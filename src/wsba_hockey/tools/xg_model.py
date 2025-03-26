@@ -3,6 +3,8 @@ import numpy as np
 import xgboost as xgb
 import scipy.sparse as sp
 import joblib
+from zipfile import ZipFile
+import requests as rs
 
 ### XG_MODEL FUNCTIONS ###
 # Provided in this file are functions vital to the goal prediction model in the WSBA Hockey Python package. #
@@ -141,6 +143,98 @@ def wsba_xG(pbp, train = False, overwrite = False, model_path = "tools/xg_model/
     xgb_matrix = xgb.DMatrix(data=predictors,label=is_goal_vect)
 
     if train == True:
-        run_num = 
+        run_num = ""
     else:
         print("No data to add yet...")
+
+def moneypuck_xG(pbp,repo_path = "tools/xg_model/moneypuck/shots_2007-2023.zip",new = '2024'):
+    #Given play-by-play, return itself with xG column sourced from MoneyPuck.com
+
+    #If file is already in the repository downloading is not necessary
+    try:
+        db = pd.read_csv("tools/xg_model/moneypuck/shots/shots_2007-2023.csv")
+    except:
+        url = 'https://peter-tanner.com/moneypuck/downloads/shots_2007-2023.zip'
+
+        response = rs.get(url)
+
+        if response.status_code == 200:
+            with open(repo_path, 'wb') as file:
+                file.write(response.content)
+            print('File downloaded successfully')
+        else:
+            print('Failed to download file')
+
+        with ZipFile(repo_path, 'r') as zObject: 
+            zObject.extractall( 
+                path="tools/xg_model/moneypuck/shots/")
+        
+        db = pd.read_csv("tools/xg_model/moneypuck/shots/shots_2007-2023.csv")
+            
+    
+    #Repeat process with active/most recent season
+    #For the new/recent season, always scrape new data
+    url = f'https://peter-tanner.com/moneypuck/downloads/shots_{new}.zip'
+    repo_path = f"tools/xg_model/moneypuck/shots_{new}.zip"
+
+    response = rs.get(url)
+
+    if response.status_code == 200:
+        with open(repo_path, 'wb') as file:
+            file.write(response.content)
+        print('File downloaded successfully')
+    else:
+        print('Failed to download file')
+
+    with ZipFile(repo_path, 'r') as zObject: 
+        zObject.extractall( 
+            path="tools/xg_model/moneypuck/shots/")
+        
+    new_season = pd.read_csv(f"tools/xg_model/moneypuck/shots/shots_{new}.csv")
+    
+    #Combine shots
+    moneypuck = pd.concat([db,new_season])
+
+    #Find game ids that occur in supplied pbp and filter moneypuck shots accordingly
+    moneypuck['game_id'] = moneypuck['season'].astype(str)+"0"+moneypuck['game_id'].astype(str)
+    moneypuck['event'] = moneypuck['event'].replace({
+        "SHOT":"shot-on-goal",
+        "MISS":"missed-shot",
+        "BLOCK":"blocked-shot",
+        "GOAL":"goal"
+    })
+    
+    #Manual Team Rename
+    moneypuck['teamCode'] = moneypuck['teamCode'].replace({
+        "L.A":"LAK",
+        "N.J":"NJD",
+        "S.J":"SJS",
+        "T.B":"TBL",
+    })
+    pbp['event_team_abbr'] = pbp['event_team_abbr'].replace({
+        "L.A":"LAK",
+        "N.J":"NJD",
+        "S.J":"SJS",
+        "T.B":"TBL",
+        "PHX":'ARI'
+    })
+
+    #Managing oddities in datatypes
+    moneypuck[['game_id','period','time']] = moneypuck[['game_id','period','time']].astype(int)
+    pbp[['game_id','period','seconds_elapsed']] = pbp[['game_id','period','seconds_elapsed']].astype(int)
+
+    #Modify and merge
+    moneypuck = moneypuck[['game_id','period','time','event','teamCode','shooterPlayerId','xGoal']]
+    comb = pd.merge(pbp,moneypuck
+                    ,left_on=['game_id','period','seconds_elapsed','event_type','event_team_abbr','event_player_1_id']
+                    ,right_on=['game_id','period','time','event','teamCode','shooterPlayerId']
+                    ,how='left')
+    
+    #Drop and rename
+    pbp_xg = comb.drop(columns=['time', 'event', 'teamCode', 'shooterPlayerId']).rename(columns={'xGoal':'xG'})
+    
+    if pbp_xg['xG'].isnull().all():
+        print("No MoneyPuck xG values were found for this game...")
+
+    #Return: play-by-play with moneypuck xG column
+    return pbp_xg
