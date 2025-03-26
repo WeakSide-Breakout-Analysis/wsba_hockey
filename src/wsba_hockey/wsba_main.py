@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import time
 from tools.scraping import *
 from tools.xg_model import *
+from tools.agg import *
 
 ### WSBA HOCKEY ###
 ## Provided below are all integral functions in the WSBA Hockey Python package. ##
@@ -305,6 +306,47 @@ def nhl_scrape_player_info(roster):
 
     return players.loc[players['Player'].notna()].sort_values(by=['Player','Season','Team'])
 
+def nhl_calculate_stats(pbp,season,season_types,game_strength,xg="moneypuck"):
+    print("Calculating stats for play-by-play and shifts data provided in the frame: " + season + "...")
+    
+    #Check if xG column exists and apply model if it does not
+    try:
+        pbp['xG']
+    except KeyError:
+        if xg == 'wsba':
+            pbp = wsba_xG(pbp)
+        else:
+            pbp = moneypuck_xG(pbp)
+
+    pbp = pbp.loc[(pbp['season_type'].isin(season_types)) & (pbp['period'] < 5)]
+    
+    # Filter by game strength if not "all"
+    if game_strength != "all":
+        pbp = pbp.loc[pbp['strength_state'].isin(game_strength)]
+
+    indv_stats = calc_indv(pbp)
+    onice_stats = calc_onice(pbp)
+    #info = calc_toi(pbp)
+
+    complete = pd.merge(indv_stats,onice_stats,how="outer",on=['Player','Team'])
+    #complete = pd.merge(complete,info,how="outer",on=['Player','Team'])
+    complete['Season'] = season
+    complete['GC%'] = complete['G']/complete['GF']
+    complete['AC%'] = (complete['A1']+complete['A2'])/complete['GF']
+    complete['GI%'] = (complete['G']+complete['A1']+complete['A2'])/complete['GF']
+    complete['FC%'] = complete['iFF']/complete['FF']
+    complete['xGC%'] = complete['ixG']/complete['xGF']
+    #complete['RC%'] = complete['Rush']/complete['iFF']
+    #complete['AVG_Rush_POW'] = complete['Rush_POW']/complete['Rush']
+
+    return complete[[
+       'Player',"Season","Team",
+        "G","A1","A2","iFF","ixG",'ixG/iFF',"G/ixG","iFsh%",
+        "GF","FF","xGF","xGF/FF","GF/xGF","FshF%",
+        "GA","FA","xGA","xGA/FA","GA/xGA","FshA%",
+        "GC%","AC%","GI%","FC%","xGC%"
+    ]].fillna(0)
+
 def repo_load_rosters(seasons = []):
     #Returns roster data from repository
     # param 'seasons' - list of seasons to include
@@ -329,3 +371,4 @@ def repo_load_teaminfo():
     #Returns team data from repository
 
     return pd.read_csv("teaminfo/nhl_teaminfo.csv")
+
