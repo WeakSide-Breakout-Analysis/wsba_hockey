@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import time
+import random
 from tools.scraping import *
 from tools.xg_model import *
 from tools.agg import *
@@ -13,11 +14,33 @@ from tools.agg import *
 ## SCRAPE FUNCTIONS ##
 def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','period-end','challenge','stoppage'],xg = 'na'):
     #Given a set of game_ids (NHL API), return complete play-by-play information as requested
-    # param 'game_ids' - NHL game ids
+    # param 'game_ids' - NHL game ids (or list formatted as ['random', num_of_games])
     # param 'split_shifts' - boolean which splits pbp and shift events if true
     # param 'remove' - list of events to remove from final dataframe
+    # param 'xg' - xG model to apply to pbp for aggregation
 
     pbps = []
+    if game_ids[0] == 'random':
+        #Randomize selection of game_ids
+        #Some ids returned may be invalid (for example, 2020021300)
+        num = game_ids[1]
+        game_ids = []
+        i = 0
+        while i is not num:
+            rand_year = random.randint(2010,2024)
+            rand_season_type = random.randint(2,3)
+            rand_game = random.randint(1,1312)
+
+            #Ensure id validity (and that number of scraped games is equal to specified value)
+            rand_id = f'{rand_year}{rand_season_type:02d}{rand_game:04d}'
+            try: 
+                rs.get(f"https://api-web.nhle.com/v1/gamecenter/{rand_id}/play-by-play").json()
+                i += 1
+                game_ids.append(rand_id)
+            except: 
+                continue
+            
+
     for game_id in game_ids:
         print("Scraping data from game " + str(game_id) + "...",end="")
         start = time.perf_counter()
@@ -30,36 +53,42 @@ def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','per
         home_log = f"https://www.nhl.com/scores/htmlreports/{season}/TH{game_id[-6:]}.HTM"
         away_log = f"https://www.nhl.com/scores/htmlreports/{season}/TV{game_id[-6:]}.HTM"
 
-        #Retrieve raw data
-        json = rs.get(api).json()
-        html = rs.get(html).content
-        home_shift = rs.get(home_log).content
-        away_shift = rs.get(away_log).content
-
         if int(game_id[:4]) < 2010:
             print()
             raise Exception('Games before 2010-2011 are not available yet.')
         else:
-            #Parse JSONs and HTMLs
             try: 
+                #Retrieve raw data
+                json = rs.get(api).json()
+                html = rs.get(html).content
+                home_shift = rs.get(home_log).content
+                away_shift = rs.get(away_log).content
+
+                #Parse JSONs and HTMLs
                 data = combine_data(html,away_shift,home_shift,json)
 
                 #Apply xG if specified
                 if xg in ['wsba','moneypuck']:
                     if xg == 'wsba':
-                        print('Applying WSBA xG Model to pbp...')
-                        data = wsba_xG(data)
+                        #print('\nApplying WSBA xG Model to pbp...')
+                        #data = wsba_xG(data)
+
+                        print("WSBA xG model is currently not available...")
                     else:
-                        print('Applying MoneyPuck xG Model to pbp...')
+                        print('\nApplying MoneyPuck xG Model to pbp...')
                         data = moneypuck_xG(data)
                     
                 #Append data to list
                 no_data = False
                 pbps.append(data)
 
+                end = time.perf_counter()
+                secs = end - start
+                print(f" finished in {secs} seconds.")
+
             except:
                 #Games such as the all-star game and pre-season games will incur this error
-                print(f"Unable to scrape game {game_id}.  Ensure the ID is properly inputted and formatted.")
+                print(f"\nUnable to scrape game {game_id}.  Ensure the ID is properly inputted and formatted.")
                 no_data = True
                 pbps.append(pd.DataFrame())
       
@@ -71,19 +100,16 @@ def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','per
     if no_data:
         return pd.DataFrame()
 
-    end = time.perf_counter()
-    secs = end - start
+    
     if split_shifts == True:
         if len(remove) == 0:
             remove = ['change']
         
-        print(f" finished in {secs} seconds.")
         #Return: dict with pbp and shifts seperated
         return {"pbp":df.loc[~df['event_type'].isin(remove)].dropna(axis=1,how='all'),
             "shifts":df.loc[df['event_type']=='change'].dropna(axis=1,how='all')
             }
     else:
-        print(f" finished in {secs} seconds.")
         #Return: all events that are not set for removal by the provided list
         return df.loc[~df['event_type'].isin(remove)]
 
@@ -306,7 +332,15 @@ def nhl_scrape_player_info(roster):
 
     return players.loc[players['Player'].notna()].sort_values(by=['Player','Season','Team'])
 
-def nhl_calculate_stats(pbp,season,season_types,game_strength,xg="moneypuck"):
+def nhl_calculate_stats(pbp,season,season_types,game_strength,roster_path="rosters/nhl_rosters.csv",xg="moneypuck"):
+    #Given play-by-play, seasonal information, game_strength, rosters, and xG model, return aggregated stats
+    # param 'pbp' - Scraped play-by-play
+    # param 'season' - season or timeframe of events in play-by-play
+    # param 'season_type' - list of season types (preseason, regular season, or playoffs) to include in aggregation
+    # param 'game_strength' - list of game_strengths to include in aggregation
+    # param 'roster_path' - path to roster file
+    # param 'xg' - xG model to apply to pbp for aggregation
+
     print("Calculating stats for play-by-play and shifts data provided in the frame: " + season + "...")
     
     #Check if xG column exists and apply model if it does not
@@ -326,10 +360,15 @@ def nhl_calculate_stats(pbp,season,season_types,game_strength,xg="moneypuck"):
 
     indv_stats = calc_indv(pbp)
     onice_stats = calc_onice(pbp)
-    #info = calc_toi(pbp)
+    info = calc_toi(pbp)
 
-    complete = pd.merge(indv_stats,onice_stats,how="outer",on=['Player','Team'])
-    #complete = pd.merge(complete,info,how="outer",on=['Player','Team'])
+    #IDs sometimes set as objects
+    indv_stats['ID'] = indv_stats['ID'].astype(float)
+    onice_stats['ID'] = onice_stats['ID'].astype(float)
+    info['ID'] = info['ID'].astype(float)
+
+    complete = pd.merge(indv_stats,onice_stats,how="outer",on=['ID','Team'])
+    complete = pd.merge(complete,info,how="outer",on=['ID','Team'])
     complete['Season'] = season
     complete['GC%'] = complete['G']/complete['GF']
     complete['AC%'] = (complete['A1']+complete['A2'])/complete['GF']
@@ -338,14 +377,19 @@ def nhl_calculate_stats(pbp,season,season_types,game_strength,xg="moneypuck"):
     complete['xGC%'] = complete['ixG']/complete['xGF']
     #complete['RC%'] = complete['Rush']/complete['iFF']
     #complete['AVG_Rush_POW'] = complete['Rush_POW']/complete['Rush']
+    
+    #Import rosters and player info
+    rosters = pd.read_csv(roster_path)
+    names = rosters[['id','fullName']].drop_duplicates()
 
+    complete = pd.merge(complete,names,how='left',left_on='ID',right_on='id').rename(columns={'fullName':'Player'})
     return complete[[
-       'Player',"Season","Team",
+        'Player','ID',"Season","Team","GP","TOI",
         "G","A1","A2","iFF","ixG",'ixG/iFF',"G/ixG","iFsh%",
         "GF","FF","xGF","xGF/FF","GF/xGF","FshF%",
         "GA","FA","xGA","xGA/FA","GA/xGA","FshA%",
         "GC%","AC%","GI%","FC%","xGC%"
-    ]].fillna(0)
+    ]].fillna(0).sort_values(['Player','Season','Team','ID'])
 
 def repo_load_rosters(seasons = []):
     #Returns roster data from repository
@@ -372,3 +416,19 @@ def repo_load_teaminfo():
 
     return pd.read_csv("teaminfo/nhl_teaminfo.csv")
 
+pbp = nhl_scrape_game(['2023020867'])
+pbp.to_csv("frejard.csv",index=False)
+timeline = create_timeline(pbp)
+timeline.to_csv("please.csv",index=False)
+
+players = ['8476889',
+           '8475764',
+           '8477402',
+           '8477573']
+#'8476889' - RADEK FAKSA
+#'8475764' - CAM FOWLER
+#'8477402' - PAVEL BUCHNEVICH
+#'8477573' - NATHAN WALKER
+for player in players:
+    toi = timeline.loc[timeline['on_ice'].str.contains(player),'seconds_elapsed'].count()
+    print(f'{player} TOI: {toi}')

@@ -404,9 +404,11 @@ def parse_json(json):
     if info['gameState'][0] == 'FUT':
         raise ValueError(f"Game {info['id'][0]} has not occured yet.")
 
+    away = info['awayTeam.id'][0]
+    home = info['homeTeam.id'][0]
     teams = {
-        info['awayTeam.id'][0]:info['awayTeam.abbrev'][0],
-        info['homeTeam.id'][0]:info['homeTeam.abbrev'][0]
+        away:info['awayTeam.abbrev'][0],
+        home:info['homeTeam.abbrev'][0]
     }
 
     #Create player information dicts used to create event_player columns
@@ -415,7 +417,7 @@ def parse_json(json):
         players.update({id:player.upper()})
 
     #Test columns
-    cols = ['eventId', 'timeInPeriod', 'timeRemaining', 'situationCode', 'homeTeamDefendingSide', 'typeCode', 'typeDescKey', 'sortOrder', 'periodDescriptor.number', 'periodDescriptor.periodType', 'periodDescriptor.maxRegulationPeriods', 'details.eventOwnerTeamId', 'details.losingPlayerId', 'details.winningPlayerId', 'details.xCoord', 'details.yCoord', 'details.zoneCode', 'pptReplayUrl', 'details.shotType', 'details.scoringPlayerId', 'details.scoringPlayerTotal', 'details.assist1PlayerId', 'details.assist1PlayerTotal', 'details.assist2PlayerId', 'details.assist2PlayerTotal', 'details.goalieInNetId', 'details.awayScore', 'details.homeScore', 'details.highlightClipSharingUrl', 'details.highlightClipSharingUrlFr', 'details.highlightClip', 'details.highlightClipFr', 'details.discreteClip', 'details.discreteClipFr', 'details.shootingPlayerId', 'details.awaySOG', 'details.homeSOG', 'details.playerId', 'details.hittingPlayerId', 'details.hitteePlayerId', 'details.reason', 'details.typeCode', 'details.descKey', 'details.duration', 'details.servedByPlayerId', 'details.secondaryReason', 'details.blockingPlayerId', 'details.committedByPlayerId', 'details.drawnByPlayerId', 'game_id', 'season', 'season_type', 'game_date', 'away_team_id', 'away_team_abbr', 'home_team_id', 'home_team_abbr']
+    cols = ['eventId', 'timeInPeriod', 'timeRemaining', 'situationCode', 'homeTeamDefendingSide', 'typeCode', 'typeDescKey', 'sortOrder', 'periodDescriptor.number', 'periodDescriptor.periodType', 'periodDescriptor.maxRegulationPeriods', 'details.eventOwnerTeamId', 'details.losingPlayerId', 'details.winningPlayerId', 'details.xCoord', 'details.yCoord', 'details.zoneCode', 'pptReplayUrl', 'details.shotType', 'details.scoringPlayerId', 'details.scoringPlayerTotal', 'details.assist1PlayerId', 'details.assist1PlayerTotal', 'details.assist2PlayerId', 'details.assist2PlayerTotal', 'details.goalieInNetId', 'details.awayScore', 'details.homeScore', 'details.highlightClipSharingUrl', 'details.highlightClipSharingUrlFr', 'details.highlightClip', 'details.highlightClipFr', 'details.discreteClip', 'details.discreteClipFr', 'details.shootingPlayerId', 'details.awaySOG', 'details.homeSOG', 'details.playerId', 'details.hittingPlayerId', 'details.hitteePlayerId', 'details.reason', 'details.typeCode', 'details.descKey', 'details.duration', 'details.servedByPlayerId', 'details.secondaryReason', 'details.blockingPlayerId', 'details.committedByPlayerId', 'details.drawnByPlayerId', 'game_id', 'season', 'season_type', 'game_date']
 
     for col in cols:
         try:events[col]
@@ -436,7 +438,7 @@ def parse_json(json):
 
     events['event_player_3_id'] = events['details.assist2PlayerId']
 
-    events['event_team_status'] = np.where(events['home_team_id']==events['details.eventOwnerTeamId'],"home","away")
+    events['event_team_status'] = np.where(events['details.eventOwnerTeamId']==home,"home","away")
 
     #Coordinate adjustments:
     #The WSBA NHL Scraper includes three sets of coordinates per event:
@@ -464,7 +466,7 @@ def parse_json(json):
     
     
     events['event_team_abbr'] = events['details.eventOwnerTeamId'].replace(teams)
-    events['event_goalie_name'] = events['details.goalieInNetId'].replace(players)
+    events['event_goalie'] = events['details.goalieInNetId'].replace(players)
 
     #Rename columns to follow WSBA naming conventions
     events = events.rename(columns={
@@ -512,13 +514,13 @@ def parse_json(json):
     for event,team in zip(list(events['event_type']),list(events['event_team_status'])):
         if event in fenwick_events:
             if team == "home":
-                hf = hf+1
+                hf += 1
                 if event == 'goal':
-                    hg = hg+1
+                    hg += 1
             else:
-                af = af+1
+                af += 1
                 if event == 'goal':
-                    ag = ag+1
+                    ag += 1
        
         ags.append(ag)
         hgs.append(hg)
@@ -621,25 +623,25 @@ def parse_shifts_html(html,json):
             
             name = name.split(',')
             number = int(name[0][:2].strip())
-            name = ' '.join([name[1].strip(' '), name[0][2:].strip(' ')])
-            players[name] = dict()
+            id = rosters[status]['playerId'][number]
+            players[id] = dict()
 
             #HTML shift functions assess one team at a time, which simplifies the lookup process with number to name and id
-            players[name]['id'] = rosters[status]['playerId'][number]
-            players[name]['name'] = rosters[status]['fullName.default'][number]
             
-            players[name]['shifts'] = []
+            players[id]['name'] = rosters[status]['fullName.default'][number]
+            
+            players[id]['shifts'] = []
         else:
-            players[name]['shifts'].extend([t])
+            players[id]['shifts'].extend([t])
 
     for key in players.keys():
         # Create lists of shifts-table columns for analysis
         players[key]['shifts'] = [players[key]['shifts'][i:i + 5] for i in range(0, len(players[key]['shifts']), 5)]
 
         name = players[key]['name']
-        id = players[key]['id']
+
         # Parsing
-        shifts = [analyze_shifts(shift, id, name, team) for shift in players[key]['shifts']]
+        shifts = [analyze_shifts(shift, key, name, team) for shift in players[key]['shifts']]
         all_shifts.extend(shifts)
 
     df = pd.DataFrame(all_shifts)
@@ -706,6 +708,7 @@ def parse_shift_events(html,json,home):
         skaters[player] = on_ice
     
     skaters = skaters.fillna(0).astype(int)
+    skaters.to_csv(f'{'home' if home else 'away'}_matrix.csv',index=False)
 
     on_skaters = (skaters == 1).stack().reset_index()
     on_skaters = on_skaters[on_skaters[0]].groupby("level_0")["level_1"].apply(list).reset_index()
@@ -806,8 +809,8 @@ def combine_shifts(away_html,home_html,json):
 def create_timeline(pbp):
     max_secs = int(pbp['seconds_elapsed'].max())+1
     
-    on_ice_col = ['away_on_1','away_on_2','away_on_3','away_on_4','away_on_5','away_on_6',"away_goalie",
-         'home_on_1','home_on_2','home_on_3','home_on_4','home_on_5','home_on_6',"home_goalie"]
+    on_ice_col = ['away_on_1_id','away_on_2_id','away_on_3_id','away_on_4_id','away_on_5_id','away_on_6_id',"away_goalie_id",
+         'home_on_1_id','home_on_2_id','home_on_3_id','home_on_4_id','home_on_5_id','home_on_6_id',"home_goalie_id"]
 
     pbp = pbp.loc[pbp['event_type']=='change']
     pbp[on_ice_col] = pbp[on_ice_col].fillna("REMOVE")
@@ -820,22 +823,36 @@ def create_timeline(pbp):
         "seconds_elapsed","away_skaters","home_skaters","strength_state",]
 
     timeline = pd.merge(timeline,pbp[info_col+on_ice_col].drop_duplicates(subset=['seconds_elapsed'],keep='last'),how="outer",on=['seconds_elapsed'])
-    timeline.to_csv("sample_timeline_pre.csv",index=False)
 
     timeline[info_col+on_ice_col] = timeline[info_col+on_ice_col].ffill()
     timeline = timeline.replace({
         "REMOVE":np.nan
     })
     
-    away_on = ['away_on_1','away_on_2','away_on_3','away_on_4','away_on_5','away_on_6']
-    home_on = ['home_on_1','home_on_2','home_on_3','home_on_4','home_on_5','home_on_6']
+    away_on = ['away_on_1_id','away_on_2_id','away_on_3_id','away_on_4_id','away_on_5_id','away_on_6_id']
+    home_on = ['home_on_1_id','home_on_2_id','home_on_3_id','home_on_4_id','home_on_5_id','home_on_6_id']
     
     timeline['away_skaters'] = timeline[away_on].replace(r'^\s*$', np.nan, regex=True).notna().sum(axis=1)
     timeline['home_skaters'] = timeline[home_on].replace(r'^\s*$', np.nan, regex=True).notna().sum(axis=1)
     
     timeline['strength_state'] = timeline['away_skaters'].astype(str) + "v" + timeline['home_skaters'].astype(str)
 
-    return timeline[info_col+on_ice_col]
+    shifts = timeline[info_col+on_ice_col]
+    shifts['on_ice'] = (shifts['home_on_1_id'].astype(str)
+                        .str.cat(shifts['home_on_2_id'].astype(str),sep=";",na_rep="")
+                        .str.cat(shifts['home_on_3_id'].astype(str),sep=";",na_rep="")
+                        .str.cat(shifts['home_on_3_id'].astype(str),sep=";",na_rep="")
+                        .str.cat(shifts['home_on_5_id'].astype(str),sep=";",na_rep="")
+                        .str.cat(shifts['home_on_6_id'].astype(str),sep=";",na_rep="")
+                        .str.cat(shifts['away_on_1_id'].astype(str),sep=";",na_rep="")
+                        .str.cat(shifts['away_on_2_id'].astype(str),sep=";",na_rep="")
+                        .str.cat(shifts['away_on_3_id'].astype(str),sep=";",na_rep="")
+                        .str.cat(shifts['away_on_3_id'].astype(str),sep=";",na_rep="")
+                        .str.cat(shifts['away_on_5_id'].astype(str),sep=";",na_rep="")
+                        .str.cat(shifts['away_on_6_id'].astype(str),sep=";",na_rep=""))
+    
+
+    return shifts
 
 ### FINALIZE PBP ###
 def get_col():
@@ -849,7 +866,7 @@ def get_col():
         "event_player_1_name","event_player_2_name","event_player_3_name",
         "event_player_1_id","event_player_2_id","event_player_3_id",
         "event_player_1_pos","event_player_2_pos","event_player_3_pos",
-        "event_goalie_name","event_goalie_id",
+        "event_goalie","event_goalie_id",
         "shot_type","zone_code","x","y","x_fixed","y_fixed","x_adj","y_adj",
         "event_skaters","away_skaters","home_skaters",
         "event_distance","event_angle","away_score","home_score", "away_fenwick", "home_fenwick",
@@ -877,9 +894,9 @@ def combine_data(html_pbp,away_shifts,home_shifts,json):
                               np.where(df['event_type']=='stoppage',3,
                               np.where(df['event_type']=='penalty',4,
                               np.where(df['event_type']=='change',5,
-                              np.where(df['event_type']=='period-end',6,
-                              np.where(df['event_type']=='game-end',7,
-                              np.where(df['event_type']=='faceoff',8,9)))))))))
+                              np.where(df['event_type']=='faceoff',6,
+                              np.where(df['event_type']=='period-end',7,
+                              np.where(df['event_type']=='game-end',8,9)))))))))
 
     df[['period','seconds_elapsed']] =  df[['period','seconds_elapsed']].astype(int)
     df = df.sort_values(['period','seconds_elapsed','priority'])
@@ -900,7 +917,7 @@ def combine_data(html_pbp,away_shifts,home_shifts,json):
     df['event_type_code'] = np.where(df['event_type']=='change',499,df['event_type_code'])
 
     #Forward fill as necessary
-    cols = ['period_type','home_team_defending_side']
+    cols = ['period_type','home_team_defending_side','away_score','away_fenwick','home_score','home_fenwick']
     for col in cols:
         df[col] = df[col].ffill()
 
