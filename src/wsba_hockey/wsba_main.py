@@ -30,7 +30,9 @@ def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','per
 
         game_ids = []
         i = 0
+        print("Finding valid, random game ids...")
         while i is not num:
+            print(f"\rGame IDs found: {i}/{num}",end="")
             rand_year = random.randint(start,end)
             rand_season_type = random.randint(2,3)
             rand_game = random.randint(1,1312)
@@ -43,6 +45,8 @@ def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','per
                 game_ids.append(rand_id)
             except: 
                 continue
+        
+        print(f"\rGame IDs found: {i}/{num}")
             
 
     for game_id in game_ids:
@@ -65,7 +69,7 @@ def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','per
             away_shift = rs.get(away_log).content
 
             #Parse JSONs and HTMLs
-            data = combine_data(html,away_shift,home_shift,json)
+            data = combine_data(game_id,html,away_shift,home_shift,json)
                 
             #Append data to list
             no_data = False
@@ -414,4 +418,3 @@ def repo_load_teaminfo():
     #Returns team data from repository
 
     return pd.read_csv("teaminfo/nhl_teaminfo.csv")
-

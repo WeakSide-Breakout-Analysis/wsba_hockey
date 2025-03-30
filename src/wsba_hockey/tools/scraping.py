@@ -5,6 +5,7 @@ import json as json_lib
 import hockey_scraper.utils.shared as shared
 import hockey_scraper.nhl.pbp.html_pbp as html_data
 import hockey_scraper.nhl.shifts.html_shifts as html_shifts
+import hockey_scraper.nhl.playing_roster as roster
 import numpy as np
 import pandas as pd
 import warnings
@@ -12,7 +13,6 @@ warnings.filterwarnings('ignore')
 
 ### SCRAPING FUNCTIONS ###
 # Provided in this file are functions vital to the scraping functions in the WSBA Hockey Python package. #
-
 
 ### JSON GAME INFO ###
 def get_game_roster(json):
@@ -184,6 +184,13 @@ def get_html_roster(html,json,teams):
 
     return roster_dict
 
+def get_html_coaches(game_id):
+    #Given game id, return head coaches for away and home team
+    #Using hockey_scraper function
+    players, coaches = roster.get_content(roster.get_roster(game_id))
+
+    return coaches
+
 def parse_html_event(event,roster,teams):
     #Given event from html events list and game roster, return event data
 
@@ -202,7 +209,16 @@ def parse_html_event(event,roster,teams):
         events_dict['description'] = desc
 
         events_dict['shot_type'] = desc.split(",")[1].lower().strip(" ") if event[4] in ['BLOCK','MISS','SHOT','GOAL'] else ""
-        
+        zone = [x for x in desc.split(',') if 'Zone' in x]
+        if not zone:
+            events_dict['zone_code'] = None
+        elif zone[0].find("Off") != -1:
+            events_dict['zone_code'] = 'O'
+        elif zone[0].find("Neu") != -1:
+            events_dict['zone_code'] = 'N'
+        elif zone[0].find("Def") != -1:
+            events_dict['zone_code'] = 'D'
+
         #Convert team names for compatiblity
         replace = [('LAK',"L.A"),('NJD',"N.J"),('SJS',"S.J"),('TBL',"T.B")]
         for name, repl in replace:
@@ -342,8 +358,8 @@ def parse_html_event(event,roster,teams):
     #Return: dataframe of event in a single row
     return (pd.DataFrame([events_dict]))
 
-def parse_html(html,json):
-    #Given the raw html document to a provided game, return parsed HTML play-by-play
+def parse_html(game_id,html,json):
+    #Given the game id, raw html document to a provided game, and json data, return parsed HTML play-by-play
 
     #Retreive cleaned html data (from Harry Shomer's hockey_scraper package) 
     events = clean_html_pbp(html,json)
@@ -393,6 +409,17 @@ def parse_html(html,json):
         except:
             data[col] = ""
     
+    #Retrieve coaches
+    coaches = get_html_coaches(game_id)
+    if not coaches:
+        data['away_coach'] = ""
+        data['home_coach'] = ""
+        data['event_coach'] = ""
+    else:
+        data['away_coach'] = coaches['Away'].upper()
+        data['home_coach'] = coaches['Home'].upper()
+        data['event_coach'] = np.where(data['event_team_abbr']==data['home_team_abbr'],coaches['Home'].upper(),coaches['Away'].upper())
+
     #Return: HTML play-by-play
     return data
 
@@ -539,17 +566,16 @@ def parse_json(json):
     #Return: dataframe with parsed game
     return events
 
-def combine_pbp(html,json):
-    #Given html and json data, return complete play-by-play data for provided game
+def combine_pbp(game_id,html,json):
+    #Given game id, html data, and json data, return complete play-by-play data for provided game
 
-    html_pbp = parse_html(html,json)
+    html_pbp = parse_html(game_id,html,json)
     info = get_game_info(json)
 
     #Route data combining - json if season is after 2009-2010:
     if str(info['season']) in ['20072008','20082009','20092010']:
         #ESPN x HTML
-        espn_pbp = parse_espn(str(info['game_date']),info['away_team_abbr'],info['home_team_abbr']).rename(columns={'coords_x':'x',
-                                                                                                                    "coords_y":'y'})
+        espn_pbp = parse_espn(str(info['game_date']),info['away_team_abbr'],info['home_team_abbr']).rename(columns={'coords_x':'x',"coords_y":'y'})
         merge_col = ['period','seconds_elapsed','event_type','event_team_abbr']
 
         df = pd.merge(html_pbp,espn_pbp,how='left',on=merge_col)
@@ -559,7 +585,7 @@ def combine_pbp(html,json):
         json_pbp = parse_json(json)
         #Modify merge conditions and merge pbps
         merge_col = ['period','seconds_elapsed','event_type','event_team_abbr','event_player_1_id']
-        html_pbp = html_pbp.drop(columns=['event_player_2_id','event_player_3_id','shot_type'])
+        html_pbp = html_pbp.drop(columns=['event_player_2_id','event_player_3_id','shot_type','zone_code'])
 
         df = pd.merge(html_pbp,json_pbp,how='left',on=merge_col)
 
@@ -1011,12 +1037,13 @@ def get_col():
         "home_on_1","home_on_2","home_on_3","home_on_4","home_on_5","home_on_6","home_goalie",
         "away_on_1_id","away_on_2_id","away_on_3_id","away_on_4_id","away_on_5_id","away_on_6_id","away_goalie_id",
         "home_on_1_id","home_on_2_id","home_on_3_id","home_on_4_id","home_on_5_id","home_on_6_id","home_goalie_id",
+        "event_coach","away_coach","home_coach"
     ]
 
-def combine_data(html_pbp,away_shifts,home_shifts,json):
-    #Given html_pbp, away and home shifts, and json pbp, return total game play-by-play data is provided with additional and corrected details
+def combine_data(game_id,html_pbp,away_shifts,home_shifts,json):
+    #Given game_id, html_pbp, away and home shifts, and json pbp, return total game play-by-play data is provided with additional and corrected details
     #Create dfs
-    pbp = combine_pbp(html_pbp,json)
+    pbp = combine_pbp(game_id,html_pbp,json)
     shifts = combine_shifts(away_shifts,home_shifts,json)
 
     #Combine data    
@@ -1029,10 +1056,11 @@ def combine_data(html_pbp,away_shifts,home_shifts,json):
                               np.where(df['event_type']=='stoppage',3,
                               np.where(df['event_type']=='delayed-penalty',4,
                               np.where(df['event_type']=='penalty',5,
-                              np.where(df['event_type']=='change',6,
-                              np.where(df['event_type']=='period-end',7,
+                              np.where(df['event_type']=='period-end',6,
+                              np.where(df['event_type']=='change',7,
                               np.where(df['event_type']=='game-end',8,
-                              np.where(df['event_type']=='faceoff',9,0)))))))))
+                              np.where(df['event_type']=='period-start',9,
+                              np.where(df['event_type']=='faceoff',10,0))))))))))
                               
     df[['period','seconds_elapsed']] =  df[['period','seconds_elapsed']].astype(int)
     df = df.sort_values(['period','seconds_elapsed','priority'])
@@ -1056,7 +1084,7 @@ def combine_data(html_pbp,away_shifts,home_shifts,json):
         ""
 
     #Forward fill as necessary
-    cols = ['period_type','home_team_defending_side','away_score','away_fenwick','home_score','home_fenwick']
+    cols = ['period_type','home_team_defending_side','away_score','away_fenwick','home_score','home_fenwick','away_coach','home_coach']
     for col in cols:
         try: df[col]
         except: df[col] = ""

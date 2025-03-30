@@ -29,25 +29,15 @@ def prep_xG_data(pbp):
                 '6v4',
                 '6v5']
     
-    #Filter unwanted date:
-    #Shots must occur in specified events and strength states, occur before the shootout, and have valid coordinates
-    data = pbp.loc[(pbp['event_type'].isin(events))&
-                   (pbp['strength_state'].isin(strengths))&
-                   (pbp['period'] < 5)&
-                   (pbp['x_fixed'].notna())&
-                   (pbp['y_fixed'].notna())&
-                   ~((pbp['x_fixed']==0)&(pbp['y_fixed']==0)&(pbp['x_fixed'].isin(fenwick_events))&(pbp['event_distance']!=90))]
     #Create last event columns
-    data = data.sort_values(by=['season','game_id','period','seconds_elapsed','event_num'])
+    data = pbp.sort_values(by=['season','game_id','period','seconds_elapsed','event_num'])
 
     data["seconds_since_last"] = data['seconds_elapsed']-data['seconds_elapsed'].shift(1)
     data["event_team_last"] = data['event_team_abbr'].shift(1)
     data["event_type_last"] = data['event_type'].shift(1)
     data["x_fixed_last"] = data['x_fixed'].shift(1)
     data["y_fixed_last"] = data['y_fixed'].shift(1)
-    data["zone_code_last"] = data['zone_code'].shift(1)
-    data['shot_type'] = data['shot_type'].fillna('wrist')
-    
+    data["zone_code_last"] = data['zone_code'].shift(1)    
 
     data.sort_values(['season','game_id','period','seconds_elapsed','event_num'],inplace=True)
     data['score_state'] = np.where(data['away_team_abbr']==data['event_team_abbr'],data['away_score']-data['home_score'],data['home_score']-data['away_score'])
@@ -131,6 +121,30 @@ def wsba_xG(pbp, train = False, overwrite = False, model_path = "tools/xg_model/
     
     #Prep Data
     data = prep_xG_data(pbp)
+    #Filter unwanted date:
+    #Shots must occur in specified events and strength states, occur before the shootout, and have valid coordinates
+    events = ['faceoff','hit','giveaway','takeaway','blocked-shot','missed-shot','shot-on-goal','goal']
+    fenwick_events = ['missed-shot','shot-on-goal','goal']
+    strengths = ['3v3',
+                '3v4',
+                '3v5',
+                '4v3',
+                '4v4',
+                '4v5',
+                '4v6',
+                '5v3',
+                '5v4',
+                '5v5',
+                '5v6',
+                '6v4',
+                '6v5']
+    
+    data = pbp.loc[(pbp['event_type'].isin(events))&
+                   (pbp['strength_state'].isin(strengths))&
+                   (pbp['period'] < 5)&
+                   (pbp['x_fixed'].notna())&
+                   (pbp['y_fixed'].notna())&
+                   ~((pbp['x_fixed']==0)&(pbp['y_fixed']==0)&(pbp['x_fixed'].isin(fenwick_events))&(pbp['event_distance']!=90))]
 
     #Convert to sparse
     data_sparse = sp.csr_matrix(data[[target]+continous+boolean])
