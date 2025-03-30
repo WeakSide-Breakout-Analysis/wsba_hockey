@@ -12,22 +12,26 @@ from tools.agg import *
 ## Provided below are all integral functions in the WSBA Hockey Python package. ##
 
 ## SCRAPE FUNCTIONS ##
-def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','period-end','challenge','stoppage'],xg = 'na'):
+def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','period-end','challenge','stoppage'],verbose=False):
     #Given a set of game_ids (NHL API), return complete play-by-play information as requested
-    # param 'game_ids' - NHL game ids (or list formatted as ['random', num_of_games])
+    # param 'game_ids' - NHL game ids (or list formatted as ['random', num_of_games, start_year, end_year])
     # param 'split_shifts' - boolean which splits pbp and shift events if true
     # param 'remove' - list of events to remove from final dataframe
     # param 'xg' - xG model to apply to pbp for aggregation
+    # param 'verbose' - boolean which adds additional event info if true
 
     pbps = []
     if game_ids[0] == 'random':
         #Randomize selection of game_ids
         #Some ids returned may be invalid (for example, 2020021300)
         num = game_ids[1]
+        start = game_ids[2]
+        end = game_ids[3]
+
         game_ids = []
         i = 0
         while i is not num:
-            rand_year = random.randint(2010,2024)
+            rand_year = random.randint(start,end)
             rand_season_type = random.randint(2,3)
             rand_game = random.randint(1,1312)
 
@@ -53,48 +57,37 @@ def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','per
         home_log = f"https://www.nhl.com/scores/htmlreports/{season}/TH{game_id[-6:]}.HTM"
         away_log = f"https://www.nhl.com/scores/htmlreports/{season}/TV{game_id[-6:]}.HTM"
 
-        if int(game_id[:4]) < 2010:
-            print()
-            raise Exception('Games before 2010-2011 are not available yet.')
-        else:
-            try: 
-                #Retrieve raw data
-                json = rs.get(api).json()
-                html = rs.get(html).content
-                home_shift = rs.get(home_log).content
-                away_shift = rs.get(away_log).content
+        try: 
+            #Retrieve raw data
+            json = rs.get(api).json()
+            html = rs.get(html).content
+            home_shift = rs.get(home_log).content
+            away_shift = rs.get(away_log).content
 
-                #Parse JSONs and HTMLs
-                data = combine_data(html,away_shift,home_shift,json)
+            #Parse JSONs and HTMLs
+            data = combine_data(html,away_shift,home_shift,json)
+                
+            #Append data to list
+            no_data = False
+            pbps.append(data)
 
-                #Apply xG if specified
-                if xg in ['wsba','moneypuck']:
-                    if xg == 'wsba':
-                        #print('\nApplying WSBA xG Model to pbp...')
-                        #data = wsba_xG(data)
+            end = time.perf_counter()
+            secs = end - start
+            print(f" finished in {secs} seconds.")
 
-                        print("WSBA xG model is currently not available...")
-                    else:
-                        print('\nApplying MoneyPuck xG Model to pbp...')
-                        data = moneypuck_xG(data)
-                    
-                #Append data to list
-                no_data = False
-                pbps.append(data)
-
-                end = time.perf_counter()
-                secs = end - start
-                print(f" finished in {secs} seconds.")
-
-            except:
-                #Games such as the all-star game and pre-season games will incur this error
-                print(f"\nUnable to scrape game {game_id}.  Ensure the ID is properly inputted and formatted.")
-                no_data = True
-                pbps.append(pd.DataFrame())
+        except:
+            #Games such as the all-star game and pre-season games will incur this error
+            print(f"\nUnable to scrape game {game_id}.  Ensure the ID is properly inputted and formatted.")
+            no_data = True
+            pbps.append(pd.DataFrame())
       
     #Add all pbps together
     df = pd.concat(pbps)
 
+    if verbose:
+        df = prep_xG_data(df)
+    else:
+        ""
     #Split pbp and shift events if necessary
     #Return: complete play-by-play with data removed or split as necessary
     if no_data:
@@ -155,8 +148,8 @@ def nhl_scrape_schedule(season,start = "09-01", end = "08-01"):
                 "id": [gameWeek[i]['id']],
                 "season": [gameWeek[i]['season']],
                 "season_type":[gameWeek[i]['gameType']],
-                "away_team_abbr":[gameWeek[i]['awayTeam.abbrev']],
-                "home_team_abbr":[gameWeek[i]['homeTeam.abbrev']],
+                "away_team_abbr":[gameWeek[i]['awayTeam']['abbrev']],
+                "home_team_abbr":[gameWeek[i]['homeTeam']['abbrev']],
                 "gamecenter_link":[gameWeek[i]['gameCenterLink']]
                 }))
     
@@ -166,7 +159,7 @@ def nhl_scrape_schedule(season,start = "09-01", end = "08-01"):
     #Return: specificed schedule data
     return df
 
-def nhl_scrape_season(season,split_shifts = False, season_types = [2,3], remove = ['period-start','period-end','game-end','challenge','stoppage'], start = "09-01", end = "08-01", local=False, local_path = "schedule/schedule.csv", xg = 'na'):
+def nhl_scrape_season(season,split_shifts = False, season_types = [2,3], remove = ['period-start','period-end','game-end','challenge','stoppage'], start = "09-01", end = "08-01", local=False, local_path = "schedule/schedule.csv", verbose = False):
     #Given season, scrape all play-by-play occuring within the season
     # param 'season' - NHL season to scrape
     # param 'split_shifts' - boolean which splits pbp and shift events if true
@@ -175,6 +168,7 @@ def nhl_scrape_season(season,split_shifts = False, season_types = [2,3], remove 
     # param 'end' - End date in season
     # param 'local' - boolean indicating whether to use local file to scrape game_ids
     # param 'local_path' - path of local file
+    # param 'verbose' - boolean which adds additional event info if true
 
     #While the default value of local is false, schedule data is provided in the package files; enabling local will automatically find and scrape games in a specified season, saving time otherwise spent scraping a season's schedule
     if local == True:
@@ -182,21 +176,23 @@ def nhl_scrape_season(season,split_shifts = False, season_types = [2,3], remove 
         load = load.loc[(load['season'].astype(str)==season)&(load['season_type'].isin(season_types))]
         game_ids = list(load['id'].astype(str))
     else:
-        load = nhl_scrape_schedule(season,start,end)['id'].astype(str)
+        load = nhl_scrape_schedule(season,start,end)
         load = load.loc[(load['season'].astype(str)==season)&(load['season_type'].isin(season_types))]
         game_ids = list(load['id'].astype(str))
 
     df = []
     df_s = []
 
+    print(f"Scraping games from {season[0:4]}-{season[4:8]} season...")
+    start = time.perf_counter()
     for game_id in game_ids: 
         try:
             if split_shifts == True:
-                data = nhl_scrape_game([game_id],split_shifts=True,remove=remove,xg=xg)
+                data = nhl_scrape_game([game_id],split_shifts=True,remove=remove,verbose=verbose)
                 df.append(data['pbp'])
                 df_s.append(data['shifts'])
             else:
-                data = nhl_scrape_game([game_id],remove=remove,xg=xg)
+                data = nhl_scrape_game([game_id],remove=remove,verbose=verbose)
                 df.append(data)
 
         except: 
@@ -213,7 +209,10 @@ def nhl_scrape_season(season,split_shifts = False, season_types = [2,3], remove 
         except: raise KeyError("No data is available to return.")
     else:
         ""
-
+    
+    end = time.perf_counter()
+    secs = end - start
+    print(f'Finished season scrape in {(secs/60)/60} hours.')
     #Return: Complete pbp and shifts data for specified season as well as dataframe of game_ids which failed to return data
     if split_shifts == True:
         return {"pbp":pbp,
@@ -416,19 +415,3 @@ def repo_load_teaminfo():
 
     return pd.read_csv("teaminfo/nhl_teaminfo.csv")
 
-pbp = nhl_scrape_game(['2023020867'])
-pbp.to_csv("frejard.csv",index=False)
-timeline = create_timeline(pbp)
-timeline.to_csv("please.csv",index=False)
-
-players = ['8476889',
-           '8475764',
-           '8477402',
-           '8477573']
-#'8476889' - RADEK FAKSA
-#'8475764' - CAM FOWLER
-#'8477402' - PAVEL BUCHNEVICH
-#'8477573' - NATHAN WALKER
-for player in players:
-    toi = timeline.loc[timeline['on_ice'].str.contains(player),'seconds_elapsed'].count()
-    print(f'{player} TOI: {toi}')

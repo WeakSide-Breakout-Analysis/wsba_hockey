@@ -1,5 +1,7 @@
 import re
 from bs4 import BeautifulSoup
+import requests as rs
+import json as json_lib
 import hockey_scraper.utils.shared as shared
 import hockey_scraper.nhl.pbp.html_pbp as html_data
 import hockey_scraper.nhl.shifts.html_shifts as html_shifts
@@ -198,6 +200,8 @@ def parse_html_event(event,roster,teams):
         events_dict['event_type'] = event[4]
         desc = re.sub(u'\xa0'," ",event[5])
         events_dict['description'] = desc
+
+        events_dict['shot_type'] = desc.split(",")[1].lower().strip(" ") if event[4] in ['BLOCK','MISS','SHOT','GOAL'] else ""
         
         #Convert team names for compatiblity
         replace = [('LAK',"L.A"),('NJD',"N.J"),('SJS',"S.J"),('TBL',"T.B")]
@@ -539,17 +543,27 @@ def combine_pbp(html,json):
     #Given html and json data, return complete play-by-play data for provided game
 
     html_pbp = parse_html(html,json)
-    json_pbp = parse_json(json)
-    
-    #Modify merge conditions and merge pbps
-    merge_col = ['period','seconds_elapsed','event_type','event_team_abbr','event_player_1_id']
-    html_pbp = html_pbp.drop(columns=['event_player_2_id','event_player_3_id'])
-
-    df = pd.merge(html_pbp,json_pbp,how='left',on=merge_col)
-
-    #Add game info
     info = get_game_info(json)
 
+    #Route data combining - json if season is after 2009-2010:
+    if str(info['season']) in ['20072008','20082009','20092010']:
+        #ESPN x HTML
+        espn_pbp = parse_espn(str(info['game_date']),info['away_team_abbr'],info['home_team_abbr']).rename(columns={'coords_x':'x',
+                                                                                                                    "coords_y":'y'})
+        merge_col = ['period','seconds_elapsed','event_type','event_team_abbr']
+
+        df = pd.merge(html_pbp,espn_pbp,how='left',on=merge_col)
+
+    else:
+        #JSON x HTML
+        json_pbp = parse_json(json)
+        #Modify merge conditions and merge pbps
+        merge_col = ['period','seconds_elapsed','event_type','event_team_abbr','event_player_1_id']
+        html_pbp = html_pbp.drop(columns=['event_player_2_id','event_player_3_id','shot_type'])
+
+        df = pd.merge(html_pbp,json_pbp,how='left',on=merge_col)
+
+    #Add game info
     info_col = ['season','season_type','game_id','game_date',"start_time","venue","venue_location",
         'away_team_abbr','home_team_abbr']
     
@@ -558,8 +572,9 @@ def combine_pbp(html,json):
 
     #Fill period_type column and assign shifts a sub-500 event code
     df['period_type'] = np.where(df['period']<4,"REG",np.where(np.logical_and(df['period']==5,df['season_type']==2),"SO","OT"))
-    df['event_type_code'] = np.where(df['event_type']!='change',df['event_type_code'],499)
-
+    try: df['event_type_code'] = np.where(df['event_type']!='change',df['event_type_code'],499)
+    except:
+        ""
     df = df.sort_values(['period','seconds_elapsed']).reset_index()
 
     df['event_team_status'] = np.where(df['event_team_abbr'].isna(),"",np.where(df['home_team_abbr']==df['event_team_abbr'],"home","away"))
@@ -568,14 +583,182 @@ def combine_pbp(html,json):
     #Return: complete play-by-play information for provided game
     return df[col]
 
+### ESPN SCRAPING FUNCTIONS ###
+def espn_game_id(date,away,home):
+    #Given a date formatted as YYYY-MM-DD and teams, return game id from ESPN schedule
+    date = date.replace("-","")
+
+    #Retreive data
+    api = f"https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates={date}"
+    schedule = pd.json_normalize(rs.get(api).json()['events'])
+
+    #Create team abbreviation columns
+    schedule['away_team_abbr'] = schedule['shortName'].str[:3].str.strip(" ")
+    schedule['home_team_abbr'] = schedule['shortName'].str[-3:].str.strip(" ")
+    
+    #Modify team abbreviations as necessary
+    schedule = schedule.replace({
+        "LA":"LAK",
+        "NJ":"NJD",
+        "SJ":"SJS",
+        "TB":"TBL",
+    })
+
+    #Retreive game id
+    game_id = schedule.loc[(schedule['away_team_abbr']==away)&
+                           (schedule['home_team_abbr']==home),'id'].tolist()[0]
+
+    #Return: ESPN game id
+    return game_id
+
+def parse_espn(date,away,home):
+    #Given a date formatted as YYYY-MM-DD and teams, return game events
+    game_id = espn_game_id(date,away,home)
+    url = f'https://www.espn.com/nhl/playbyplay/_/gameId/{game_id}'
+    
+    #Code modified from Patrick Bacon
+
+    #Retreive game events as json
+    page = rs.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout = 500)
+    soup = BeautifulSoup(page.content.decode('ISO-8859-1'), 'lxml', multi_valued_attributes = None)
+    json = json_lib.loads(str(soup).split('"playGrps":')[1].split(',"tms"')[0])
+
+    #DataFrame of time-related info for events
+    clock_df = pd.DataFrame()
+
+    for period in range(0, len(json)):
+        clock_df = clock_df._append(pd.DataFrame(json[period]))
+
+    clock_df = clock_df[~pd.isna(clock_df.clock)]
+
+    # Needed to add .split(',"st":3')[0] for playoffs
+
+    #DataFrame of coordinates for events
+    coords_df = pd.DataFrame(json_lib.loads(str(soup).split('plays":')[1].split(',"st":1')[0].split(',"st":2')[0].split(',"st":3')[0]))
+
+    clock_df = clock_df.assign(
+        clock = clock_df.clock.apply(lambda x: x['displayValue'])
+    )
+
+    coords_df = coords_df.assign(
+        coords_x = coords_df[~pd.isna(coords_df.coordinate)].coordinate.apply(lambda x: x['x']).astype(int),
+        coords_y = coords_df[~pd.isna(coords_df.coordinate)].coordinate.apply(lambda y: y['y']).astype(int),
+        event_player_1 = coords_df[~pd.isna(coords_df.athlete)]['athlete'].apply(lambda x: x['name'])
+    )
+
+    #Combine
+    espn_events = coords_df.merge(clock_df.loc[:, ['id', 'clock']])
+
+    espn_events = espn_events.assign(
+        period = espn_events['period'].apply(lambda x: x['number']),
+        minutes = espn_events['clock'].str.split(':').apply(lambda x: x[0]).astype(int),
+        seconds = espn_events['clock'].str.split(':').apply(lambda x: x[1]).astype(int),
+        event_type = espn_events['type'].apply(lambda x: x['txt'])
+    )
+
+    espn_events = espn_events.assign(coords_x = np.where((pd.isna(espn_events.coords_x)) & (pd.isna(espn_events.coords_y)) &
+                (espn_events.event_type=='Face Off'), 0, espn_events.coords_x
+    ),
+                      coords_y = np.where((pd.isna(espn_events.coords_x)) & (pd.isna(espn_events.coords_y)) &
+                (espn_events.event_type=='Face Off'), 0, espn_events.coords_y))
+
+    espn_events = espn_events[(~pd.isna(espn_events.coords_x)) & (~pd.isna(espn_events.coords_y)) & (~pd.isna(espn_events.event_player_1))]
+
+    espn_events = espn_events.assign(
+        coords_x = espn_events.coords_x.astype(int),
+        coords_y = espn_events.coords_y.astype(int)
+    )
+    
+    #Rename events
+    #The turnover event includes just one player in the event information, meaning takeaways will have no coordinates for play-by-plays created by ESPN scraping
+    espn_events['event_type'] = espn_events['event_type'].replace({
+        "Face Off":'faceoff',
+        "Hit":'hit',
+        "Shot":'shot-on-goal',
+        "Missed":'missed-shot',
+        "Blocked":'blocked-shot',
+        "Goal":'goal',
+        "Turnover":'giveaway',
+        "Delayed Penalty":'delayed-penalty',
+        "Penalty":'penalty',
+    })
+
+    #Period time adjustments (only 'seconds_elapsed' is included in the resulting data)
+    espn_events['period_time_simple'] = espn_events['clock'].str.replace(":","",regex=True)
+    espn_events['period_seconds_elapsed'] = np.where(espn_events['period_time_simple'].str.len()==3,
+                                            ((espn_events['period_time_simple'].str[0].astype(int)*60)+espn_events['period_time_simple'].str[-2:].astype(int)),
+                                            ((espn_events['period_time_simple'].str[0:2].astype(int)*60)+espn_events['period_time_simple'].str[-2:].astype(int)))
+    espn_events['seconds_elapsed'] = ((espn_events['period']-1)*1200)+espn_events['period_seconds_elapsed']
+
+    espn_events = espn_events.rename(columns = {'text':'description'})
+
+    #Add event team
+    espn_events['event_team_abbr'] = espn_events['homeAway'].replace({
+        "away":away,
+        "home":home
+    })
+
+    #Some games (mostly preseason and all star games) do not include coordinates.  
+    try:
+        espn_events['x_fixed'] = abs(espn_events['coords_x'])
+        espn_events['y_fixed'] = np.where(espn_events['coords_x']<0,-espn_events['coords_y'],espn_events['coords_y'])
+        espn_events['x_adj'] = np.where(espn_events['homeAway']=="home",espn_events['x_fixed'],-espn_events['x_fixed'])
+        espn_events['y_adj'] = np.where(espn_events['homeAway']=="home",espn_events['y_fixed'],-espn_events['y_fixed'])
+        espn_events['event_distance'] = np.sqrt(((89 - espn_events['x_fixed'])**2) + (espn_events['y_fixed']**2))
+        espn_events['event_angle'] = np.degrees(np.arctan2(abs(espn_events['y_fixed']), abs(89 - espn_events['x_fixed'])))
+    except TypeError:
+        print(f"No coordinates found for ESPN game...")
+    
+        espn_events['x_fixed'] = np.nan
+        espn_events['y_fixed'] = np.nan
+        espn_events['x_adj'] = np.nan
+        espn_events['y_adj'] = np.nan
+        espn_events['event_distance'] = np.nan
+        espn_events['event_angle'] = np.nan
+
+    #Assign score and fenwick for each event
+    fenwick_events = ['missed-shot','shot-on-goal','goal']
+    ag = 0
+    ags = []
+    hg = 0
+    hgs = []
+
+    af = 0
+    afs = []
+    hf = 0
+    hfs = []
+    for event,team in zip(list(espn_events['event_type']),list(espn_events['homeAway'])):
+        if event in fenwick_events:
+            if team == "home":
+                hf += 1
+                if event == 'goal':
+                    hg += 1
+            else:
+                af += 1
+                if event == 'goal':
+                    ag += 1
+       
+        ags.append(ag)
+        hgs.append(hg)
+        afs.append(af)
+        hfs.append(hf)
+
+    espn_events['away_score'] = ags
+    espn_events['home_score'] = hgs
+    espn_events['away_fenwick'] = afs
+    espn_events['home_fenwick'] = hfs
+    #Return: play-by-play events in supplied game from ESPN
+    return espn_events
+
 ### SHIFT SCRAPING FUNCTIONS ###
-def analyze_shifts(shift, id, name, team):
+def analyze_shifts(shift, id, name, pos, team):
     #Collects teams in given shifts html (parsed by Beautiful Soup)
     #Modified version of Harry Shomer's analyze_shifts function in the hockey_scraper package
     shifts = dict()
 
     shifts['player_name'] = name.upper()
     shifts['player_id'] = id
+    shifts['player_pos'] = pos
     shifts['period'] = '4' if shift[1] == 'OT' else '5' if shift[1] == 'SO' else shift[1]
     shifts['event_team_abbr'] = shared.get_team(team.strip(' '))
     shifts['start'] = shared.convert_to_seconds(shift[2].split('/')[0])
@@ -598,11 +781,12 @@ def parse_shifts_html(html,json):
 
     away = info['away_team_id'] #Away team in the HTML is the seventh column 
     home = info['home_team_id'] #Home team in the HTML is the eighth column
-    away_players = roster.loc[roster['teamId']==away][['fullName.default','playerId','sweaterNumber']]
-    home_players = roster.loc[roster['teamId']==home][['fullName.default','playerId','sweaterNumber']]
+    away_players = roster.loc[roster['teamId']==away][['playerId','fullName.default','positionCode','sweaterNumber']]
+    home_players = roster.loc[roster['teamId']==home][['playerId','fullName.default','positionCode','sweaterNumber']]
     
-    rosters = {"away":away_players.set_index("sweaterNumber")[['playerId','fullName.default']].to_dict(),
-               "home":home_players.set_index("sweaterNumber")[['playerId','fullName.default']].to_dict()
+    #Create roster dict
+    rosters = {"away":away_players.set_index("sweaterNumber")[['playerId','fullName.default','positionCode']].to_dict(),
+               "home":home_players.set_index("sweaterNumber")[['playerId','fullName.default','positionCode']].to_dict()
                }
     
     all_shifts = []
@@ -629,7 +813,8 @@ def parse_shifts_html(html,json):
             #HTML shift functions assess one team at a time, which simplifies the lookup process with number to name and id
             
             players[id]['name'] = rosters[status]['fullName.default'][number]
-            
+            players[id]['pos'] = rosters[status]['positionCode'][number]
+
             players[id]['shifts'] = []
         else:
             players[id]['shifts'].extend([t])
@@ -639,9 +824,10 @@ def parse_shifts_html(html,json):
         players[key]['shifts'] = [players[key]['shifts'][i:i + 5] for i in range(0, len(players[key]['shifts']), 5)]
 
         name = players[key]['name']
+        pos = players[key]['pos']
 
         # Parsing
-        shifts = [analyze_shifts(shift, key, name, team) for shift in players[key]['shifts']]
+        shifts = [analyze_shifts(shift, key, name, pos, team) for shift in players[key]['shifts']]
         all_shifts.extend(shifts)
 
     df = pd.DataFrame(all_shifts)
@@ -708,7 +894,6 @@ def parse_shift_events(html,json,home):
         skaters[player] = on_ice
     
     skaters = skaters.fillna(0).astype(int)
-    skaters.to_csv(f'{'home' if home else 'away'}_matrix.csv',index=False)
 
     on_skaters = (skaters == 1).stack().reset_index()
     on_skaters = on_skaters[on_skaters[0]].groupby("level_0")["level_1"].apply(list).reset_index()
@@ -764,7 +949,7 @@ def combine_shifts(away_html,home_html,json):
     away = parse_shift_events(away_html,json,False)
     home = parse_shift_events(home_html,json,True)
 
-    #Combine shits
+    #Combine shifts
     data = pd.concat([away,home]).sort_values(['period','seconds_elapsed'])
 
     #Create info columns
@@ -806,54 +991,6 @@ def combine_shifts(away_html,home_html,json):
     col = [col for col in get_col() if col in data.columns.to_list()]
     return data[col]
 
-def create_timeline(pbp):
-    max_secs = int(pbp['seconds_elapsed'].max())+1
-    
-    on_ice_col = ['away_on_1_id','away_on_2_id','away_on_3_id','away_on_4_id','away_on_5_id','away_on_6_id',"away_goalie_id",
-         'home_on_1_id','home_on_2_id','home_on_3_id','home_on_4_id','home_on_5_id','home_on_6_id',"home_goalie_id"]
-
-    pbp = pbp.loc[pbp['event_type']=='change']
-    pbp[on_ice_col] = pbp[on_ice_col].fillna("REMOVE")
-    
-    timeline = pd.DataFrame()
-    timeline['seconds_elapsed'] = range(max_secs)
-
-    info_col = ['season','season_type','game_id','game_date',
-        'away_team_abbr','home_team_abbr','period','period_type',
-        "seconds_elapsed","away_skaters","home_skaters","strength_state",]
-
-    timeline = pd.merge(timeline,pbp[info_col+on_ice_col].drop_duplicates(subset=['seconds_elapsed'],keep='last'),how="outer",on=['seconds_elapsed'])
-
-    timeline[info_col+on_ice_col] = timeline[info_col+on_ice_col].ffill()
-    timeline = timeline.replace({
-        "REMOVE":np.nan
-    })
-    
-    away_on = ['away_on_1_id','away_on_2_id','away_on_3_id','away_on_4_id','away_on_5_id','away_on_6_id']
-    home_on = ['home_on_1_id','home_on_2_id','home_on_3_id','home_on_4_id','home_on_5_id','home_on_6_id']
-    
-    timeline['away_skaters'] = timeline[away_on].replace(r'^\s*$', np.nan, regex=True).notna().sum(axis=1)
-    timeline['home_skaters'] = timeline[home_on].replace(r'^\s*$', np.nan, regex=True).notna().sum(axis=1)
-    
-    timeline['strength_state'] = timeline['away_skaters'].astype(str) + "v" + timeline['home_skaters'].astype(str)
-
-    shifts = timeline[info_col+on_ice_col]
-    shifts['on_ice'] = (shifts['home_on_1_id'].astype(str)
-                        .str.cat(shifts['home_on_2_id'].astype(str),sep=";",na_rep="")
-                        .str.cat(shifts['home_on_3_id'].astype(str),sep=";",na_rep="")
-                        .str.cat(shifts['home_on_3_id'].astype(str),sep=";",na_rep="")
-                        .str.cat(shifts['home_on_5_id'].astype(str),sep=";",na_rep="")
-                        .str.cat(shifts['home_on_6_id'].astype(str),sep=";",na_rep="")
-                        .str.cat(shifts['away_on_1_id'].astype(str),sep=";",na_rep="")
-                        .str.cat(shifts['away_on_2_id'].astype(str),sep=";",na_rep="")
-                        .str.cat(shifts['away_on_3_id'].astype(str),sep=";",na_rep="")
-                        .str.cat(shifts['away_on_3_id'].astype(str),sep=";",na_rep="")
-                        .str.cat(shifts['away_on_5_id'].astype(str),sep=";",na_rep="")
-                        .str.cat(shifts['away_on_6_id'].astype(str),sep=";",na_rep=""))
-    
-
-    return shifts
-
 ### FINALIZE PBP ###
 def get_col():
     return [
@@ -886,18 +1023,17 @@ def combine_data(html_pbp,away_shifts,home_shifts,json):
     df = pd.concat([pbp,shifts])
 
     #Create priority columns designed to order events that occur at the same time in a game
-    start_pri = ['period-start','game-start']
     even_pri = ['takeaway','giveaway','missed-shot','hit','shot-on-goal','blocked-shot']
-    df['priority'] = np.where(df['event_type'].isin(start_pri),0,
-                              np.where(df['event_type'].isin(even_pri),1,
+    df['priority'] = np.where(df['event_type'].isin(even_pri),1,
                               np.where(df['event_type']=='goal',2,
                               np.where(df['event_type']=='stoppage',3,
-                              np.where(df['event_type']=='penalty',4,
-                              np.where(df['event_type']=='change',5,
-                              np.where(df['event_type']=='faceoff',6,
+                              np.where(df['event_type']=='delayed-penalty',4,
+                              np.where(df['event_type']=='penalty',5,
+                              np.where(df['event_type']=='change',6,
                               np.where(df['event_type']=='period-end',7,
-                              np.where(df['event_type']=='game-end',8,9)))))))))
-
+                              np.where(df['event_type']=='game-end',8,
+                              np.where(df['event_type']=='faceoff',9,0)))))))))
+                              
     df[['period','seconds_elapsed']] =  df[['period','seconds_elapsed']].astype(int)
     df = df.sort_values(['period','seconds_elapsed','priority'])
     
@@ -914,12 +1050,17 @@ def combine_data(html_pbp,away_shifts,home_shifts,json):
     #Define shifts by "line-change" or "on-the-fly"
     df['shift_type'] = np.where(df['event_type']=='change',np.where(np.logical_or(np.logical_or(df['event_type_last'].isin(lag_events),df['event_type_last_2'].isin(lag_events),df['event_type_next'].isin(lead_events)),df['seconds_elapsed'].isin(period_end_secs)),"line-change","on-the-fly"),"")
     df['description'] = df['description'].combine_first(df['event_team_abbr']+" CHANGE: "+df['shift_type'])
-    df['event_type_code'] = np.where(df['event_type']=='change',499,df['event_type_code'])
+    try:
+        df['event_type_code'] = np.where(df['event_type']=='change',499,df['event_type_code'])
+    except:
+        ""
 
     #Forward fill as necessary
     cols = ['period_type','home_team_defending_side','away_score','away_fenwick','home_score','home_fenwick']
     for col in cols:
+        try: df[col]
+        except: df[col] = ""
         df[col] = df[col].ffill()
 
     #Return: complete play-by-play with all important data for each event in a provided game
-    return df[get_col()].replace(r'^\s*$', np.nan, regex=True)
+    return df[[col for col in get_col() if col in df.columns.to_list()]].replace(r'^\s*$', np.nan, regex=True)
