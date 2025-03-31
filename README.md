@@ -29,7 +29,7 @@ wsba.nhl_scrape_season('20242025',split_shifts=False,remove=['game-end'],local=T
 
 ```python
 wsba.nhl_scrape_schedule('20242025')
-wsba.nhl_scrape_seasons_info(seasons=['20212022','20222023','20232024','20242025])
+wsba.nhl_scrape_seasons_info(seasons=['20212022','20222023','20232024','20242025'])
 wsba.nhl_scrape_standings(arg = '2024-03-20')
 ```
 
@@ -37,12 +37,17 @@ wsba.nhl_scrape_standings(arg = '2024-03-20')
 
 ```python
 wsba.nhl_scrape_player_info(wsba.nhl_scrape_roster('20242025'))
+wsba.nhl_scrape_team_info()
 ```
 
 ## DATA ANALYTICS
-### Expected Goals (WeakSide Breakout and MoneyPuck models)*
+### Expected Goals (WeakSide Breakout and MoneyPuck models)
 ### Goal Impacts and Shot Analysis*
-### Stat Aggregation*
+### Stat Aggregation
+```python
+pbp = wsba.nhl_scrape_season('20232024',remove=[], local = True)
+wsba.nhl_calculate_stats(pbp,'20232024',[2],['5v5','4v4','3v3'],xg='moneypuck')
+```
 ### Shot Plotting (Plots, Heatmaps, etc.)*
 
 ## REPOSITORY 
