@@ -174,7 +174,7 @@ def nhl_scrape_season(season,split_shifts = False, season_types = [2,3], remove 
     # param 'local_path' - path of local file
     # param 'verbose' - boolean which adds additional event info if true
 
-    #While the default value of local is false, schedule data is provided in the package files; enabling local will automatically find and scrape games in a specified season, saving time otherwise spent scraping a season's schedule
+    #Determine whether to use schedule data in repository or to scrape
     if local == True:
         load = pd.read_csv(local_path)
         load = load.loc[(load['season'].astype(str)==season)&(load['season_type'].isin(season_types))]
@@ -244,19 +244,33 @@ def nhl_scrape_seasons_info(seasons = []):
     else:
         return df.sort_values(by=['id'])
 
-def nhl_scrape_standings(arg = "now"):
+def nhl_scrape_standings(arg = "now",season_type = 2):
     #Returns standings
     # param 'arg' - by default, this is "now" returning active NHL standings.  May also be a specific date formatted as YYYY-MM-DD
-    
-    if arg == "now":
-        print("Scraping standings as of now...")
-    else:
-        print("Scraping standings for season: "+arg)
-    api = "https://api-web.nhle.com/v1/standings/"+arg
-    
-    data = rs.get(api).json()['standings']
+    # param 'season_type' - by default, this scrapes the regular season standings.  If set to 3, it returns the playoff bracket for the specified season
 
-    return pd.json_normalize(data)
+    #arg param is ignored when set to "now" if season_type param is 3
+    if season_type == 3:
+        if arg == "now":
+            arg = "2024"
+
+        print("Scraping playoff bracket for season: "+arg)
+        api = "https://api-web.nhle.com/v1/playoff-bracket/"+arg
+    
+        data = rs.get(api).json()['series']
+
+        return pd.json_normalize(data)
+
+    else:
+        if arg == "now":
+            print("Scraping standings as of now...")
+
+        print("Scraping standings for season: "+arg)
+        api = "https://api-web.nhle.com/v1/standings/"+arg
+    
+        data = rs.get(api).json()['standings']
+
+        return pd.json_normalize(data)
 
 def nhl_scrape_roster(season):
     #Given a nhl season, return rosters for all participating teams
@@ -334,6 +348,15 @@ def nhl_scrape_player_info(roster):
     players['Player'] = players['Player'].replace(r'^\s*$', np.nan, regex=True)
 
     return players.loc[players['Player'].notna()].sort_values(by=['Player','Season','Team'])
+
+def nhl_scrape_team_info():
+    #Return team information
+
+    print('Scraping team information...')
+    api = 'https://api.nhle.com/stats/rest/en/team'
+    
+    #Return: team information
+    return pd.json_normalize(rs.get(api).json()['data'])
 
 def nhl_calculate_stats(pbp,season,season_types,game_strength,roster_path="rosters/nhl_rosters.csv",xg="moneypuck"):
     #Given play-by-play, seasonal information, game_strength, rosters, and xG model, return aggregated stats

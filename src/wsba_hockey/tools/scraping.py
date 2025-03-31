@@ -573,7 +573,7 @@ def combine_pbp(game_id,html,json):
     info = get_game_info(json)
 
     #Route data combining - json if season is after 2009-2010:
-    if str(info['season']) in ['20072008','20082009','20092010']:
+    if str(info['season']) in ['20052006','20062007','20072008','20082009','20092010']:
         #ESPN x HTML
         espn_pbp = parse_espn(str(info['game_date']),info['away_team_abbr'],info['home_team_abbr']).rename(columns={'coords_x':'x',"coords_y":'y'})
         merge_col = ['period','seconds_elapsed','event_type','event_team_abbr']
@@ -669,7 +669,7 @@ def parse_espn(date,away,home):
     coords_df = coords_df.assign(
         coords_x = coords_df[~pd.isna(coords_df.coordinate)].coordinate.apply(lambda x: x['x']).astype(int),
         coords_y = coords_df[~pd.isna(coords_df.coordinate)].coordinate.apply(lambda y: y['y']).astype(int),
-        event_player_1 = coords_df[~pd.isna(coords_df.athlete)]['athlete'].apply(lambda x: x['name'])
+        event_player_1_name = coords_df[~pd.isna(coords_df.athlete)]['athlete'].apply(lambda x: x['name'])
     )
 
     #Combine
