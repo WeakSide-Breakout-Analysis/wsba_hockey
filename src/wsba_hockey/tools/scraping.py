@@ -2,10 +2,7 @@ import re
 from bs4 import BeautifulSoup
 import requests as rs
 import json as json_lib
-import hockey_scraper.utils.shared as shared
-import hockey_scraper.nhl.pbp.html_pbp as html_data
-import hockey_scraper.nhl.shifts.html_shifts as html_shifts
-import hockey_scraper.nhl.playing_roster as roster
+from tools.utils.shared import *
 import numpy as np
 import pandas as pd
 import warnings
@@ -125,7 +122,7 @@ def strip_html_pbp(td,json):
 
 def clean_html_pbp(html,json):
     #Harry Shomer's Code (modified)
-    soup = html_data.get_contents(html)
+    soup = get_contents(html)
 
     # Create a list of lists (each length 8)...corresponds to 8 columns in html pbp
     td = [soup[i:i + 8] for i in range(0, len(soup), 8)]
@@ -184,11 +181,24 @@ def get_html_roster(html,json,teams):
 
     return roster_dict
 
-def get_html_coaches(game_id):
+def get_json_coaches(game_id):
     #Given game id, return head coaches for away and home team
-    #Using hockey_scraper function
-    players, coaches = roster.get_content(roster.get_roster(game_id))
+    
+    #Retreive data
+    json = rs.get(f'https://api-web.nhle.com/v1/gamecenter/{game_id}/right-rail').json()
+    data = json['gameInfo']
 
+    #Add coaches
+    try:
+        away = data['awayTeam']['headCoach']['default'].upper()
+        home = data['homeTeam']['headCoach']['default'].upper()
+        
+        coaches = {'away':away,
+                'home':home}
+    except KeyError:
+        return {}
+
+    #Return: dict with coaches
     return coaches
 
 def parse_html_event(event,roster,teams):
@@ -203,7 +213,7 @@ def parse_html_event(event,roster,teams):
         events_dict['period'] = int(event[1])
         events_dict['strength'] = re.sub(u'\xa0'," ",event[2])
         events_dict['period_time_elapsed'] = event[3]
-        events_dict['seconds_elapsed'] = shared.convert_to_seconds(event[3]) + (1200*(int(event[1])-1))
+        events_dict['seconds_elapsed'] = convert_to_seconds(event[3]) + (1200*(int(event[1])-1))
         events_dict['event_type'] = event[4]
         desc = re.sub(u'\xa0'," ",event[5])
         events_dict['description'] = desc
@@ -410,15 +420,15 @@ def parse_html(game_id,html,json):
             data[col] = ""
     
     #Retrieve coaches
-    coaches = get_html_coaches(game_id)
+    coaches = get_json_coaches(game_id)
     if not coaches:
         data['away_coach'] = ""
         data['home_coach'] = ""
         data['event_coach'] = ""
     else:
-        data['away_coach'] = coaches['Away'].upper()
-        data['home_coach'] = coaches['Home'].upper()
-        data['event_coach'] = np.where(data['event_team_abbr']==data['home_team_abbr'],coaches['Home'].upper(),coaches['Away'].upper())
+        data['away_coach'] = coaches['away']
+        data['home_coach'] = coaches['home']
+        data['event_coach'] = np.where(data['event_team_abbr']==data['home_team_abbr'],coaches['home'],coaches['away'])
 
     #Return: HTML play-by-play
     return data
@@ -688,7 +698,7 @@ def parse_espn(date,away,home):
                       coords_y = np.where((pd.isna(espn_events.coords_x)) & (pd.isna(espn_events.coords_y)) &
                 (espn_events.event_type=='Face Off'), 0, espn_events.coords_y))
 
-    espn_events = espn_events[(~pd.isna(espn_events.coords_x)) & (~pd.isna(espn_events.coords_y)) & (~pd.isna(espn_events.event_player_1))]
+    espn_events = espn_events[(~pd.isna(espn_events.coords_x)) & (~pd.isna(espn_events.coords_y)) & (~pd.isna(espn_events.event_player_1_name))]
 
     espn_events = espn_events.assign(
         coords_x = espn_events.coords_x.astype(int),
@@ -786,13 +796,13 @@ def analyze_shifts(shift, id, name, pos, team):
     shifts['player_id'] = id
     shifts['player_pos'] = pos
     shifts['period'] = '4' if shift[1] == 'OT' else '5' if shift[1] == 'SO' else shift[1]
-    shifts['event_team_abbr'] = shared.get_team(team.strip(' '))
-    shifts['start'] = shared.convert_to_seconds(shift[2].split('/')[0])
-    shifts['duration'] = shared.convert_to_seconds(shift[4].split('/')[0])
+    shifts['event_team_abbr'] = get_team(team.strip(' '))
+    shifts['start'] = convert_to_seconds(shift[2].split('/')[0])
+    shifts['duration'] = convert_to_seconds(shift[4].split('/')[0])
 
     # I've had problems with this one...if there are no digits the time is fucked up
     if re.compile(r'\d+').findall(shift[3].split('/')[0]):
-        shifts['end'] = shared.convert_to_seconds(shift[3].split('/')[0])
+        shifts['end'] = convert_to_seconds(shift[3].split('/')[0])
     else:
         shifts['end'] = shifts['start'] + shifts['duration']
     return shifts
@@ -817,7 +827,7 @@ def parse_shifts_html(html,json):
     
     all_shifts = []
     #columns = ['game_id', 'player_name', 'player_id', 'period', 'team_abbr', 'start', 'end', 'duration']
-    td, teams = html_shifts.get_soup(html)
+    td, teams = get_soup(html)
 
     team = teams[0]
     home_team = teams[1]

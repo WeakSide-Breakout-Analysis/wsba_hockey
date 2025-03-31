@@ -1,7 +1,7 @@
 import requests as rs
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import time
 import random
 from tools.scraping import *
@@ -25,14 +25,20 @@ def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','per
         #Randomize selection of game_ids
         #Some ids returned may be invalid (for example, 2020021300)
         num = game_ids[1]
-        start = game_ids[2]
-        end = game_ids[3]
+        try: 
+            start = game_ids[2]
+        except:
+            start = 2007
+        try:
+            end = game_ids[3]
+        except:
+            end = (date.today().year)-1
 
         game_ids = []
         i = 0
         print("Finding valid, random game ids...")
         while i is not num:
-            print(f"\rGame IDs found: {i}/{num}",end="")
+            print(f"\rGame IDs found in range {start}-{end}: {i}/{num}",end="")
             rand_year = random.randint(start,end)
             rand_season_type = random.randint(2,3)
             rand_game = random.randint(1,1312)
@@ -46,7 +52,7 @@ def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','per
             except: 
                 continue
         
-        print(f"\rGame IDs found: {i}/{num}")
+        print(f"\rGame IDs found in range {start}-{end}: {i}/{num}")
             
 
     for game_id in game_ids:
@@ -77,7 +83,7 @@ def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','per
 
             end = time.perf_counter()
             secs = end - start
-            print(f" finished in {secs} seconds.")
+            print(f" finished in {secs:.2f} seconds.")
 
         except:
             #Games such as the all-star game and pre-season games will incur this error
@@ -216,7 +222,7 @@ def nhl_scrape_season(season,split_shifts = False, season_types = [2,3], remove 
     
     end = time.perf_counter()
     secs = end - start
-    print(f'Finished season scrape in {(secs/60)/60} hours.')
+    print(f'Finished season scrape in {(secs/60)/60:.2f} hours.')
     #Return: Complete pbp and shifts data for specified season as well as dataframe of game_ids which failed to return data
     if split_shifts == True:
         return {"pbp":pbp,
