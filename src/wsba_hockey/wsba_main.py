@@ -190,45 +190,25 @@ def nhl_scrape_season(season,split_shifts = False, season_types = [2,3], remove 
         load = load.loc[(load['season'].astype(str)==season)&(load['season_type'].isin(season_types))]
         game_ids = list(load['id'].astype(str))
 
-    df = []
-    df_s = []
-
     print(f"Scraping games from {season[0:4]}-{season[4:8]} season...")
     start = time.perf_counter()
-    for game_id in game_ids: 
-        try:
-            if split_shifts == True:
-                data = nhl_scrape_game([game_id],split_shifts=True,remove=remove,verbose=verbose)
-                df.append(data['pbp'])
-                df_s.append(data['shifts'])
-            else:
-                data = nhl_scrape_game([game_id],remove=remove,verbose=verbose)
-                df.append(data)
 
-        except: 
-            #Errors should be rare; testing of eight full-season scraped produced just one missing regular season game due to error
-            continue
-
-    #Missing data handled as a KeyError
-    try: pbp = pd.concat(df)
-    except: 
-        raise KeyError("No data is available to return.")
-        
+    #Perform scrape
     if split_shifts == True:
-        try: shifts = pd.concat(df_s)
-        except: raise KeyError("No data is available to return.")
+        data = nhl_scrape_game(game_ids,split_shifts=True,remove=remove,verbose=verbose)
     else:
-        ""
+        data = nhl_scrape_game(game_ids,remove=remove,verbose=verbose)
     
     end = time.perf_counter()
     secs = end - start
+    
     print(f'Finished season scrape in {(secs/60)/60:.2f} hours.')
     #Return: Complete pbp and shifts data for specified season as well as dataframe of game_ids which failed to return data
     if split_shifts == True:
-        return {"pbp":pbp,
-            'shifts':shifts}
+        return {"pbp":data['pbp'],
+            'shifts':data['shifts']}
     else:
-        return pbp
+        return data
 
 def nhl_scrape_seasons_info(seasons = []):
     #Returns info related to NHL seasons (by default, all seasons are included)
