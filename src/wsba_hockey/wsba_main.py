@@ -190,6 +190,11 @@ def nhl_scrape_season(season,split_shifts = False, season_types = [2,3], remove 
         load = load.loc[(load['season'].astype(str)==season)&(load['season_type'].isin(season_types))]
         game_ids = list(load['id'].astype(str))
 
+    #If no games found, terminate the process
+    if not game_ids:
+        print('No games found for dates in season...')
+        return ""
+    
     print(f"Scraping games from {season[0:4]}-{season[4:8]} season...")
     start = time.perf_counter()
 
