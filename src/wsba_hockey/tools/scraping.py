@@ -418,17 +418,6 @@ def parse_html(game_id,html,json):
         try: data[col]
         except:
             data[col] = ""
-    
-    #Retrieve coaches
-    coaches = get_json_coaches(game_id)
-    if not coaches:
-        data['away_coach'] = ""
-        data['home_coach'] = ""
-        data['event_coach'] = ""
-    else:
-        data['away_coach'] = coaches['away']
-        data['home_coach'] = coaches['home']
-        data['event_coach'] = np.where(data['event_team_abbr']==data['home_team_abbr'],coaches['home'],coaches['away'])
 
     #Return: HTML play-by-play
     return data
@@ -1092,6 +1081,17 @@ def combine_data(game_id,html_pbp,away_shifts,home_shifts,json):
         df['event_type_code'] = np.where(df['event_type']=='change',499,df['event_type_code'])
     except:
         ""
+
+    #Retrieve coaches
+    coaches = get_json_coaches(game_id)
+    if not coaches:
+        df['away_coach'] = ""
+        df['home_coach'] = ""
+        df['event_coach'] = ""
+    else:
+        df['away_coach'] = coaches['away']
+        df['home_coach'] = coaches['home']
+        df['event_coach'] = np.where(df['event_team_abbr']==df['home_team_abbr'],coaches['home'],coaches['away'])
 
     #Forward fill as necessary
     cols = ['period_type','home_team_defending_side','away_score','away_fenwick','home_score','home_fenwick','away_coach','home_coach']

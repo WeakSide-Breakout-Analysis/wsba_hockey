@@ -109,8 +109,8 @@ def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','per
             remove = ['change']
         
         #Return: dict with pbp and shifts seperated
-        return {"pbp":df.loc[~df['event_type'].isin(remove)].dropna(axis=1,how='all'),
-            "shifts":df.loc[df['event_type']=='change'].dropna(axis=1,how='all')
+        return {"pbp":df.loc[~df['event_type'].isin(remove)],
+            "shifts":df.loc[df['event_type']=='change']
             }
     else:
         #Return: all events that are not set for removal by the provided list
