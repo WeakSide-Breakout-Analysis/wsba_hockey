@@ -14,13 +14,8 @@ def get_col():
             'event_goalie','away_goalie','home_goalie',
             'away_score','home_score']
 
-def ncaa_scrape_game(game_id):
-    #Given NCAA game id, return parsed play-by-play data
-    api = f"https://ncaa-api.henrygd.me/game/{game_id}/play-by-play"
-    scoring = f"https://ncaa-api.henrygd.me/game/{game_id}/scoring-summary"
-
-    data = rs.get(api).json()
-    scores = rs.get(scoring).json()
+def ncaa_parse_json(game_id,data,scores):
+    #Given game_id and raw json for plays and goals, return complete play-by-play for specified game
 
     #Game info
     away = data['meta']['teams'][1]['sixCharAbbr'] if data['meta']['teams'][0]['homeTeam'] else data['meta']['teams'][0]['sixCharAbbr']
@@ -177,7 +172,6 @@ def ncaa_scrape_game(game_id):
                                             pbp['away_goalie'],pbp['home_goalie'])
                                             ,pbp['event_goalie']))
 
-    #Return: play-by-play from supplied game
-    return pbp[get_col()]
 
-ncaa_scrape_game('6384826').to_csv("sample.csv",index=False)
+    #Return: formatted play-by-play
+    return pbp[get_col()]

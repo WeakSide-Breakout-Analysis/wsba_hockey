@@ -7,6 +7,7 @@ import random
 from tools.scraping import *
 from tools.xg_model import *
 from tools.agg import *
+from tools.ncaa_scraping import *
 
 ### WSBA HOCKEY ###
 ## Provided below are all integral functions in the WSBA Hockey Python package. ##
@@ -349,6 +350,7 @@ def nhl_scrape_team_info():
     #Return: team information
     return pd.json_normalize(rs.get(api).json()['data'])
 
+''' In-repair
 def nhl_calculate_stats(pbp,season,season_types,game_strength,roster_path="rosters/nhl_rosters.csv",xg="moneypuck"):
     #Given play-by-play, seasonal information, game_strength, rosters, and xG model, return aggregated stats
     # param 'pbp' - Scraped play-by-play
@@ -407,6 +409,47 @@ def nhl_calculate_stats(pbp,season,season_types,game_strength,roster_path="roste
         "GA","FA","xGA","xGA/FA","GA/xGA","FshA%",
         "GC%","AC%","GI%","FC%","xGC%"
     ]].fillna(0).sort_values(['Player','Season','Team','ID'])
+'''
+
+def ncaa_scrape_game(game_ids,remove=[]):
+    #Given list of NCAA game id, return parsed play-by-play data
+    # param 'game_ids' - NHL game ids (or list formatted as ['random', num_of_games, start_year, end_year])
+    # param 'remove' - list of events to remove from final dataframe
+    
+    pbps = []
+    for game_id in game_ids:
+        api = f"https://ncaa-api.henrygd.me/game/{game_id}/play-by-play"
+        scoring = f"https://ncaa-api.henrygd.me/game/{game_id}/scoring-summary"
+
+        print(f'Scraping data from game {game_id}...',end="")
+        start = time.perf_counter()
+        try:
+            #Retreive data
+            data = rs.get(api).json()
+            scores = rs.get(scoring).json()
+
+            #Append data to list
+            no_data = False
+            pbps.append(ncaa_parse_json(game_id,data,scores))
+
+            end = time.perf_counter()
+            secs = end - start
+            print(f" finished in {secs:.2f} seconds.")
+
+        except:
+            #Games such as the all-star game and pre-season games will incur this error
+            print(f"\nUnable to scrape game {game_id}.  Ensure the ID is properly inputted and formatted.")
+            no_data = True
+            pbps.append(pd.DataFrame())
+
+    #Add all pbps together
+    df = pd.concat(pbps)
+
+    #Return: complete play-by-play with data removed or split as necessary
+    if no_data:
+        return pd.DataFrame()
+    else:
+        return df.loc[~df['event_type'].isin(remove)]
 
 def repo_load_rosters(seasons = []):
     #Returns roster data from repository
@@ -432,3 +475,13 @@ def repo_load_teaminfo():
     #Returns team data from repository
 
     return pd.read_csv("teaminfo/nhl_teaminfo.csv")
+
+def repo_load_pbp(seasons = []):
+    #Returns play-by-play data from repository
+    # param 'seasons' - list of seasons to include
+
+    #Add parquet to total
+    print(f'Loading play-by-play from the following seasons: {seasons}...')
+    dfs = [pd.read_parquet(f"https://github.com/owensingh38/wsba_hockey/raw/refs/heads/main/src/wsba_hockey/pbp/parquet/nhl_pbp_{season}.parquet") for season in seasons]
+
+    return pd.concat(dfs)
