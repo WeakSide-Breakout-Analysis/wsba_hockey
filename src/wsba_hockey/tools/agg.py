@@ -88,66 +88,77 @@ def calc_onice(pbp):
 
     return onice_stats
 
+def create_timeline(pbp):
+    #Filter non-change events
+    data = pbp.loc[pbp['event_type']=='change']
+
+    shifts = data.drop_duplicates(subset=['period','seconds_elapsed'],keep='last')
+    secs = pd.DataFrame()
+    secs['seconds_elapsed'] = range(shifts['seconds_elapsed'].max())
+
+    on_ice_col = ['game_id','away_team_abbr','home_team_abbr','strength_state','away_on_1','away_on_2','away_on_3','away_on_4','away_on_5','away_on_6',
+                    'away_on_1_id','away_on_2_id','away_on_3_id','away_on_4_id','away_on_5_id','away_on_6_id',
+                    'home_on_1','home_on_2','home_on_3','home_on_4','home_on_5','home_on_6',
+                    'home_on_1_id','home_on_2_id','home_on_3_id','home_on_4_id','home_on_5_id','home_on_6_id',
+                    'away_goalie','home_goalie','away_goalie_id','home_goalie_id']
+
+    shifts = pd.merge(shifts,secs,how='right')
+    for col in on_ice_col:
+        shifts[col] = shifts[col].ffill()
+
+    shifts = shifts[['seconds_elapsed']+on_ice_col]
+    shifts['away_on_ice'] = (shifts['away_on_1_id'].astype(str)
+                        .str.cat(shifts['away_on_2_id'].astype(str),sep=";",na_rep="")
+                        .str.cat(shifts['away_on_3_id'].astype(str),sep=";",na_rep="")
+                        .str.cat(shifts['away_on_3_id'].astype(str),sep=";",na_rep="")
+                        .str.cat(shifts['away_on_5_id'].astype(str),sep=";",na_rep="")
+                        .str.cat(shifts['away_on_6_id'].astype(str),sep=";",na_rep="")).replace(";nan","",regex=True)
+    
+    shifts['home_on_ice'] = (shifts['home_on_1_id'].astype(str)
+                        .str.cat(shifts['home_on_2_id'].astype(str),sep=";",na_rep="")
+                        .str.cat(shifts['home_on_3_id'].astype(str),sep=";",na_rep="")
+                        .str.cat(shifts['home_on_3_id'].astype(str),sep=";",na_rep="")
+                        .str.cat(shifts['home_on_5_id'].astype(str),sep=";",na_rep="")
+                        .str.cat(shifts['home_on_6_id'].astype(str),sep=";",na_rep="")).replace(";nan","",regex=True)    
+
+    return shifts
+
 def calc_toi(pbp):
-    dfs = []
-    for team in ['home','away']:
-        max_secs = int(pbp['seconds_elapsed'].max())+1
+    shifts = create_timeline(pbp)
 
-        on_ice_col = ['away_on_1_id','away_on_2_id','away_on_3_id','away_on_4_id','away_on_5_id','away_on_6_id',"away_goalie_id",
-                'home_on_1_id','home_on_2_id','home_on_3_id','home_on_4_id','home_on_5_id','home_on_6_id',"home_goalie_id"]
+    #Split shifts and Expand on_ice into individual player records
+    away_shifts = shifts.assign(
+        on_ice=shifts['away_on_ice'].str.split(';'),
+    ).explode('on_ice')
+    
+    away_shifts = away_shifts.loc[away_shifts.index > 0]
+    
+    home_shifts = shifts.assign(
+        on_ice=shifts['home_on_ice'].str.split(';'),
+    ).explode('on_ice')
+    
+    home_shifts = home_shifts.loc[home_shifts.index > 0]
 
-        pbp = pbp.loc[pbp['event_type']=='change']
-        pbp[on_ice_col] = pbp[on_ice_col].fillna("REMOVE")
+    #Calculate Time on Ice (TOI) for Away Team
+    away_toi_df = away_shifts.groupby(['on_ice',"away_team_abbr"]).agg(
+        GP=('game_id', lambda x: x.nunique()),
+        TOI=('seconds_elapsed', 'count')
+    ).reset_index()
 
-        timeline = pd.DataFrame()
-        timeline['seconds_elapsed'] = range(max_secs)
+    away_toi_df = away_toi_df.loc[away_toi_df['on_ice'].notna()].rename(columns={"on_ice": "ID","away_team_abbr":"Team"})
+    
+    #Calculate Time on Ice (TOI) for Home Team
+    home_toi_df = home_shifts.groupby(['on_ice',"home_team_abbr"]).agg(
+        GP=('game_id', lambda x: x.nunique()),
+        TOI=('seconds_elapsed', 'count')
+    ).reset_index()
+    
+    home_toi_df = home_toi_df.loc[home_toi_df['on_ice'].notna()].rename(columns={"on_ice": "ID","home_team_abbr":"Team"})
 
-        info_col = ['season','season_type','game_id','game_date',
-            'away_team_abbr','home_team_abbr','period','period_type',
-            "seconds_elapsed","away_skaters","home_skaters","strength_state",]
+    #Combine Data
+    toi_df = pd.concat([away_toi_df,home_toi_df])
+    
+    toi_df['TOI'] = toi_df['TOI'] / 60
+    toi_df['ID'] = toi_df['ID'].replace(r'^\s*$', np.nan, regex=True)
 
-        timeline = pd.merge(timeline,pbp[info_col+on_ice_col].drop_duplicates(subset=['seconds_elapsed'],keep='last'),how="left",on=['seconds_elapsed'])
-
-        timeline[info_col+on_ice_col] = timeline[info_col+on_ice_col].ffill()
-        timeline = timeline.replace({
-            "REMOVE":np.nan
-        })
-
-        away_on = ['away_on_1_id','away_on_2_id','away_on_3_id','away_on_4_id','away_on_5_id','away_on_6_id']
-        home_on = ['home_on_1_id','home_on_2_id','home_on_3_id','home_on_4_id','home_on_5_id','home_on_6_id']
-
-        timeline['away_skaters'] = timeline[away_on].replace(r'^\s*$', np.nan, regex=True).notna().sum(axis=1)
-        timeline['home_skaters'] = timeline[home_on].replace(r'^\s*$', np.nan, regex=True).notna().sum(axis=1)
-
-        timeline['strength_state'] = timeline['away_skaters'].astype(str) + "v" + timeline['home_skaters'].astype(str)
-
-        shifts = timeline[info_col+on_ice_col]
-        shifts['on_ice'] = (shifts[f'{team}_on_1_id'].astype(str)
-                            .str.cat(shifts[f'{team}_on_2_id'],sep=";",na_rep="")
-                            .str.cat(shifts[f'{team}_on_3_id'],sep=";",na_rep="")
-                            .str.cat(shifts[f'{team}_on_3_id'],sep=";",na_rep="")
-                            .str.cat(shifts[f'{team}_on_5_id'],sep=";",na_rep="")
-                            .str.cat(shifts[f'{team}_on_6_id'],sep=";",na_rep=""))
-        
-        # Expand on_ice into individual player records
-        full_shifts = shifts.assign(
-            on_ice=shifts['on_ice'].str.split(';'),
-        ).explode('on_ice')
-        
-        full_shifts = full_shifts.loc[full_shifts.index > 0]
-
-        # Calculate Time on Ice (TOI)
-        toi_df = full_shifts.groupby(['on_ice',f"{team}_team_abbr"]).agg(
-            GP=('game_id', lambda x: x.nunique()),
-            TOI=('seconds_elapsed', 'count')
-        ).reset_index()
-        
-        toi_df['TOI'] = toi_df['TOI'] / 60
-        toi_df['on_ice'] = toi_df['on_ice'].replace(r'^\s*$', np.nan, regex=True)
-
-        dfs.append(toi_df.loc[toi_df['on_ice'].notna()].rename(columns={"on_ice": "ID",f"{team}_team_abbr":"Team"}))
-
-    return pd.concat(dfs).groupby(['ID','Team'], as_index=False).agg(
-        GP = ('GP','sum'),
-        TOI = ("TOI",'sum')
-    )
+    return toi_df
