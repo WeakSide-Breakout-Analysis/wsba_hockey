@@ -11,178 +11,52 @@ warnings.filterwarnings('ignore')
 ### SCRAPING FUNCTIONS ###
 # Provided in this file are functions vital to the scraping functions in the WSBA Hockey Python package. #
 
-### JSON GAME INFO ###
+## ORDER OF OPERATIONS ##
+# Create game information to use with all functions
+# Retreive JSON data
+# Parse JSON data
+# Retreive and clean HTML pbp with player information
+# Parse HTML pbp, return parsed HTML
+# Combine pbp data
+# Retreive and analyze HTML shifts with player information for home and away teams
+# Parse shift events
+# Combine all data, return complete play-by-play
+
+## UTILITY FUNCTIONS ##
+def get_col():
+    return [
+        'season','season_type','game_id','game_date',"start_time","venue","venue_location",
+        'away_team_abbr','home_team_abbr','event_num','period','period_type',
+        'seconds_elapsed',"situation_code","strength_state","home_team_defending_side",
+        "event_type_code","event_type","description","penalty_duration",
+        "event_team_abbr",'num_on', 'players_on','ids_on','num_off','players_off','ids_off','shift_type',
+        "event_team_venue",
+        "event_player_1_name","event_player_2_name","event_player_3_name",
+        "event_player_1_id","event_player_2_id","event_player_3_id",
+        "event_player_1_pos","event_player_2_pos","event_player_3_pos",
+        "event_goalie","event_goalie_id",
+        "shot_type","zone_code","x","y","x_fixed","y_fixed","x_adj","y_adj",
+        "event_skaters","away_skaters","home_skaters",
+        "event_distance","event_angle","away_score","home_score", "away_fenwick", "home_fenwick",
+        "away_on_1","away_on_2","away_on_3","away_on_4","away_on_5","away_on_6","away_goalie",
+        "home_on_1","home_on_2","home_on_3","home_on_4","home_on_5","home_on_6","home_goalie",
+        "away_on_1_id","away_on_2_id","away_on_3_id","away_on_4_id","away_on_5_id","away_on_6_id","away_goalie_id",
+        "home_on_1_id","home_on_2_id","home_on_3_id","home_on_4_id","home_on_5_id","home_on_6_id","home_goalie_id",
+        "event_coach","away_coach","home_coach"
+    ]
+
+
+## JSON FUNCTIONS ##
 def get_game_roster(json):
     #Given raw json data, return game rosters
     roster = pd.json_normalize(json['rosterSpots'])
+    roster['full_name'] = (roster['firstName.default'] + " " + roster['lastName.default']).str.upper()
 
-    alt_name_col = ['firstName.cs','firstName.de','firstName.es','firstName.fi','firstName.sk','firstName.sv']
-
-    #Add alt-names pattern (appropriately replaces names in shift html)
-    roster['fullName.default'] = (roster['firstName.default'] + " " + roster['lastName.default']).str.upper()
-    for col in alt_name_col:
-        try:
-            roster[f'fullName.{re.sub('firstName.',"",col)}'] = (roster[col] + " " + roster['lastName.default']).str.upper()
-        except:
-            continue
+    #Return: roster information
     return roster
 
-def get_game_info(json):
-    #Given raw json data, return game information
-
-    base = pd.json_normalize(json)
-    game_id = base['id'][0]
-    season = base['season'][0]
-    season_type = base['gameType'][0]
-    game_date = base['gameDate'][0]
-    start_time = base['startTimeUTC'][0]
-    venue = base['venue.default'][0]
-    venue_location = base['venueLocation.default'][0]
-    away_team_id = base['awayTeam.id'][0]
-    away_team_abbr = base['awayTeam.abbrev'][0]
-    home_team_id = base['homeTeam.id'][0]
-    home_team_abbr = base['homeTeam.abbrev'][0]
-
-    return {"game_id":game_id,
-            "season":season,
-            "season_type":season_type,
-            "game_date":game_date,
-            "start_time":start_time,
-            'venue':venue,
-            'venue_location':venue_location,
-            'away_team_id':away_team_id,
-            'away_team_abbr':away_team_abbr,
-            'home_team_id':home_team_id,
-            'home_team_abbr':home_team_abbr,
-            'rosters':get_game_roster(json)}
-
-## HTML PBP DATA ###
-def strip_html_pbp(td,json):
-    #Harry Shomer's Code (modified)
-
-    #JSON Prep
-    info = get_game_info(json)
-    roster = info['rosters']
-
-    away = info['away_team_id'] #Away team in the HTML is the seventh column 
-    home = info['home_team_id'] #Home team in the HTML is the eighth column
-    away_players = roster.loc[roster['teamId']==away][['fullName.default','playerId','sweaterNumber']]
-    home_players = roster.loc[roster['teamId']==home][['fullName.default','playerId','sweaterNumber']]
-    
-    rosters = {"away":away_players.set_index("sweaterNumber")[['playerId','fullName.default']].to_dict(),
-               "home":home_players.set_index("sweaterNumber")[['playerId','fullName.default']].to_dict()
-               }
-    
-    #HTML Parsing
-    for y in range(len(td)):
-        # Get the 'br' tag for the time column...this get's us time remaining instead of elapsed and remaining combined
-        if y == 3:
-            td[y] = td[y].get_text()   # This gets us elapsed and remaining combined-< 3:0017:00
-            index = td[y].find(':')
-            td[y] = td[y][:index+3]
-        elif (y == 6 or y == 7) and td[0] != '#':
-            # 6 & 7-> These are the player 1 ice one's
-            # The second statement controls for when it's just a header
-            baz = td[y].find_all('td')
-            bar = [baz[z] for z in range(len(baz)) if z % 4 != 0]  # Because of previous step we get repeats...delete some
-
-            # The setup in the list is now: Name/Number->Position->Blank...and repeat
-            # Now strip all the html
-            players = []
-            for i in range(len(bar)):
-                if i % 3 == 0:
-                    try:
-                        #Using the supplied json we can bind player name and id to number and team
-                        #Find number and team of player then lookup roster dictionary
-                        
-                        number = bar[i].get_text().strip('\n')  # Get number and strip leading/trailing newlines
-                        if y == 6:
-                            team = 'away'
-                        else:
-                            team = 'home'
-                        
-                        id = rosters[team]['playerId'][int(number)]
-                        name = rosters[team]['fullName.default'][int(number)]
-                        
-                    except KeyError:
-                        name = ''
-                        number = ''
-                        id = ''
-                elif i % 3 == 1:
-                    if name != '':
-                        position = bar[i].get_text()
-                        players.append([name, number, position, id])
-
-            td[y] = players
-        else:
-            td[y] = td[y].get_text()
-
-    return td
-
-
-def clean_html_pbp(html,json):
-    #Harry Shomer's Code (modified)
-    soup = get_contents(html)
-
-    # Create a list of lists (each length 8)...corresponds to 8 columns in html pbp
-    td = [soup[i:i + 8] for i in range(0, len(soup), 8)]
-
-    cleaned_html = [strip_html_pbp(x,json) for x in td]
-
-    return cleaned_html
-
-def get_html_roster(html,json,teams):
-    #Given raw html and teams, return available roster data
-    events = clean_html_pbp(html,json)
-
-    #Roster dict
-    roster_dict = {teams['away']:{},
-                   teams['home']:{}}
-    
-    for event in events:
-        if event[0] == "#":
-            continue
-        else:
-            #Players are keys, value is a list with number, position, and description id
-            for i in range(len(event[6])):
-                player = event[6][i][0]
-                num = event[6][i][1]
-                pos = event[6][i][2]
-                id = event[6][i][3]
-                team = teams['away']
-                
-                #Accounting for players with three or more parts in their name
-                if len(player.split())>2:
-                    last = " ".join(player.split()[1:len(player.split())])
-                else: 
-                    last = player.split()[len(player.split())-1]
-
-                desc_id = f'#{num} {last}'
-                roster_dict[team].update({
-                   desc_id:[num,pos,player,team,id]
-                })      
-            for i in range(len(event[7])):
-                player = event[7][i][0]
-                num = event[7][i][1]
-                pos = event[7][i][2]
-                id = event[7][i][3]
-                team = teams['home']
-                
-                #Accounting for players with three or more parts in their name
-                if len(player.split())>2:
-                    last = " ".join(player.split()[1:len(player.split())])
-                else: 
-                    last = player.split()[len(player.split())-1]
-
-                desc_id = f'#{num} {last}'
-                roster_dict[team].update({
-                   desc_id:[num,pos,player,team,id]
-                })   
-
-    return roster_dict
-
-def get_json_coaches(game_id):
-    #Given game id, return head coaches for away and home team
+def get_game_coaches(game_id):
+    #Given game info, return head coaches for away and home team
     
     #Retreive data
     json = rs.get(f'https://api-web.nhle.com/v1/gamecenter/{game_id}/right-rail').json()
@@ -200,252 +74,90 @@ def get_json_coaches(game_id):
 
     #Return: dict with coaches
     return coaches
-
-def parse_html_event(event,roster,teams):
-    #Given event from html events list and game roster, return event data
-
-    events_dict = dict()
-    if event[0] == "#" or event[4] in ['GOFF', 'EGT', 'PGSTR', 'PGEND', 'ANTHEM','SPC','PBOX']:
-        return pd.DataFrame()
-    else:
-        #Event info
-        events_dict['event_num'] = int(event[0])
-        events_dict['period'] = int(event[1])
-        events_dict['strength'] = re.sub(u'\xa0'," ",event[2])
-        events_dict['period_time_elapsed'] = event[3]
-        events_dict['seconds_elapsed'] = convert_to_seconds(event[3]) + (1200*(int(event[1])-1))
-        events_dict['event_type'] = event[4]
-        desc = re.sub(u'\xa0'," ",event[5])
-        events_dict['description'] = desc
-
-        events_dict['shot_type'] = desc.split(",")[1].lower().strip(" ") if event[4] in ['BLOCK','MISS','SHOT','GOAL'] else ""
-        zone = [x for x in desc.split(',') if 'Zone' in x]
-        if not zone:
-            events_dict['zone_code'] = None
-        elif zone[0].find("Off") != -1:
-            events_dict['zone_code'] = 'O'
-        elif zone[0].find("Neu") != -1:
-            events_dict['zone_code'] = 'N'
-        elif zone[0].find("Def") != -1:
-            events_dict['zone_code'] = 'D'
-
-        #Convert team names for compatiblity
-        replace = [('LAK',"L.A"),('NJD',"N.J"),('SJS',"S.J"),('TBL',"T.B")]
-        for name, repl in replace:
-            teams['away'] = teams['away'].replace(repl,name)
-            teams['home'] = teams['home'].replace(repl,name)
-            desc = desc.replace(repl,name)
-        
-        event_team = desc[0:3] if desc[0:3] in [teams['away'],teams['home']] else   ""
-        events_dict['event_team_abbr'] = event_team
-
-        
-        events_dict['away_team_abbr'] = teams['away']
-        events_dict['home_team_abbr'] = teams['home']
-        event_skaters = []
-
-        away_skaters = 0
-        away_goalie = 0
-        #Away on-ice
-        for i in range(len(event[6])):
-            player = event[6][i][0]
-            num = event[6][i][1]
-            pos = event[6][i][2]
-            id = event[6][i][3]
-            
-            if pos == 'G':
-                events_dict['away_goalie'] = player
-                events_dict['away_goalie_id'] = id
-                away_goalie += 1
-            else:
-                events_dict[f'away_on_{i+1}'] = player
-                events_dict[f'away_on_{i+1}_id'] = id
-                away_skaters += 1
-
-        home_skaters = 0
-        home_goalie = 0
-        #Home on-ice
-        for i in range(len(event[7])):
-            player = event[7][i][0]
-            num = event[7][i][1]
-            pos = event[7][i][2]    
-            id = event[7][i][3]
-            
-            if pos == 'G':
-                events_dict['home_goalie'] = player
-                events_dict['home_goalie_id'] = id
-                home_goalie += 1
-            else:
-                events_dict[f'home_on_{i+1}'] = player
-                events_dict[f'home_on_{i+1}_id'] = id
-                home_skaters += 1
-
-        #Determine parsing route based on event (single player events are left)
-        if event[4] in ['FAC','HIT','BLOCK','PENL']:
-            #Regex to find team and player number involved (finds all for each event)
-            #Code is modified from Harry Shomer in order to account for periods in a team abbreviation
-            regex = re.compile(r'([A-Z]{2,3}|\b[A-Z]\.[A-Z])\s+#(\d+)')
-            fac = regex.findall(desc)
-
-            try: team_1,num_1 = fac[0]
-            except: team_1 = ''
-            try: team_2,num_2 = fac[1]
-            except: team_2 = ''
-            
-            try: rost_1 = roster[team_1]
-            except: rost_1 = {}
-            try: rost_2 = roster[team_2]
-            except: rost_2 = {}
-
-            #Filter incorrectly parsed teams
-            repl = []
-            for team, num in fac:
-                if team in [teams['home'],teams['away']]:
-                    repl.append((team,num))
-
-            fac = repl
-                
-            #Determine append order (really only applies to faceoffs)
-            if len(fac) == 0:
-                #No data
-                ""
-            else:
-                if len(fac) == 1:
-                    #Find event players using given roster
-                    for desc_id,info in rost_1.items():
-                        if desc_id in desc:
-                            event_skaters.append([info[2],info[1],info[4]])
-                else:
-                    if team_1 == event_team:
-                        for desc_id,info in rost_1.items():
-                            if desc_id in desc:
-                                event_skaters.append([info[2],info[1],info[4]])
-                        for desc_id,info in rost_2.items():
-                            if desc_id in desc:
-                                event_skaters.append([info[2],info[1],info[4]])
-                    else: 
-                        for desc_id,info in rost_2.items():
-                            if desc_id in desc:
-                                event_skaters.append([info[2],info[1],info[4]])
-                        for desc_id,info in rost_1.items():
-                            if desc_id in desc:
-                                event_skaters.append([info[2],info[1],info[4]])
-        else:
-            #Parse goal
-            if event[4] == 'GOAL':
-                regex = re.compile(r'#(\d+)\s+')
-                goal = regex.findall(desc)
-
-                goal_team = roster[event_team]
-                #Search through individual element in goal (adds skaters in order from goal, first assist, second assist)
-                for point in goal:
-                    for info in goal_team.values():
-                        if info[0] == point:
-                            event_skaters.append([info[2],info[1],info[4]])
-                            break
-            else:
-                #Parse single player or no player events
-                combined = roster[teams['away']] | roster[teams['home']]
-                for desc_id,info in combined.items():
-                    if desc_id in desc:
-                        event_skaters.append([info[2],info[1],info[4]])
-
-        for i in range(len(event_skaters)):
-            events_dict[f'event_player_{i+1}_name'] = event_skaters[i][0]
-            events_dict[f'event_player_{i+1}_id'] = event_skaters[i][2]
-            events_dict[f'event_player_{i+1}_pos'] = event_skaters[i][1]
-
-        events_dict['away_skaters'] = away_skaters
-        events_dict['home_skaters'] = home_skaters
-        events_dict['away_goalie_in'] = away_goalie
-        events_dict['home_goalie_in'] = home_goalie
-
-        event_skaters = away_skaters if teams['away'] == event_team else home_skaters
-        event_skaters_against = away_skaters if teams['home'] == event_team else home_skaters
-        events_dict['strength_state'] = f'{event_skaters}v{event_skaters_against}'
-        events_dict['event_skaters'] = np.where(event_team == teams['home'],home_skaters,away_skaters)
-
-    #Return: dataframe of event in a single row
-    return (pd.DataFrame([events_dict]))
-
-def parse_html(game_id,html,json):
-    #Given the game id, raw html document to a provided game, and json data, return parsed HTML play-by-play
-
-    #Retreive cleaned html data (from Harry Shomer's hockey_scraper package) 
-    events = clean_html_pbp(html,json)
     
-    json_info = pd.json_normalize(json)
-    teams = {
-        'away':json_info['awayTeam.abbrev'][0],
-        'home':json_info['homeTeam.abbrev'][0]
-    }
+def get_game_info(game_id):
+    #Given game_id, return game information
+    
+    #Retreive data
+    api = f"https://api-web.nhle.com/v1/gamecenter/{game_id}/play-by-play"
+    json = rs.get(api).json()
 
-    roster = get_html_roster(html,json,teams)
-    event_log = []
-    for event in events:
-        event_log.append(parse_html_event(event,roster,teams))
+    #Games don't always have JSON shifts, for whatever reason
+    shifts = f"https://api.nhle.com/stats/rest/en/shiftcharts?cayenneExp=gameId={game_id}"
+    shifts = rs.get(shifts).json()
+    json_shifts = pd.json_normalize(shifts['data'])
+    
+    if shifts['total'] == 0:
+        json_shifts = pd.DataFrame()
 
-    data = pd.concat(event_log)
-    data['event_type'] = data['event_type'].replace({
-     "PGSTR": "pre-game-start",
-     "PGEND": "pre-game-end",
-     'GSTR':"game-start",
-     "ANTHEM":"anthem",
-     "PSTR":"period-start",
-     'FAC':"faceoff",
-     "SHOT":"shot-on-goal",
-     "BLOCK":"blocked-shot",
-     "STOP":"stoppage",
-     "MISS":"missed-shot",
-     "HIT":"hit",
-     "GOAL":"goal",
-     "GIVE":"giveaway",
-     "TAKE":"takeaway",
-     "DELPEN":"delayed-penalty",
-     "PENL":"penalty",
-     "CHL":"challenge",
-     "PEND":"period-end",
-     "GEND":"game-end"
+    #Split information
+    base = pd.json_normalize(json)
+    game_id = base['id'][0]
+    season = base['season'][0]
+    season_type = base['gameType'][0]
+    game_date = base['gameDate'][0]
+    game_state = base['gameState'][0]
+    start_time = base['startTimeUTC'][0]
+    venue = base['venue.default'][0]
+    venue_location = base['venueLocation.default'][0]
+    away_team_id = base['awayTeam.id'][0]
+    away_team_abbr = base['awayTeam.abbrev'][0]
+    home_team_id = base['homeTeam.id'][0]
+    home_team_abbr = base['homeTeam.abbrev'][0]
+
+    #Add roster
+    roster = get_game_roster(json)
+    #In the HTML parsing process, player are identified by a regex pattern (ABB #00 such as BOS #37) or number and name in the following format: #00 NAME (i.e. #37 BERGERON) so these are added as IDs of sorts.  
+    roster['descID'] = '#'+roster['sweaterNumber'].astype(str)+" "+roster['lastName.default'].str.upper()
+    roster['team_abbr'] = roster['teamId'].replace({
+        away_team_id:[away_team_abbr],
+        home_team_id:[home_team_abbr]
     })
+    roster['key'] = roster['team_abbr'] + " #" + roster['sweaterNumber'].astype(str)
 
-    check_col = ['event_player_1_id','event_player_2_id','event_player_3_id',
-                 'away_on_1','away_on_2','away_on_3','away_on_4','away_on_5','away_on_6',
-                 'away_on_1_id','away_on_2_id','away_on_3_id','away_on_4_id','away_on_5_id','away_on_6_id',
-                 'home_on_1','home_on_2','home_on_3','home_on_4','home_on_5','home_on_6',
-                 'home_on_1_id','home_on_2_id','home_on_3_id','home_on_4_id','home_on_5_id','home_on_6_id']
+    #Create an additional roster dictionary for use with HTML parsing
+    #Roster dict
+    roster_dict = {'away':{},
+                   'home':{}}
+    
+    #Evaluate and add players by team
+    for team in ['away','home']:
+        abbr = (away_team_abbr if team == 'away' else home_team_abbr)
+        rost = roster.loc[roster['team_abbr']==abbr]
+        
+        #Now iterate through team players
+        for player,id,num,pos,team_abbr,key in zip(rost['full_name'],rost['playerId'],rost['sweaterNumber'],rost['positionCode'],rost['team_abbr'],rost['key']):
+            roster_dict[team].update({str(num):[key, pos, player, team_abbr, id]})
 
-    for col in check_col:
-        try: data[col]
-        except:
-            data[col] = ""
+    #Return: game information
+    return {"game_id":str(game_id),
+            "season":season,
+            "season_type":season_type,
+            "game_date":game_date,
+            "game_state":game_state,
+            "start_time":start_time,
+            'venue':venue,
+            'venue_location':venue_location,
+            'away_team_id':away_team_id,
+            'away_team_abbr':away_team_abbr,
+            'home_team_id':home_team_id,
+            'home_team_abbr':home_team_abbr,
+            'events':pd.json_normalize(json['plays']).reset_index(drop=True),
+            'rosters':roster,
+            'HTML_rosters':roster_dict,
+            'coaches':get_game_coaches(game_id),
+            'json_shifts':json_shifts}
 
-    #Return: HTML play-by-play
-    return data
+def parse_json(info):
+    #Given game info, return JSON document
 
-### JSON PBP DATA ###
-def parse_json(json):
-    #Given json data from an NHL API call, return play-by-play data.
-
-    events = pd.json_normalize(json['plays']).reset_index(drop=True)
-    info = pd.json_normalize(json)
-    roster =get_game_roster(json)
+    #Retreive data
+    events = info['events']
 
     #Return error if game is set in the future
-    if info['gameState'][0] == 'FUT':
+    if info['game_state'] == 'FUT':
         raise ValueError(f"Game {info['id'][0]} has not occured yet.")
-
-    away = info['awayTeam.id'][0]
-    home = info['homeTeam.id'][0]
-    teams = {
-        away:info['awayTeam.abbrev'][0],
-        home:info['homeTeam.abbrev'][0]
-    }
-
-    #Create player information dicts used to create event_player columns
-    players = {}
-    for id, player in zip(list(roster['playerId']),list(roster['fullName.default'])):
-        players.update({id:player.upper()})
-
+    
     #Test columns
     cols = ['eventId', 'timeInPeriod', 'timeRemaining', 'situationCode', 'homeTeamDefendingSide', 'typeCode', 'typeDescKey', 'sortOrder', 'periodDescriptor.number', 'periodDescriptor.periodType', 'periodDescriptor.maxRegulationPeriods', 'details.eventOwnerTeamId', 'details.losingPlayerId', 'details.winningPlayerId', 'details.xCoord', 'details.yCoord', 'details.zoneCode', 'pptReplayUrl', 'details.shotType', 'details.scoringPlayerId', 'details.scoringPlayerTotal', 'details.assist1PlayerId', 'details.assist1PlayerTotal', 'details.assist2PlayerId', 'details.assist2PlayerTotal', 'details.goalieInNetId', 'details.awayScore', 'details.homeScore', 'details.highlightClipSharingUrl', 'details.highlightClipSharingUrlFr', 'details.highlightClip', 'details.highlightClipFr', 'details.discreteClip', 'details.discreteClipFr', 'details.shootingPlayerId', 'details.awaySOG', 'details.homeSOG', 'details.playerId', 'details.hittingPlayerId', 'details.hitteePlayerId', 'details.reason', 'details.typeCode', 'details.descKey', 'details.duration', 'details.servedByPlayerId', 'details.secondaryReason', 'details.blockingPlayerId', 'details.committedByPlayerId', 'details.drawnByPlayerId', 'game_id', 'season', 'season_type', 'game_date']
 
@@ -468,7 +180,7 @@ def parse_json(json):
 
     events['event_player_3_id'] = events['details.assist2PlayerId']
 
-    events['event_team_status'] = np.where(events['details.eventOwnerTeamId']==home,"home","away")
+    events['event_team_venue'] = np.where(events['details.eventOwnerTeamId']==info['home_team_id'],"home","away")
 
     #Coordinate adjustments:
     #The WSBA NHL Scraper includes three sets of coordinates per event:
@@ -480,8 +192,8 @@ def parse_json(json):
     try:
         events['x_fixed'] = abs(events['details.xCoord'])
         events['y_fixed'] = np.where(events['details.xCoord']<0,-events['details.yCoord'],events['details.yCoord'])
-        events['x_adj'] = np.where(events['event_team_status']=="home",events['x_fixed'],-events['x_fixed'])
-        events['y_adj'] = np.where(events['event_team_status']=="home",events['y_fixed'],-events['y_fixed'])
+        events['x_adj'] = np.where(events['event_team_venue']=="home",events['x_fixed'],-events['x_fixed'])
+        events['y_adj'] = np.where(events['event_team_venue']=="home",events['y_fixed'],-events['y_fixed'])
         events['event_distance'] = np.sqrt(((89 - events['x_fixed'])**2) + (events['y_fixed']**2))
         events['event_angle'] = np.degrees(np.arctan2(abs(events['y_fixed']), abs(89 - events['x_fixed'])))
     except TypeError:
@@ -495,8 +207,10 @@ def parse_json(json):
         events['event_angle'] = np.nan
     
     
-    events['event_team_abbr'] = events['details.eventOwnerTeamId'].replace(teams)
-    events['event_goalie'] = events['details.goalieInNetId'].replace(players)
+    events['event_team_abbr'] = events['details.eventOwnerTeamId'].replace({
+        info['away_team_id']:[info['away_team_abbr']],
+        info['home_team_id']:[info['home_team_abbr']]
+    })
 
     #Rename columns to follow WSBA naming conventions
     events = events.rename(columns={
@@ -522,10 +236,7 @@ def parse_json(json):
     })
 
     #Period time adjustments (only 'seconds_elapsed' is included in the resulting data)
-    events['period_time_simple'] = events['period_time_elasped'].str.replace(":","",regex=True)
-    events['period_seconds_elapsed'] = np.where(events['period_time_simple'].str.len()==3,
-                                           ((events['period_time_simple'].str[0].astype(int)*60)+events['period_time_simple'].str[-2:].astype(int)),
-                                           ((events['period_time_simple'].str[0:2].astype(int)*60)+events['period_time_simple'].str[-2:].astype(int)))
+    events['period_seconds_elapsed'] = events['period_time_elasped'].apply(convert_to_seconds)
     events['seconds_elapsed'] = ((events['period']-1)*1200)+events['period_seconds_elapsed']
 
     events = events.loc[(events['event_type']!="")]
@@ -541,7 +252,7 @@ def parse_json(json):
     afs = []
     hf = 0
     hfs = []
-    for event,team in zip(list(events['event_type']),list(events['event_team_status'])):
+    for event,team in zip(list(events['event_type']),list(events['event_team_venue'])):
         if event in fenwick_events:
             if team == "home":
                 hf += 1
@@ -564,49 +275,6 @@ def parse_json(json):
 
     #Return: dataframe with parsed game
     return events
-
-def combine_pbp(game_id,html,json):
-    #Given game id, html data, and json data, return complete play-by-play data for provided game
-
-    html_pbp = parse_html(game_id,html,json)
-    info = get_game_info(json)
-
-    #Route data combining - json if season is after 2009-2010:
-    if str(info['season']) in ['20052006','20062007','20072008','20082009','20092010']:
-        #ESPN x HTML
-        espn_pbp = parse_espn(str(info['game_date']),info['away_team_abbr'],info['home_team_abbr']).rename(columns={'coords_x':'x',"coords_y":'y'})
-        merge_col = ['period','seconds_elapsed','event_type','event_team_abbr']
-
-        df = pd.merge(html_pbp,espn_pbp,how='left',on=merge_col)
-
-    else:
-        #JSON x HTML
-        json_pbp = parse_json(json)
-        #Modify merge conditions and merge pbps
-        merge_col = ['period','seconds_elapsed','event_type','event_team_abbr','event_player_1_id']
-        html_pbp = html_pbp.drop(columns=['event_player_2_id','event_player_3_id','shot_type','zone_code'])
-
-        df = pd.merge(html_pbp,json_pbp,how='left',on=merge_col)
-
-    #Add game info
-    info_col = ['season','season_type','game_id','game_date',"start_time","venue","venue_location",
-        'away_team_abbr','home_team_abbr']
-    
-    for col in info_col:
-        df[col] = info[col]
-
-    #Fill period_type column and assign shifts a sub-500 event code
-    df['period_type'] = np.where(df['period']<4,"REG",np.where(np.logical_and(df['period']==5,df['season_type']==2),"SO","OT"))
-    try: df['event_type_code'] = np.where(df['event_type']!='change',df['event_type_code'],499)
-    except:
-        ""
-    df = df.sort_values(['period','seconds_elapsed']).reset_index()
-
-    df['event_team_status'] = np.where(df['event_team_abbr'].isna(),"",np.where(df['home_team_abbr']==df['event_team_abbr'],"home","away"))
-
-    col = [col for col in get_col() if col in df.columns.to_list()]
-    #Return: complete play-by-play information for provided game
-    return df[col]
 
 ### ESPN SCRAPING FUNCTIONS ###
 def espn_game_id(date,away,home):
@@ -774,8 +442,348 @@ def parse_espn(date,away,home):
     espn_events['home_fenwick'] = hfs
     #Return: play-by-play events in supplied game from ESPN
     return espn_events
+    
+## HTML PBP FUNCTIONS ##
+def strip_html_pbp(td,rosters):
+    #Given html row, parse data from HTML pbp
+    #Harry Shomer's Code (modified)
+    
+    #HTML Parsing
+    for y in range(len(td)):
+        # Get the 'br' tag for the time column...this get's us time remaining instead of elapsed and remaining combined
+        if y == 3:
+            td[y] = td[y].get_text()   # This gets us elapsed and remaining combined-< 3:0017:00
+            index = td[y].find(':')
+            td[y] = td[y][:index+3]
+        elif (y == 6 or y == 7) and td[0] != '#':
+            # 6 & 7-> These are the player 1 ice one's
+            # The second statement controls for when it's just a header
+            baz = td[y].find_all('td')
+            bar = [baz[z] for z in range(len(baz)) if z % 4 != 0]  # Because of previous step we get repeats...delete some
 
-### SHIFT SCRAPING FUNCTIONS ###
+            # The setup in the list is now: Name/Number->Position->Blank...and repeat
+            # Now strip all the html
+            players = []
+            for i in range(len(bar)):
+                if i % 3 == 0:
+                    try:
+                        #Using the supplied json we can bind player name and id to number and team
+                        #Find number and team of player then lookup roster dictionary
+                        
+                        number = bar[i].get_text().strip('\n')  # Get number and strip leading/trailing newlines
+                        if y == 6:
+                            team = 'away'
+                        else:
+                            team = 'home'
+                        
+                        id = rosters[team][str(number)][4]
+                        name = rosters[team][str(number)][2]
+                        position = rosters[team][str(number)][1]
+                        
+                    except KeyError:
+                        name = ''
+                        number = ''
+                        id = ''
+                elif i % 3 == 1:
+                    if name != '':
+                        players.append([name, number, position, id])
+
+            td[y] = players
+        else:
+            td[y] = td[y].get_text()
+
+    return td
+
+
+def clean_html_pbp(info):
+    #Harry Shomer's Code (modified)
+
+    game_id = info['game_id']
+    #Retreive data
+    season = info['season']
+    doc = f"https://www.nhl.com/scores/htmlreports/{season}/PL{game_id[-6:]}.HTM"
+    html = rs.get(doc).content
+    soup = get_contents(html)
+
+    #Rosters
+    rosters = info['HTML_rosters']
+
+    # Create a list of lists (each length 8)...corresponds to 8 columns in html pbp
+    td = [soup[i:i + 8] for i in range(0, len(soup), 8)]
+
+    cleaned_html = [strip_html_pbp(x,rosters) for x in td]
+
+    return cleaned_html
+
+def parse_html(info):
+    #Given game info, return HTML event data
+
+    #Retreive game information and html events
+    rosters = info['HTML_rosters']
+    events = clean_html_pbp(info)
+
+    teams = {info['away_team_abbr']:['away'],
+             info['home_team_abbr']:['home']}
+    
+    #Parsing
+    event_log = []
+    for event in events:
+        events_dict = {}
+        if event[0] == "#" or event[4] in ['GOFF', 'EGT', 'PGSTR', 'PGEND', 'ANTHEM','SPC','PBOX','SOC']:
+            continue
+        else:
+            #Event info
+            events_dict['event_num'] = int(event[0])
+            events_dict['period'] = int(event[1])
+            events_dict['strength'] = re.sub(u'\xa0'," ",event[2])
+            events_dict['period_time_elapsed'] = event[3]
+            events_dict['seconds_elapsed'] = convert_to_seconds(event[3]) + (1200*(int(event[1])-1))
+            events_dict['event_type'] = event[4]
+
+            desc = re.sub(u'\xa0'," ",event[5])
+            events_dict['description'] = desc
+
+            events_dict['shot_type'] = desc.split(",")[1].lower().strip(" ") if event[4] in ['BLOCK','MISS','SHOT','GOAL'] else ""
+            zone = [x for x in desc.split(',') if 'Zone' in x]
+            if not zone:
+                events_dict['zone_code'] = None
+            elif zone[0].find("Off") != -1:
+                events_dict['zone_code'] = 'O'
+            elif zone[0].find("Neu") != -1:
+                events_dict['zone_code'] = 'N'
+            elif zone[0].find("Def") != -1:
+                events_dict['zone_code'] = 'D'
+
+            #Convert team names for compatiblity
+            replace = [('LAK',"L.A"),('NJD',"N.J"),('SJS',"S.J"),('TBL',"T.B")]
+            for name, repl in replace:
+                desc = desc.replace(repl,name)
+            
+            event_team = desc[0:3] if desc[0:3] in teams.keys() else ""
+            events_dict['event_team_abbr'] = event_team
+
+            events_dict['away_team_abbr'] = info['away_team_abbr']
+            events_dict['home_team_abbr'] = info['home_team_abbr']
+
+            away_skaters = 0
+            away_goalie = 0
+            #Away on-ice
+            for i in range(len(event[6])):
+                player = event[6][i][0]
+                pos = event[6][i][2]
+                id = event[6][i][3]
+                
+                if pos == 'G':
+                    events_dict['away_goalie'] = player
+                    events_dict['away_goalie_id'] = id
+                    away_goalie += 1
+                else:
+                    events_dict[f'away_on_{i+1}'] = player
+                    events_dict[f'away_on_{i+1}_id'] = id
+                    away_skaters += 1
+
+            home_skaters = 0
+            home_goalie = 0
+            #Home on-ice
+            for i in range(len(event[7])):
+                player = event[7][i][0]
+                pos = event[7][i][2]    
+                id = event[7][i][3]
+                
+                if pos == 'G':
+                    events_dict['home_goalie'] = player
+                    events_dict['home_goalie_id'] = id
+                    home_goalie += 1
+                else:
+                    events_dict[f'home_on_{i+1}'] = player
+                    events_dict[f'home_on_{i+1}_id'] = id
+                    home_skaters += 1
+            
+            event_players = []
+            #Determine parsing route based on event
+            if event[4] in ['FAC','HIT','BLOCK','PENL']:
+                #Regex to find team and player number involved (finds all for each event)
+                #Code is modified from Harry Shomer in order to account for periods in a team abbreviation
+                regex = re.compile(r'([A-Z]{2,3}|\b[A-Z]\.[A-Z])\s+#(\d+)')
+                fac = regex.findall(desc)
+                #Filter incorrectly parsed teams
+                repl = []
+                for team, num in fac:
+                    if team in teams.keys():
+                        repl.append((team,num))
+                fac = repl
+
+                #Find first event player
+                ep1_num = ''
+                for i in range(len(fac)):
+                    team, num = fac[i]
+                    if team == event_team:
+                        ep1_num = num
+                        event_players.append(fac[i])
+                    else:
+                        continue
+                    
+                #Find other players
+                for i in range(len(fac)):
+                    team, num = fac[i]
+                    if num == ep1_num:
+                        continue
+                    else:
+                        event_players.append(fac[i])
+            elif event[4]=='GOAL':
+                #Parse goal
+                regex = re.compile(r'#(\d+)\s+')
+                goal = regex.findall(desc)
+                
+                #Add all involved players
+                for point in goal:
+                    #In this loop, point is a player number.  We can assign event_team to all players in a goal
+                    event_players.append((event_team,str(point)))
+            elif event[4]=='DELPEN':
+                #Don't parse DELPEN events 
+                #These events typically have no text but when they do it is often erroneous or otherwise problematic
+
+                ""
+            else:
+                #Parse single or no player events
+                regex = re.compile(r'#\d+')
+                fac = regex.findall(desc)
+
+                for i in range(len(fac)):
+                    num = fac[i].replace("#","")
+                    event_players.append((event_team,str(num)))
+
+            for i in range(len(event_players)):
+                #For each player, evaluate their event data, then retreive information from rosters
+                team, num = event_players[i]
+                
+                status = teams[team]
+                data = rosters[status[0]]
+
+                
+                events_dict[f'event_player_{i+1}_name'] = data[str(num)][2]
+                events_dict[f'event_player_{i+1}_id'] = data[str(num)][4]
+                events_dict[f'event_player_{i+1}_pos'] = data[str(num)][1]
+
+            events_dict['away_skaters'] = away_skaters
+            events_dict['home_skaters'] = home_skaters
+            events_dict['away_goalie_in'] = away_goalie
+            events_dict['home_goalie_in'] = home_goalie
+
+            event_skaters = away_skaters if info['away_team_abbr'] == event_team else home_skaters
+            event_skaters_against = away_skaters if info['home_team_abbr'] == event_team else home_skaters
+            events_dict['strength_state'] = f'{event_skaters}v{event_skaters_against}'
+            events_dict['event_skaters'] = np.where(event_team == info['home_team_abbr'],home_skaters,away_skaters)
+
+        event_log.append(pd.DataFrame([events_dict]))
+    
+    data = pd.concat(event_log)
+    data['event_type'] = data['event_type'].replace({
+     "PGSTR": "pre-game-start",
+     "PGEND": "pre-game-end",
+     'GSTR':"game-start",
+     "ANTHEM":"anthem",
+     "PSTR":"period-start",
+     'FAC':"faceoff",
+     "SHOT":"shot-on-goal",
+     "BLOCK":"blocked-shot",
+     "STOP":"stoppage",
+     "MISS":"missed-shot",
+     "HIT":"hit",
+     "GOAL":"goal",
+     "GIVE":"giveaway",
+     "TAKE":"takeaway",
+     "DELPEN":"delayed-penalty",
+     "PENL":"penalty",
+     "CHL":"challenge",
+     "PEND":"period-end",
+     "GEND":"game-end"
+    })
+
+    #Return: parsed HTML pbp
+    return data
+
+def combine_pbp(info):
+    #Given game info, return complete play-by-play data for provided game
+
+    html_pbp = parse_html(info)
+
+    #Route data combining - json if season is after 2009-2010:
+    if str(info['season']) in ['20052006','20062007','20072008','20082009','20092010']:
+        #ESPN x HTML
+        espn_pbp = parse_espn(str(info['game_date']),info['away_team_abbr'],info['home_team_abbr']).rename(columns={'coords_x':'x',"coords_y":'y'}).drop(columns=['event_player_1_name'])
+        merge_col = ['period','seconds_elapsed','event_type','event_team_abbr']
+
+        df = pd.merge(html_pbp,espn_pbp,how='left',on=merge_col)
+
+    else:
+        #JSON x HTML
+        json_pbp = parse_json(info)
+        #Modify merge conditions and merge pbps
+        merge_col = ['period','seconds_elapsed','event_type','event_team_abbr','event_player_1_id']
+        html_pbp = html_pbp.drop(columns=['event_player_2_id','event_player_3_id','shot_type','zone_code'],errors='ignore')
+
+        #While rare sometimes column 'event_player_1_id' is interpreted differently between the two dataframes. 
+        html_pbp['event_player_1_id'] = html_pbp['event_player_1_id'].astype(object)
+        json_pbp['event_player_1_id'] = json_pbp['event_player_1_id'].astype(object)
+
+        df = pd.merge(html_pbp,json_pbp,how='left',on=merge_col)
+
+    #Add game info
+    info_col = ['season','season_type','game_id','game_date',"venue","venue_location",
+        'away_team_abbr','home_team_abbr']
+    
+    for col in info_col:
+        df[col] = info[col]
+
+    #Fill period_type column and assign shifts a sub-500 event code
+    df['period_type'] = np.where(df['period']<4,"REG",np.where(np.logical_and(df['period']==5,df['season_type']==2),"SO","OT"))
+    try: df['event_type_code'] = np.where(df['event_type']!='change',df['event_type_code'],499)
+    except:
+        ""
+    df = df.sort_values(['period','seconds_elapsed']).reset_index()
+
+    df['event_team_venue'] = np.where(df['event_team_abbr'].isna(),"",np.where(df['home_team_abbr']==df['event_team_abbr'],"home","away"))
+
+    col = [col for col in get_col() if col in df.columns.to_list()]
+    #Return: complete play-by-play information for provided game
+    return df[col]
+
+## SHIFT SCRAPING FUNCTIONS ##
+def parse_shifts_json(info):
+    #Given game info, return json shift chart
+
+    log = info['json_shifts']
+    #Filter non-shift events and duplicate events
+    log = log.loc[log['detailCode']==0].drop_duplicates(subset=['playerId','shiftNumber'])
+
+    #Add full name columns
+    log['player_name'] = (log['firstName'] + " " + log['lastName']).str.upper()
+
+    log = log.rename(columns={
+        'playerId':'player_id',
+        'teamAbbrev':'event_team_abbr',
+        'startTime':'start',
+        'endTime':'end'
+    })
+
+    #Convert time columns
+    log['start'] = log['start'].astype(str).apply(convert_to_seconds)
+    log['end'] = log['end'].astype(str).apply(convert_to_seconds)
+    log = log[['player_name','player_id',
+                'period','event_team_abbr',
+                'start','duration','end']]
+    
+    #Recalibrate duration
+    log['duration'] = log['end'] - log['start']
+
+    #Return: JSON shifts (seperated by team)
+    away = log.loc[log['event_team_abbr']==info['away_team_abbr']]
+    home = log.loc[log['event_team_abbr']==info['home_team_abbr']]
+
+    return {'away':away,
+            'home':home}
+
 def analyze_shifts(shift, id, name, pos, team):
     #Collects teams in given shifts html (parsed by Beautiful Soup)
     #Modified version of Harry Shomer's analyze_shifts function in the hockey_scraper package
@@ -789,39 +797,34 @@ def analyze_shifts(shift, id, name, pos, team):
     shifts['start'] = convert_to_seconds(shift[2].split('/')[0])
     shifts['duration'] = convert_to_seconds(shift[4].split('/')[0])
 
-    # I've had problems with this one...if there are no digits the time is fucked up
+    #Sometimes there are no digits
     if re.compile(r'\d+').findall(shift[3].split('/')[0]):
         shifts['end'] = convert_to_seconds(shift[3].split('/')[0])
     else:
         shifts['end'] = shifts['start'] + shifts['duration']
     return shifts
 
-def parse_shifts_html(html,json):
+def parse_shifts_html(info,home):
     #Parsing of shifts data for a single team in a provided game
     #Modified version of Harry Shomer's parse_shifts function in the hockey_scraper package
 
-    #JSON Prep
-    info = get_game_info(json)
-    roster = info['rosters']
+    #Roster info prep
+    roster = info['HTML_rosters']
 
-    away = info['away_team_id'] #Away team in the HTML is the seventh column 
-    home = info['home_team_id'] #Home team in the HTML is the eighth column
-    away_players = roster.loc[roster['teamId']==away][['playerId','fullName.default','positionCode','sweaterNumber']]
-    home_players = roster.loc[roster['teamId']==home][['playerId','fullName.default','positionCode','sweaterNumber']]
-    
-    #Create roster dict
-    rosters = {"away":away_players.set_index("sweaterNumber")[['playerId','fullName.default','positionCode']].to_dict(),
-               "home":home_players.set_index("sweaterNumber")[['playerId','fullName.default','positionCode']].to_dict()
-               }
+    rosters = roster['home' if home else 'away']
     
     all_shifts = []
     #columns = ['game_id', 'player_name', 'player_id', 'period', 'team_abbr', 'start', 'end', 'duration']
-    td, teams = get_soup(html)
+
+    #Retreive HTML
+    game_id = info['game_id']
+    season = info['season']
+    link = f"https://www.nhl.com/scores/htmlreports/{season}/T{'H' if home else 'V'}{game_id[-6:]}.HTM"
+    doc = rs.get(link).content
+    td, teams = get_soup(doc)
 
     team = teams[0]
-    home_team = teams[1]
     players = dict()
-    status = 'home' if team == home_team else 'away'
 
     # Iterates through each player shifts table with the following data:
     # Shift #, Period, Start, End, and Duration.
@@ -832,13 +835,13 @@ def parse_shifts_html(html,json):
             
             name = name.split(',')
             number = int(name[0][:2].strip())
-            id = rosters[status]['playerId'][number]
+            id = rosters[str(number)][4]
             players[id] = dict()
 
             #HTML shift functions assess one team at a time, which simplifies the lookup process with number to name and id
             
-            players[id]['name'] = rosters[status]['fullName.default'][number]
-            players[id]['pos'] = rosters[status]['positionCode'][number]
+            players[id]['name'] = rosters[str(number)][2]
+            players[id]['pos'] = rosters[str(number)][1]
 
             players[id]['shifts'] = []
         else:
@@ -862,10 +865,16 @@ def parse_shifts_html(html,json):
     #Return: single-team individual shifts by player
     return shifts_raw
 
-def parse_shift_events(html,json,home):
-    #Given shift document and home team conditional, parse and convert document to shift events congruent to html play-by-play
-    shift = parse_shifts_html(html,json)
-    rosters = get_game_roster(json)
+def parse_shift_events(info,home):
+    #Given game info and home team conditional, parse and convert document to shift events congruent to html play-by-play
+    
+    #Determine whether to use JSON shifts or HTML shifts
+    if len(info['json_shifts']) == 0:
+        shift = parse_shifts_html(info,home)
+    else:
+        shift = parse_shifts_json(info)['home' if home else 'away']
+
+    rosters = info['rosters']
 
     # Identify shift starts for each shift event
     shifts_on = shift.groupby(['event_team_abbr', 'period', 'start']).agg(
@@ -964,27 +973,30 @@ def parse_shift_events(html,json,home):
     #Return: shift events with newly added on-ice columns.  NAN values are replaced with string "REMOVE" as means to create proper on-ice columns for json pbp
     return pd.merge(shifts,on_players,how="outer",on=['row']).replace(np.nan,"")
 
-def combine_shifts(away_html,home_html,json):
-    #JSON Prep
-    info = get_game_info(json)
-    del info['rosters']
+## FINALIZE PBP FUNCTIONS ##
+def combine_shifts(info):
+    #Given game info, return complete shift events
 
-    roster = get_game_roster(json)
+    #JSON Prep
+    roster = info['rosters']
+
     #Quickly combine shifts data
-    away = parse_shift_events(away_html,json,False)
-    home = parse_shift_events(home_html,json,True)
+    away = parse_shift_events(info,False)
+    home = parse_shift_events(info,True)
 
     #Combine shifts
     data = pd.concat([away,home]).sort_values(['period','seconds_elapsed'])
 
-    #Create info columns
-    for col in info.keys():
+    #Add game info
+    info_col = ['season','season_type','game_id','game_date',"venue","venue_location",
+        'away_team_abbr','home_team_abbr']
+    
+    for col in info_col:
         data[col] = info[col]
 
-        #Create player information dicts to create on-ice names
-    players = {}
-    for id, player in zip(list(roster['playerId']),list(roster['fullName.default'])):
-        players.update({str(id):player.upper()})
+    #Create player information dicts to create on-ice names
+    roster['playerId'] = roster['playerId'].astype(str)
+    players = roster.set_index("playerId")['full_name'].to_dict()
 
     for i in range(0,7):
         if i == 6:
@@ -1016,34 +1028,13 @@ def combine_shifts(away_html,home_html,json):
     col = [col for col in get_col() if col in data.columns.to_list()]
     return data[col]
 
-### FINALIZE PBP ###
-def get_col():
-    return [
-        'season','season_type','game_id','game_date',"start_time","venue","venue_location",
-        'away_team_abbr','home_team_abbr','event_num','period','period_type',
-        'seconds_elapsed',"situation_code","strength_state","home_team_defending_side",
-        "event_type_code","event_type","description","penalty_duration",
-        "event_team_abbr",'num_on', 'players_on','ids_on','num_off','players_off','ids_off','shift_type',
-        "event_team_status",
-        "event_player_1_name","event_player_2_name","event_player_3_name",
-        "event_player_1_id","event_player_2_id","event_player_3_id",
-        "event_player_1_pos","event_player_2_pos","event_player_3_pos",
-        "event_goalie","event_goalie_id",
-        "shot_type","zone_code","x","y","x_fixed","y_fixed","x_adj","y_adj",
-        "event_skaters","away_skaters","home_skaters",
-        "event_distance","event_angle","away_score","home_score", "away_fenwick", "home_fenwick",
-        "away_on_1","away_on_2","away_on_3","away_on_4","away_on_5","away_on_6","away_goalie",
-        "home_on_1","home_on_2","home_on_3","home_on_4","home_on_5","home_on_6","home_goalie",
-        "away_on_1_id","away_on_2_id","away_on_3_id","away_on_4_id","away_on_5_id","away_on_6_id","away_goalie_id",
-        "home_on_1_id","home_on_2_id","home_on_3_id","home_on_4_id","home_on_5_id","home_on_6_id","home_goalie_id",
-        "event_coach","away_coach","home_coach"
-    ]
+def combine_data(info):
+    #Given game info, return complete play-by-play data
 
-def combine_data(game_id,html_pbp,away_shifts,home_shifts,json):
-    #Given game_id, html_pbp, away and home shifts, and json pbp, return total game play-by-play data is provided with additional and corrected details
-    #Create dfs
-    pbp = combine_pbp(game_id,html_pbp,json)
-    shifts = combine_shifts(away_shifts,home_shifts,json)
+    game_id = info['game_id']
+
+    pbp = combine_pbp(info)
+    shifts = combine_shifts(info)
 
     #Combine data    
     df = pd.concat([pbp,shifts])
@@ -1067,7 +1058,7 @@ def combine_data(game_id,html_pbp,away_shifts,home_shifts,json):
     #Recalibrate event_num column to accurately depict the order of all events, including changes
     df.reset_index(inplace=True,drop=True)
     df['event_num'] = df.index+1
-    df['event_team_status'] = np.where(df['event_team_abbr'].isna(),"",np.where(df['home_team_abbr']==df['event_team_abbr'],"home","away"))
+    df['event_team_venue'] = np.where(df['event_team_abbr'].isna(),"",np.where(df['home_team_abbr']==df['event_team_abbr'],"home","away"))
     df['event_type_last'] = df['event_type'].shift(1)
     df['event_type_last_2'] = df['event_type_last'].shift(1)
     df['event_type_next'] = df['event_type'].shift(-1)
@@ -1083,7 +1074,7 @@ def combine_data(game_id,html_pbp,away_shifts,home_shifts,json):
         ""
 
     #Retrieve coaches
-    coaches = get_json_coaches(game_id)
+    coaches = info['coaches']
     if not coaches:
         df['away_coach'] = ""
         df['home_coach'] = ""

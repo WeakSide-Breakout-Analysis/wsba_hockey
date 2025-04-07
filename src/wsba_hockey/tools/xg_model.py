@@ -15,19 +15,6 @@ def prep_xG_data(pbp):
     events = ['faceoff','hit','giveaway','takeaway','blocked-shot','missed-shot','shot-on-goal','goal']
     shot_types = ['wrist','deflected','tip-in','slap','backhand','snap','wrap-around','poke','bat','cradle','between-legs']
     fenwick_events = ['missed-shot','shot-on-goal','goal']
-    strengths = ['3v3',
-                '3v4',
-                '3v5',
-                '4v3',
-                '4v4',
-                '4v5',
-                '4v6',
-                '5v3',
-                '5v4',
-                '5v5',
-                '5v6',
-                '6v4',
-                '6v5']
     
     #Create last event columns
     data = pbp.sort_values(by=['season','game_id','period','seconds_elapsed','event_num'])
@@ -41,6 +28,7 @@ def prep_xG_data(pbp):
 
     data.sort_values(['season','game_id','period','seconds_elapsed','event_num'],inplace=True)
     data['score_state'] = np.where(data['away_team_abbr']==data['event_team_abbr'],data['away_score']-data['home_score'],data['home_score']-data['away_score'])
+    data['strength_diff'] = np.where(data['away_team_abbr']==data['event_team_abbr'],data['away_skaters']-data['home_skaters'],data['home_skaters']-data['away_skaters'])
     data['fenwick_state'] = np.where(data['away_team_abbr']==data['event_team_abbr'],data['away_fenwick']-data['home_fenwick'],data['home_fenwick']-data['away_fenwick'])
     data['distance_from_last'] = np.sqrt((data['x_fixed'] - data['x_fixed_last'])**2 + (data['y_fixed'] - data['y_fixed_last'])**2)
     data['rush_mod'] = np.where((data['event_type'].isin(fenwick_events))&(data['zone_code_last'].isin(['N','D']))&(data['x_fixed']>25)&(data['seconds_since_last']<5),5-data['seconds_since_last'],0)
@@ -50,19 +38,18 @@ def prep_xG_data(pbp):
     data["is_goal"]=(data['event_type']=='goal').astype(int)
     data["is_home"]=(data['home_team_abbr']==data['event_team_abbr']).astype(int)
 
-
+    #Boolean variables for shot types and prior events
     for shot in shot_types:
         data[shot] = (data['shot_type']==shot).astype(int)
-    for strength in strengths:
-        data[f'state_{strength}'] = (data['strength_state']==strength).astype(int)
     for event in events[0:len(events)-1]:
         data[f'prior_{event}_same'] = ((data['event_type_last']==event)&(data['event_team_last']==data['event_team_abbr'])).astype(int)
         data[f'prior_{event}_opp'] = ((data['event_type_last']==event)&(data['event_team_last']!=data['event_team_abbr'])).astype(int)
     
+    data['prior_faceoff'] = (data['event_type_last']=='faceoff').astype(int)
     #Return: pbp data prepared to train and calculate the xG model
     return data
 
-def wsba_xG(pbp, train = False, overwrite = False, model_path = "tools/xg_model/wsba_xg.joblib", train_runs = 20, test_runs = 20):
+def wsba_xG(pbp, train = False, overwrite = False, model_path = "tools/xg_model/wsba_xg.joblib", train_runs = 20, cv_runs = 20):
     #Train and calculate the WSBA Expected Goals model
     
     target = "is_goal"
@@ -77,23 +64,11 @@ def wsba_xG(pbp, train = False, overwrite = False, model_path = "tools/xg_model/
                 'distance_from_last',
                 'seconds_since_last',
                 'score_state',
+                'strength_diff',
                 'fenwick_state',
                 'rush_mod',
                 'rebound_mod']
     boolean = ['is_home',
-            'state_3v3',
-            'state_3v4',
-            'state_3v5',
-            'state_4v3',
-            'state_4v4',
-            'state_4v5',
-            'state_4v6',
-            'state_5v3',
-            'state_5v4',
-            'state_5v5',
-            'state_5v6',
-            'state_6v4',
-            'state_6v5',
             'wrist',
             'deflected',
             'tip-in',
@@ -120,7 +95,7 @@ def wsba_xG(pbp, train = False, overwrite = False, model_path = "tools/xg_model/
             'prior_faceoff']
     
     #Prep Data
-    data = prep_xG_data(pbp)
+    pbp = prep_xG_data(pbp)
     #Filter unwanted date:
     #Shots must occur in specified events and strength states, occur before the shootout, and have valid coordinates
     events = ['faceoff','hit','giveaway','takeaway','blocked-shot','missed-shot','shot-on-goal','goal']
@@ -157,16 +132,146 @@ def wsba_xG(pbp, train = False, overwrite = False, model_path = "tools/xg_model/
     xgb_matrix = xgb.DMatrix(data=predictors,label=is_goal_vect)
 
     if train == True:
-        run_num = ""
+        # Number of runs
+        run_num = train_runs
+
+        # DataFrames to store results
+        best_df = pd.DataFrame(columns=["max_depth", "eta", "gamma", "subsample", "colsample_bytree", "min_child_weight", "max_delta_step"])
+        best_ll = pd.DataFrame(columns=["ll", "ll_rounds", "auc", "auc_rounds", "seed"])
+
+        # Loop
+        for i in range(run_num):
+            print(f"### LOOP: {i+1} ###")
+            
+            param = {
+                "objective": "binary:logistic",
+                "eval_metric": ["logloss", "auc"],
+                "max_depth": 6,
+                "eta": np.random.uniform(0.06, 0.11),
+                "gamma": np.random.uniform(0.06, 0.12),
+                "subsample": np.random.uniform(0.76, 0.84),
+                "colsample_bytree": np.random.uniform(0.76, 0.8),
+                "min_child_weight": np.random.randint(5, 23),
+                "max_delta_step": np.random.randint(4, 9)
+            }
+            
+            # Cross-validation
+            seed = np.random.randint(0, 10000)
+            np.random.seed(seed)
+            
+            cv_results = xgb.cv(
+                params=param,
+                dtrain=xgb_matrix,
+                num_boost_round=1000,
+                nfold=5,
+                early_stopping_rounds=25,
+                metrics=["logloss", "auc"],
+                seed=seed
+            )
+            
+            # Record results
+            best_df.loc[i] = param
+            best_ll.loc[i] = [
+                cv_results["test-logloss-mean"].min(),
+                cv_results["test-logloss-mean"].idxmin(),
+                cv_results["test-auc-mean"].max(),
+                cv_results["test-auc-mean"].idxmax(),
+                seed
+            ]
+
+        # Combine results
+        best_all = pd.concat([best_df, best_ll], axis=1).dropna()
+
+        # Arrange to get best run
+        best_all = best_all.sort_values(by="auc", ascending=False)
+
+        if overwrite == True:
+            best_all.to_csv("xg_model/testing/xg_model_training_runs.csv",index=False)
+        else: 
+            best_old = pd.read_csv("xg_model/testing/xg_model_training_runs.csv")
+            best_comb = pd.concat([best_old,best_all])
+            best_comb.to_csv("xg_model/testing/xg_model_training_runs.csv",index=False)
+
+        # Final parameters
+        param_7_EV = {
+            "objective": "binary:logistic",
+            "eval_metric": ["logloss", "auc"],
+            "eta": 0.068,
+            "gamma": 0.12,
+            "subsample": 0.78,
+            "max_depth": 6,
+            "colsample_bytree": 0.76,
+            "min_child_weight": 5,
+            "max_delta_step": 5,
+        }
+
+        # CV rounds Loop
+        run_num = cv_runs
+        cv_test = pd.DataFrame(columns=["AUC_rounds", "AUC", "LL_rounds", "LL", "seed"])
+
+        for i in range(run_num):
+            print(f"### LOOP: {i+1} ###")
+            
+            seed = np.random.randint(0, 10000)
+            np.random.seed(seed)
+            
+            cv_rounds = xgb.cv(
+                params=param_7_EV,
+                dtrain=xgb_matrix,
+                num_boost_round=1000,
+                nfold=5,
+                early_stopping_rounds=25,
+                metrics=["logloss", "auc"],
+                seed=seed
+            )
+            
+            # Record results
+            cv_test.loc[i] = [
+                cv_rounds["test-auc-mean"].idxmax(),
+                cv_rounds["test-auc-mean"].max(),
+                cv_rounds["test-logloss-mean"].idxmin(),
+                cv_rounds["test-logloss-mean"].min(),
+                seed
+            ]
+
+        # Clean results and sort to find the number of rounds to use and seed
+        cv_final = cv_test.sort_values(by="AUC", ascending=False)
+        if overwrite == True:
+            cv_final.to_csv("xg_model/testing/xg_model_cv_runs.csv",index=False)
+        else:
+            cv_old = pd.read_csv("xg_model/testing/xg_model_cv_runs.csv")
+            cv_comb = pd.concat([cv_old,cv_final])
+            cv_comb.to_csv("xg_model/testing/xg_model_cv_runs.csv")
+        cv_final.loc[len(cv_final)] = cv_test.mean()
+
+        # Train the final model
+        np.random.seed(556)
+        
+        if overwrite == False:
+            model = joblib.load(model_path)
+        else:
+            ""
+
+        model = xgb.train(
+            params=param_7_EV,
+            dtrain=xgb_matrix,
+            num_boost_round=189,
+            verbose_eval=2
+        )
+
+        joblib.dump(model,model_path)
+        
     else:
-        print("No data to add yet...")
+        model = joblib.load(model_path)
+        pbp['xG'] = np.where(pbp['event_type'].isin(fenwick_events),model.predict(xgb_matrix),"")
+        return pbp
 
 def moneypuck_xG(pbp,repo_path = "tools/xg_model/moneypuck/shots_2007-2023.zip",new = '2024'):
     #Given play-by-play, return itself with xG column sourced from MoneyPuck.com
 
     #If file is already in the repository downloading is not necessary
     try:
-        db = pd.read_csv("tools/xg_model/moneypuck/shots/shots_2007-2023.csv")
+        db = pd.read_parquet("tools/xg_model/moneypuck/shots/shots_2007-2023.parquet")
     except:
         url = 'https://peter-tanner.com/moneypuck/downloads/shots_2007-2023.zip'
 
@@ -183,8 +288,7 @@ def moneypuck_xG(pbp,repo_path = "tools/xg_model/moneypuck/shots_2007-2023.zip",
             zObject.extractall( 
                 path="tools/xg_model/moneypuck/shots/")
         
-        db = pd.read_csv("tools/xg_model/moneypuck/shots/shots_2007-2023.csv")
-            
+        db = pd.read_csv("tools/xg_model/moneypuck/shots/shots_2007-2023.csv")  
     
     #Repeat process with active/most recent season
     #For the new/recent season, always scrape new data
@@ -205,7 +309,9 @@ def moneypuck_xG(pbp,repo_path = "tools/xg_model/moneypuck/shots_2007-2023.zip",
             path="tools/xg_model/moneypuck/shots/")
         
     new_season = pd.read_csv(f"tools/xg_model/moneypuck/shots/shots_{new}.csv")
-    
+    #Convert to parquet
+    new_season.to_parquet(f"tools/xg_model/moneypuck/shots/shots_{new}.csv",index=False)
+
     #Combine shots
     moneypuck = pd.concat([db,new_season])
 

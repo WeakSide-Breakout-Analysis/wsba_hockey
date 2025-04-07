@@ -12,14 +12,53 @@ from tools.ncaa_scraping import *
 ### WSBA HOCKEY ###
 ## Provided below are all integral functions in the WSBA Hockey Python package. ##
 
+## GLOBAL VARIABLES ##
+seasons = [
+    '20072008',
+    '20082009',
+    '20092010',
+    '20102011',
+    '20112012',
+    '20122013',
+    '20132014',
+    '20142015',
+    '20152016',
+    '20162017',
+    '20172018',
+    '20182019',
+    '20192020',
+    '20202021',
+    '20212022',
+    '20222023',
+    '20232024',
+    '20242025'
+]
+
+#Some games in the API are specifically known to cause errors in scraping.
+#This list is updated as frequently as necessary
+known_probs ={
+    '2007020011':'Missing shifts data for game between Chicago and Minnesota.',
+    '2007021178':'Game between the Bruins and Sabres is missing data after the second period, for some reason.',
+    '2008020259':'HTML data is completely missing for this game.',
+    '2008020409':'HTML data is completely missing for this game.',
+    '2008021077':'HTML data is completely missing for this game.',
+    '2009020081':'HTML pbp for this game between Pittsburgh and Carolina is missing all but the period start and first faceoff events, for some reason.',
+    '2009020658':'Missing shifts data for game between New York Islanders and Dallas.',
+    '2009020885':'Missing shifts data for game between Sharks and Blue Jackets.',
+    '2010020124':'Game between Capitals and Hurricanes is sporadically missing player on-ice data',
+    '2013020971':'On March 10th, 2014, Stars forward Rich Peverley suffered from a cardiac episode midgame and as a result, the remainder of the game was postponed.  \nThe game resumed on April 9th, and the only goal scorer in the game, Blue Jackets forward Nathan Horton, did not appear in the resumed game due to injury.  Interestingly, Horton would never play in the NHL again.',
+    '2019020876':'Due to the frightening collapse of Blues defensemen Jay Bouwmeester, a game on February 2nd, 2020 between the Ducks and Blues was postponed.  \nWhen the game resumed, Ducks defensemen Hampus Lindholm, who assisted on a goal in the inital game, did not play in the resumed match.'
+}
+
 ## SCRAPE FUNCTIONS ##
-def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','period-end','challenge','stoppage'],verbose=False):
+def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','period-end','challenge','stoppage'],verbose = False, errors = False):
     #Given a set of game_ids (NHL API), return complete play-by-play information as requested
     # param 'game_ids' - NHL game ids (or list formatted as ['random', num_of_games, start_year, end_year])
     # param 'split_shifts' - boolean which splits pbp and shift events if true
     # param 'remove' - list of events to remove from final dataframe
     # param 'xg' - xG model to apply to pbp for aggregation
     # param 'verbose' - boolean which adds additional event info if true
+    # param 'errors' - boolean returning game ids which did not scrape if true
 
     pbps = []
     if game_ids[0] == 'random':
@@ -55,31 +94,19 @@ def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','per
         
         print(f"\rGame IDs found in range {start}-{end}: {i}/{num}")
             
-
+    #Scrape each game
+    #Track Errors
+    error_ids = []
     for game_id in game_ids:
         print("Scraping data from game " + str(game_id) + "...",end="")
         start = time.perf_counter()
 
-        game_id = str(game_id)
-        season = str(game_id[:4])+str(int(game_id[:4])+1)
-
-        api = f"https://api-web.nhle.com/v1/gamecenter/{game_id}/play-by-play"
-        html = f"https://www.nhl.com/scores/htmlreports/{season}/PL{game_id[-6:]}.HTM"
-        home_log = f"https://www.nhl.com/scores/htmlreports/{season}/TH{game_id[-6:]}.HTM"
-        away_log = f"https://www.nhl.com/scores/htmlreports/{season}/TV{game_id[-6:]}.HTM"
-
-        try: 
-            #Retrieve raw data
-            json = rs.get(api).json()
-            html = rs.get(html).content
-            home_shift = rs.get(home_log).content
-            away_shift = rs.get(away_log).content
-
-            #Parse JSONs and HTMLs
-            data = combine_data(game_id,html,away_shift,home_shift,json)
+        try:
+            #Retrieve data
+            info = get_game_info(game_id)
+            data = combine_data(info)
                 
             #Append data to list
-            no_data = False
             pbps.append(data)
 
             end = time.perf_counter()
@@ -88,34 +115,59 @@ def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','per
 
         except:
             #Games such as the all-star game and pre-season games will incur this error
-            print(f"\nUnable to scrape game {game_id}.  Ensure the ID is properly inputted and formatted.")
-            no_data = True
-            pbps.append(pd.DataFrame())
-      
+            #Other games have known problems
+            if game_id in known_probs.keys():
+                print(f"\nGame {game_id} has a known problem: {known_probs[game_id]}")
+            else:
+                print(f"\nUnable to scrape game {game_id}.  Ensure the ID is properly inputted and formatted.")
+            
+            #Track error
+            error_ids.append(game_id)
+     
     #Add all pbps together
+    if len(pbps) == 0:
+        print("\rNo data returned.")
+        return pd.DataFrame()
     df = pd.concat(pbps)
 
+    #If verbose is true features required to calculate xG are added to dataframe
     if verbose:
         df = prep_xG_data(df)
     else:
         ""
+
+    #Print final message
+    if len(error_ids) > 0:
+        print(f'\rScrape of provided games finished.\nThe following games failed to scrape: {error_ids}')
+    else:
+        print('\rScrape of provided games finished.')
+    
     #Split pbp and shift events if necessary
     #Return: complete play-by-play with data removed or split as necessary
-    if no_data:
-        return pd.DataFrame()
-
     
     if split_shifts == True:
-        if len(remove) == 0:
-            remove = ['change']
+        remove.append('change')
         
         #Return: dict with pbp and shifts seperated
-        return {"pbp":df.loc[~df['event_type'].isin(remove)],
+        pbp_dict = {"pbp":df.loc[~df['event_type'].isin(remove)],
             "shifts":df.loc[df['event_type']=='change']
             }
+        
+        if errors:
+            pbp_dict.update({'errors':error_ids})
+
+        return pbp_dict
     else:
         #Return: all events that are not set for removal by the provided list
-        return df.loc[~df['event_type'].isin(remove)]
+        pbp = df.loc[~df['event_type'].isin(remove)]
+
+        if errors:
+            pbp_dict = {'pbp':pbp,
+                        'errors':error_ids}
+            
+            return pbp_dict
+        else:
+            return pbp
 
 def nhl_scrape_schedule(season,start = "09-01", end = "08-01"):
     #Given a season, return schedule data
@@ -170,7 +222,7 @@ def nhl_scrape_schedule(season,start = "09-01", end = "08-01"):
     #Return: specificed schedule data
     return df
 
-def nhl_scrape_season(season,split_shifts = False, season_types = [2,3], remove = ['period-start','period-end','game-end','challenge','stoppage'], start = "09-01", end = "08-01", local=False, local_path = "schedule/schedule.csv", verbose = False):
+def nhl_scrape_season(season,split_shifts = False, season_types = [2,3], remove = ['period-start','period-end','game-end','challenge','stoppage'], start = "09-01", end = "08-01", local=False, local_path = "schedule/schedule.csv", verbose = False, errors = False):
     #Given season, scrape all play-by-play occuring within the season
     # param 'season' - NHL season to scrape
     # param 'split_shifts' - boolean which splits pbp and shift events if true
@@ -180,6 +232,7 @@ def nhl_scrape_season(season,split_shifts = False, season_types = [2,3], remove 
     # param 'local' - boolean indicating whether to use local file to scrape game_ids
     # param 'local_path' - path of local file
     # param 'verbose' - boolean which adds additional event info if true
+    # param 'errors' - boolean returning game ids which did not scrape if true
 
     #Determine whether to use schedule data in repository or to scrape
     if local == True:
@@ -201,9 +254,9 @@ def nhl_scrape_season(season,split_shifts = False, season_types = [2,3], remove 
 
     #Perform scrape
     if split_shifts == True:
-        data = nhl_scrape_game(game_ids,split_shifts=True,remove=remove,verbose=verbose)
+        data = nhl_scrape_game(game_ids,split_shifts=True,remove=remove,verbose=verbose,errors=errors)
     else:
-        data = nhl_scrape_game(game_ids,remove=remove,verbose=verbose)
+        data = nhl_scrape_game(game_ids,remove=remove,verbose=verbose,errors=errors)
     
     end = time.perf_counter()
     secs = end - start
@@ -211,10 +264,21 @@ def nhl_scrape_season(season,split_shifts = False, season_types = [2,3], remove 
     print(f'Finished season scrape in {(secs/60)/60:.2f} hours.')
     #Return: Complete pbp and shifts data for specified season as well as dataframe of game_ids which failed to return data
     if split_shifts == True:
-        return {"pbp":data['pbp'],
+        pbp_dict = {'pbp':data['pbp'],
             'shifts':data['shifts']}
+        
+        if errors:
+            pbp_dict.update({'errors':data['errors']})
+        return pbp_dict
     else:
-        return data
+        pbp = data['pbp']
+
+        if errors:
+            pbp_dict = {'pbp':pbp,
+                        'errors':data['errors']}
+            return pbp_dict
+        else:
+            return pbp
 
 def nhl_scrape_seasons_info(seasons = []):
     #Returns info related to NHL seasons (by default, all seasons are included)
@@ -350,7 +414,7 @@ def nhl_scrape_team_info():
     #Return: team information
     return pd.json_normalize(rs.get(api).json()['data'])
 
-''' In-repair
+''' In Repair
 def nhl_calculate_stats(pbp,season,season_types,game_strength,roster_path="rosters/nhl_rosters.csv",xg="moneypuck"):
     #Given play-by-play, seasonal information, game_strength, rosters, and xG model, return aggregated stats
     # param 'pbp' - Scraped play-by-play
