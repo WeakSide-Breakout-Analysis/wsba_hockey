@@ -51,15 +51,18 @@ wsba.nhl_calculate_stats(pbp,'20232024',[2],['5v5','4v4','3v3'],xg='moneypuck')
 ### Shot Plotting (Plots, Heatmaps, etc.)*
 
 ## REPOSITORY 
-### Past Season Play-by-Play*
+### Past Season Play-by-Play
+```python
+wsba.repo_load_pbp(seasons=['20212022','20222023','20232024','20242025'])
+```
 ### Team Information
 ```python
 wsba.repo_load_teaminfo()
-wsba.repo_load_rosters(seasons=['20212022','20222023','20232024','20242025])
+wsba.repo_load_rosters(seasons=['20212022','20222023','20232024','20242025'])
 ```
 ### Schedule
 ```python
-wsba.repo_load_schedule(seasons=['20212022','20222023','20232024','20242025])
+wsba.repo_load_schedule(seasons=['20212022','20222023','20232024','20242025'])
 ```
 
 ## ACKNOWLEDGEMENTS AND CREDITS 
@@ -69,5 +72,7 @@ Harry Shomer - Creator of the hockey_scraper package, which contains select util
 Dan Morse - Creator of the hockeyR package; another important inspiration and model for developing an NHL scraper.
 
 Patrick Bacon - Creator of TopDownHockey package
+
+MoneyPuck - Source of available xG data in the package
 
 Anyone in the NHL Public Analytics community who has stuck around and supported WeakSide Breakout Analysis hockey.
