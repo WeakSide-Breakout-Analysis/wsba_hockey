@@ -359,6 +359,23 @@ def nhl_scrape_roster(season):
 
     return pd.concat(rosts)
 
+def nhl_scrape_prospects(team):
+    #Given team abbreviation, retreive current team prospects
+
+    api = f'https://api-web.nhle.com/v1/prospects/{team}'
+
+    data = rs.get(api).json()
+    
+    #Iterate through positions
+    players = [pd.json_normalize(data[pos]) for pos in ['forwards','defensemen','goalies']]
+
+    prospects = pd.concat(players)
+    #Add name columns
+    prospects['fullName'] = (prospects['firstName.default']+" "+prospects['lastName.default']).str.upper()
+
+    #Return: team prospects
+    return prospects
+
 def nhl_scrape_player_info(roster):
     #Given compiled roster information from the nhl_scrape_roster function, return a list of all players (seperated into team and season) and associated information
     # param 'roster' - dataframe of roster information from the nhl_scrape_roster function
@@ -413,6 +430,23 @@ def nhl_scrape_team_info():
     
     #Return: team information
     return pd.json_normalize(rs.get(api).json()['data'])
+
+def nhl_scrape_draft_rankings(arg = 'now', category = ''):
+    #Given url argument for timeframe and prospect category, return draft rankings
+    #Category 1 is North American Skaters
+    #Category 2 is International Skaters
+    #Category 3 is North American Goalie
+    #Category 4 is International Goalie
+
+    #Player category only applies when requesting a specific season
+    api = f"https://api-web.nhle.com/v1/draft/rankings/{arg}/{category}" if category != "" else f"https://api-web.nhle.com/v1/draft/rankings/{arg}"
+    data = pd.json_normalize(rs.get(api).json()['rankings'])
+
+    #Add player name columns
+    data['fullName'] = (data['firstName']+" "+data['lastName']).str.upper()
+
+    #Return: prospect rankings
+    return data
 
 ''' In Repair
 def nhl_calculate_stats(pbp,season,season_types,game_strength,roster_path="rosters/nhl_rosters.csv",xg="moneypuck"):

@@ -92,6 +92,7 @@ def create_timeline(pbp):
     #Filter non-change events
     data = pbp.loc[pbp['event_type']=='change']
 
+    #Remove duplicate seconds of play (keep the most recent change for a given second)
     shifts = data.drop_duplicates(subset=['period','seconds_elapsed'],keep='last')
     secs = pd.DataFrame()
     secs['seconds_elapsed'] = range(shifts['seconds_elapsed'].max())
@@ -102,6 +103,7 @@ def create_timeline(pbp):
                     'home_on_1_id','home_on_2_id','home_on_3_id','home_on_4_id','home_on_5_id','home_on_6_id',
                     'away_goalie','home_goalie','away_goalie_id','home_goalie_id']
 
+    #Anchor shift events to seconds in game then fill to complete second-by-second timeline
     shifts = pd.merge(shifts,secs,how='right')
     for col in on_ice_col:
         shifts[col] = shifts[col].ffill()
