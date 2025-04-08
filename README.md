@@ -40,6 +40,14 @@ wsba.nhl_scrape_player_info(wsba.nhl_scrape_roster('20242025'))
 wsba.nhl_scrape_team_info()
 ```
 
+### NHL Draft Rankings and Prospects
+
+```python
+wsba.nhl_scrape_draft_rankings()
+wsba.nhl_scrape_prospects('BOS')
+```
+
+
 ## DATA ANALYTICS
 ### Expected Goals (WeakSide Breakout and MoneyPuck models)
 ### Goal Impacts and Shot Analysis*
