@@ -1,0 +1,50 @@
+id,country3Code,countryCode,countryName,hasPlayerStats,imageUrl,iocCode,isActive,nationalityName,olympicUrl,thumbnailUrl
+AUS,AUS,AU,Australia,1,/images/country/48/AUS.png,AUS,1,Australian,,/images/country/16/AUS.png
+AUT,AUT,AT,Austria,1,/images/country/48/AUT.png,AUT,1,Austrian,,/images/country/16/AUT.png
+BEL,BEL,BE,Belgium,1,/images/country/48/BEL.png,BEL,1,Belgian,,/images/country/16/BEL.png
+BHS,BHS,BS,Bahamas,1,/images/country/48/BHS.png,BAH,1,Bahamian,,/images/country/16/BHS.png
+BLR,BLR,BY,Belarus,1,/images/country/48/BLR.png,BLR,1,Belarussian,/ice/page.htm?id=60523,/images/country/16/BLR.png
+BRA,BRA,BR,Brazil,1,/images/country/48/BRA.png,BRA,1,Brazilian,,/images/country/16/BRA.png
+CAN,CAN,CA,Canada,1,/images/country/48/CAN.png,CAN,1,Canadian,/ice/page.htm?id=60524,/images/country/16/CAN.png
+CHE,CHE,CH,Switzerland,1,/images/country/48/CHE.png,SUI,1,Swiss,/ice/page.htm?id=60518,/images/country/16/CHE.png
+CHN,CHN,CN,China,0,/images/country/48/CHN.png,CHN,1,Chinese,,/images/country/16/CHN.png
+CZE,CZE,CZ,Czechia,1,/images/country/48/CZE.png,CZE,1,Czech,/ice/page.htm?id=60526,/images/country/16/CZE.png
+DEU,DEU,DE,Germany,1,/images/country/48/DEU.png,GER,1,German,/ice/page.htm?id=60515,/images/country/16/DEU.png
+DNK,DNK,DK,Denmark,1,/images/country/48/DNK.png,DEN,1,Danish,,/images/country/16/DNK.png
+EST,EST,EE,Estonia,1,/images/country/48/EST.png,EST,1,Estonian,,/images/country/16/EST.png
+FIN,FIN,FI,Finland,1,/images/country/48/FIN.png,FIN,1,Finnish,/ice/page.htm?id=60514,/images/country/16/FIN.png
+FRA,FRA,FR,France,1,/images/country/48/FRA.png,FRA,1,French,,/images/country/16/FRA.png
+GBR,GBR,GB,United Kingdom,1,/images/country/48/GBR.png,GBR,1,British,,/images/country/16/GBR.png
+GRC,GRC,GR,Greece,1,/images/country/48/GRC.png,GRE,1,Greek,,/images/country/16/GRC.png
+GUY,GUY,GY,Guyana,1,/images/country/48/GUY.png,GUY,1,Guyanese,,/images/country/16/GUY.png
+HRV,HRV,HR,Croatia (Hrvatska),1,/images/country/48/HRV.png,CRO,1,Croat,,/images/country/16/HRV.png
+HTI,HTI,HT,Haiti,1,/images/country/48/HTI.png,HAI,1,Haitian,,/images/country/16/HTI.png
+HUN,HUN,HU,Hungary,1,/images/country/48/HUN.png,HUN,1,Hungarian,,/images/country/16/HUN.png
+IRL,IRL,IE,Ireland,1,/images/country/48/IRL.png,IRL,1,Irish,,/images/country/16/IRL.png
+ISR,ISR,IL,Israel,0,/images/country/48/ISR.png,ISR,1,Israeli,,/images/country/16/ISR.png
+ITA,ITA,IT,Italy,1,/images/country/48/ITA.png,ITA,1,Italian,,/images/country/16/ITA.png
+JAM,JAM,JM,Jamaica,1,/images/country/48/JAM.png,JAM,1,Jamaican,,/images/country/16/JAM.png
+JPN,JPN,JP,Japan,1,/images/country/48/JPN.png,JPN,1,Japanese,,/images/country/16/JPN.png
+KAZ,KAZ,KZ,Kazakhstan,1,/images/country/48/KAZ.png,KAZ,1,Kazahkstanian,,/images/country/16/KAZ.png
+KOR,KOR,KR,Korea (South),1,/images/country/48/KOR.png,KOR,1,South Korean,,/images/country/16/KOR.png
+LBN,LBN,LB,Lebanon,1,/images/country/48/LBN.png,LIB,1,Lebanese,,/images/country/16/LBN.png
+LTU,LTU,LT,Lithuania,1,/images/country/48/LTU.png,LTU,1,Lithuanian,,/images/country/16/LTU.png
+LVA,LVA,LV,Latvia,1,/images/country/48/LVA.png,LAT,1,Latvian,/ice/page.htm?id=60516,/images/country/16/LVA.png
+MEX,MEX,MX,Mexico,0,/images/country/48/MEX.png,MEX,1,Mexican,,/images/country/16/MEX.png
+NGA,NGA,NG,Nigeria,1,/images/country/48/NGA.png,NGR,1,Nigerian,,/images/country/16/NGA.png
+NLD,NLD,NL,Netherlands,1,/images/country/48/NLD.png,NED,1,Netherlander,,/images/country/16/NLD.png
+NOR,NOR,NO,Norway,1,/images/country/48/NOR.png,NOR,1,Norwegian,/ice/page.htm?id=60525,/images/country/16/NOR.png
+POL,POL,PL,Poland,1,/images/country/48/POL.png,POL,1,Polish,,/images/country/16/POL.png
+PRY,PRY,PY,Paraguay,1,/images/country/48/PRY.png,PAR,1,Paraguayan,,/images/country/16/PRY.png
+ROU,ROU,RO,Romania,1,/images/country/48/ROU.png,ROU,1,Romanian,,/images/country/16/ROU.png
+RUS,RUS,RU,Russia,1,/images/country/48/RUS.png,RUS,1,Russian,/ice/page.htm?id=60513,/images/country/16/RUS.png
+SRB,SRB,RS,Serbia,1,,SRB,1,Serbian,,
+SVK,SVK,SK,Slovakia,1,/images/country/48/SVK.png,SVK,1,Slovakian,/ice/page.htm?id=60519,/images/country/16/SVK.png
+SVN,SVN,SI,Slovenia,1,/images/country/48/SVN.png,SLO,1,Slovenian,,/images/country/16/SVN.png
+SWE,SWE,SE,Sweden,1,/images/country/48/SWE.png,SWE,1,Swedish,/ice/page.htm?id=60512,/images/country/16/SWE.png
+THA,THA,TH,Thailand,1,/images/country/48/THA.png,THA,1,Thailanese,,/images/country/16/THA.png
+UKR,UKR,UA,Ukraine,1,/images/country/48/UKR.png,UKR,1,Ukrainian,,/images/country/16/UKR.png
+USA,USA,US,United States,1,/images/country/48/USA.png,USA,1,American,/ice/page.htm?id=60504,/images/country/16/USA.png
+VEN,VEN,VE,Venezuela,1,/images/country/48/VEN.png,VEN,1,Venezuelan,,/images/country/16/VEN.png
+YUG,YUG,YU,Yugoslavia,0,,YUG,0,Yugoslavian,,
+ZAF,ZAF,ZA,South Africa,1,/images/country/48/ZAF.png,RSA,1,South African,,/images/country/16/ZAF.png

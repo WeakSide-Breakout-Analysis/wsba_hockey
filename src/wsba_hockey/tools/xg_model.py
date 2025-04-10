@@ -31,6 +31,8 @@ def prep_xG_data(pbp):
     data['strength_diff'] = np.where(data['away_team_abbr']==data['event_team_abbr'],data['away_skaters']-data['home_skaters'],data['home_skaters']-data['away_skaters'])
     data['fenwick_state'] = np.where(data['away_team_abbr']==data['event_team_abbr'],data['away_fenwick']-data['home_fenwick'],data['home_fenwick']-data['away_fenwick'])
     data['distance_from_last'] = np.sqrt((data['x_fixed'] - data['x_fixed_last'])**2 + (data['y_fixed'] - data['y_fixed_last'])**2)
+
+    #Rush and rebounds are included and graded off of the speed of the event (an event cannot be a rush event unless it also occurs in the offensive zone)
     data['rush_mod'] = np.where((data['event_type'].isin(fenwick_events))&(data['zone_code_last'].isin(['N','D']))&(data['x_fixed']>25)&(data['seconds_since_last']<5),5-data['seconds_since_last'],0)
     data['rebound_mod'] = np.where((data['event_type'].isin(fenwick_events))&(data['event_type_last'].isin(fenwick_events))&(data['seconds_since_last']<3),3-data['seconds_since_last'],0)
 

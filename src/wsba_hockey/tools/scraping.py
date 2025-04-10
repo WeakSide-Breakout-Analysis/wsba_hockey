@@ -34,7 +34,7 @@ def get_col():
         "event_player_1_name","event_player_2_name","event_player_3_name",
         "event_player_1_id","event_player_2_id","event_player_3_id",
         "event_player_1_pos","event_player_2_pos","event_player_3_pos",
-        "event_goalie","event_goalie_id",
+        "event_goalie_name","event_goalie_id",
         "shot_type","zone_code","x","y","x_fixed","y_fixed","x_adj","y_adj",
         "event_skaters","away_skaters","home_skaters",
         "event_distance","event_angle","away_score","home_score", "away_fenwick", "home_fenwick",
@@ -529,7 +529,7 @@ def parse_html(info):
     event_log = []
     for event in events:
         events_dict = {}
-        if event[0] == "#" or event[4] in ['GOFF', 'EGT', 'PGSTR', 'PGEND', 'ANTHEM','SPC','PBOX','SOC']:
+        if event[0] == "#" or event[4] in ['GOFF', 'EGT', 'PGSTR', 'PGEND', 'ANTHEM','SPC','PBOX','SOC'] or event[3]=='-16:0-':
             continue
         else:
             #Event info
@@ -660,7 +660,6 @@ def parse_html(info):
                 status = teams[team]
                 data = rosters[status[0]]
 
-                
                 events_dict[f'event_player_{i+1}_name'] = data[str(num)][2]
                 events_dict[f'event_player_{i+1}_id'] = data[str(num)][4]
                 events_dict[f'event_player_{i+1}_pos'] = data[str(num)][1]
@@ -744,6 +743,10 @@ def combine_pbp(info):
     df = df.sort_values(['period','seconds_elapsed']).reset_index()
 
     df['event_team_venue'] = np.where(df['event_team_abbr'].isna(),"",np.where(df['home_team_abbr']==df['event_team_abbr'],"home","away"))
+    
+    #Correct strength state for penalty shots and shootouts - most games dont have shifts in shootout and are disculuded otherwise
+    df['strength_state'] = np.where(np.logical_and(df['period'].astype(str)=='5',df['event_type'].isin(['missed-shot','shot-on-goal','goal'])),"1v0",df['strength_state'])
+    df['strength_state'] = np.where(df['description'].str.contains('Penalty Shot',case=False),"1v0",df['strength_state'])
 
     col = [col for col in get_col() if col in df.columns.to_list()]
     #Return: complete play-by-play information for provided game

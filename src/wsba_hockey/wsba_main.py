@@ -7,7 +7,6 @@ import random
 from tools.scraping import *
 from tools.xg_model import *
 from tools.agg import *
-from tools.ncaa_scraping import *
 
 ### WSBA HOCKEY ###
 ## Provided below are all integral functions in the WSBA Hockey Python package. ##
@@ -34,6 +33,31 @@ seasons = [
     '20242025'
 ]
 
+convert_seasons = {'2007': '20072008', 
+                   '2008': '20082009', 
+                   '2009': '20092010', 
+                   '2010': '20102011', 
+                   '2011': '20112012', 
+                   '2012': '20122013', 
+                   '2013': '20132014', 
+                   '2014': '20142015', 
+                   '2015': '20152016', 
+                   '2016': '20162017', 
+                   '2017': '20172018', 
+                   '2018': '20182019', 
+                   '2019': '20192020', 
+                   '2020': '20202021', 
+                   '2021': '20212022', 
+                   '2022': '20222023', 
+                   '2023': '20232024', 
+                   '2024': '20242025'}
+
+convert_team_abbr = {'L.A':'LAK',
+                     'N.J':'NJD',
+                     'S.J':'SJS',
+                     'T.B':'TBL',
+                     'PHX':'ARI'}
+
 #Some games in the API are specifically known to cause errors in scraping.
 #This list is updated as frequently as necessary
 known_probs ={
@@ -47,6 +71,7 @@ known_probs ={
     '2009020885':'Missing shifts data for game between Sharks and Blue Jackets.',
     '2010020124':'Game between Capitals and Hurricanes is sporadically missing player on-ice data',
     '2013020971':'On March 10th, 2014, Stars forward Rich Peverley suffered from a cardiac episode midgame and as a result, the remainder of the game was postponed.  \nThe game resumed on April 9th, and the only goal scorer in the game, Blue Jackets forward Nathan Horton, did not appear in the resumed game due to injury.  Interestingly, Horton would never play in the NHL again.',
+    '2018021133':'Game between Lightning and Capitals has incorrectly labeled event teams (i.e. WSH TAKEAWAY - #71 CIRELLI (Cirelli is a Tampa Bay skater in this game)).',
     '2019020876':'Due to the frightening collapse of Blues defensemen Jay Bouwmeester, a game on February 2nd, 2020 between the Ducks and Blues was postponed.  \nWhen the game resumed, Ducks defensemen Hampus Lindholm, who assisted on a goal in the inital game, did not play in the resumed match.'
 }
 
@@ -280,6 +305,13 @@ def nhl_scrape_season(season,split_shifts = False, season_types = [2,3], remove 
         else:
             return pbp
 
+#errors = []
+#for season in seasons[10:12]:
+#    data = nhl_scrape_season(season,remove=[],local=True,errors=True)
+#    errors.append(data['errors'])
+#    data['pbp'].to_csv(f'pbp/csv/nhl_pbp_{season}.csv',index=False)
+#print(f'Errors: {errors}')
+
 def nhl_scrape_seasons_info(seasons = []):
     #Returns info related to NHL seasons (by default, all seasons are included)
     # param 'season' - list of seasons to include
@@ -376,60 +408,32 @@ def nhl_scrape_prospects(team):
     #Return: team prospects
     return prospects
 
-def nhl_scrape_player_info(roster):
-    #Given compiled roster information from the nhl_scrape_roster function, return a list of all players (seperated into team and season) and associated information
-    # param 'roster' - dataframe of roster information from the nhl_scrape_roster function
-
-    data = roster
-
-    print("Creating player info for provided roster data...")
-
-    alt_name_col = ['firstName.cs',	'firstName.de',	'firstName.es',	'firstName.fi',	'firstName.sk',	'firstName.sv']
-    for i in range(len(alt_name_col)):
-        try: data['fullName.'+str(i+1)] = np.where(data[alt_name_col[i]].notna(),(data[alt_name_col[i]].astype(str)+" "+data['lastName.default'].astype(str)).str.upper(),np.nan)
-        except: continue
-
-    name_col = ['fullName',	'fullName.1',	'fullName.2',	'fullName.3',	'fullName.4',	'fullName.5', 'fullName.6']
-
-    for name in name_col:
-        try: data[name]
-        except:
-            data[name] = np.nan
-
-    infos = []
-    for name in name_col:
-        infos.append(data[[name,"id","season","team_abbr","headshot",
-                              "sweaterNumber","headingPosition",
-                              "positionCode",'shootsCatches',
-                              'heightInInches','weightInPounds',
-                              'birthDate','birthCountry']].rename(columns={
-                                                              name:'Player',
-                                                              'id':"API",
-                                                              "season":"Season",
-                                                              "team_abbr":"Team",
-                                                              'headshot':'Headshot',
-                                                              'sweaterNumber':"Number",
-                                                              'headingPosition':"Primary Position",
-                                                              'positionCode':'Position',
-                                                              'shootsCatches':'Handedness',
-                                                              'heightInInches':'Height',
-                                                              'weightInPounds':'Weight',
-                                                              'birthDate':'Birthday',
-                                                              'birthCountry':'Nationality'}))
-    players = pd.concat(infos)
-    players['Season'] = players['Season'].astype(str)
-    players['Player'] = players['Player'].replace(r'^\s*$', np.nan, regex=True)
-
-    return players.loc[players['Player'].notna()].sort_values(by=['Player','Season','Team'])
-
-def nhl_scrape_team_info():
-    #Return team information
+def nhl_scrape_team_info(country = False):
+    #Given option to return franchise or country, return team information
 
     print('Scraping team information...')
-    api = 'https://api.nhle.com/stats/rest/en/team'
+    api = f'https://api.nhle.com/stats/rest/en/{'country' if country else 'team'}'
     
-    #Return: team information
-    return pd.json_normalize(rs.get(api).json()['data'])
+    data =  pd.json_normalize(rs.get(api).json()['data'])
+
+    #Add logos if necessary
+    if not country:
+        data['logo_light'] = 'https://assets.nhle.com/logos/nhl/svg/'+data['triCode']+'_light.svg'
+        data['logo_dark'] = 'https://assets.nhle.com/logos/nhl/svg/'+data['triCode']+'_dark.svg'
+
+    return data.sort_values(by=(['country3Code','countryCode','iocCode','countryName'] if country else ['fullName','triCode','id']))
+
+def nhl_scrape_player_data(player_id):
+    #Given player id, return player information
+    api = f'https://api-web.nhle.com/v1/player/{player_id}/landing'
+
+    data = pd.json_normalize(rs.get(api).json())
+
+    #Add name column
+    data['fullName'] = (data['firstName.default'] + " " + data['lastName.default']).str.upper()
+
+    #Return: player data
+    return data
 
 def nhl_scrape_draft_rankings(arg = 'now', category = ''):
     #Given url argument for timeframe and prospect category, return draft rankings
@@ -448,7 +452,6 @@ def nhl_scrape_draft_rankings(arg = 'now', category = ''):
     #Return: prospect rankings
     return data
 
-''' In Repair
 def nhl_calculate_stats(pbp,season,season_types,game_strength,roster_path="rosters/nhl_rosters.csv",xg="moneypuck"):
     #Given play-by-play, seasonal information, game_strength, rosters, and xG model, return aggregated stats
     # param 'pbp' - Scraped play-by-play
@@ -459,7 +462,9 @@ def nhl_calculate_stats(pbp,season,season_types,game_strength,roster_path="roste
     # param 'xg' - xG model to apply to pbp for aggregation
 
     print("Calculating stats for play-by-play and shifts data provided in the frame: " + season + "...")
-    
+    #Add extra data
+    pbp = prep_xG_data(pbp)
+
     #Check if xG column exists and apply model if it does not
     try:
         pbp['xG']
@@ -477,15 +482,15 @@ def nhl_calculate_stats(pbp,season,season_types,game_strength,roster_path="roste
 
     indv_stats = calc_indv(pbp)
     onice_stats = calc_onice(pbp)
-    info = calc_toi(pbp)
+    #info = calc_toi(pbp)
 
     #IDs sometimes set as objects
     indv_stats['ID'] = indv_stats['ID'].astype(float)
     onice_stats['ID'] = onice_stats['ID'].astype(float)
-    info['ID'] = info['ID'].astype(float)
+    #info['ID'] = info['ID'].astype(float)
 
     complete = pd.merge(indv_stats,onice_stats,how="outer",on=['ID','Team'])
-    complete = pd.merge(complete,info,how="outer",on=['ID','Team'])
+    #complete = pd.merge(complete,info,how="outer",on=['ID','Team'])
     complete['Season'] = season
     complete['GC%'] = complete['G']/complete['GF']
     complete['AC%'] = (complete['A1']+complete['A2'])/complete['GF']
@@ -499,55 +504,45 @@ def nhl_calculate_stats(pbp,season,season_types,game_strength,roster_path="roste
     rosters = pd.read_csv(roster_path)
     names = rosters[['id','fullName']].drop_duplicates()
 
-    complete = pd.merge(complete,names,how='left',left_on='ID',right_on='id').rename(columns={'fullName':'Player'})
+    #Add names
+    complete = pd.merge(complete,names,how='left',left_on='ID',right_on='id')
+
+    try:
+        #Find missing IDs (typically players who feature in one or two games)
+        miss = complete.loc[complete['fullName'].isna(),'ID'].astype(int)
+        
+        #Create df with extra names
+        add = [nhl_scrape_player_data(player_id) for player_id in list(miss)]
+        extra = pd.concat(add)[['playerId','fullName']].drop_duplicates()
+        
+        #Add extra names
+        complete = pd.merge(complete,extra,how='left',left_on='ID',right_on='playerId')
+
+        #Combine columns as necessary
+        complete['Player'] = complete['fullName_x'].combine_first(complete['fullName_y'])
+    except:
+        #Rename if there are no missing names
+        complete = complete.rename(columns={'fullName':'Player'})
+
+    #Still working on fix to time-on-ice calculation, using substitution for now
+    toi_data = pd.read_csv('tools/xg_model/moneypuck/toi_ref.csv')
+    toi_data['season'] = toi_data['season'].astype(str).replace(convert_seasons).astype(object)
+    toi_data['team_abbr'] = toi_data['team'].replace(convert_team_abbr)
+    toi_data['strength_state'] = toi_data['situation'].str.replace("on","v")
+    if game_strength !='all':
+        toi_data = toi_data.loc[toi_data['strength_state'].isin(game_strength)]
+    complete = pd.merge(complete,toi_data,how='left',left_on=['ID','Season','Team'],right_on=['playerId','season','team_abbr']).rename(columns={'games_played':'GP','icetime':'TOI'})
+    #Set TOI to minute
+    complete['TOI'] = complete['TOI']/60
+
     return complete[[
-        'Player','ID',"Season","Team","GP","TOI",
+        'Player','ID',"Season","Team",
+        'GP','TOI',
         "G","A1","A2","iFF","ixG",'ixG/iFF',"G/ixG","iFsh%",
         "GF","FF","xGF","xGF/FF","GF/xGF","FshF%",
         "GA","FA","xGA","xGA/FA","GA/xGA","FshA%",
         "GC%","AC%","GI%","FC%","xGC%"
     ]].fillna(0).sort_values(['Player','Season','Team','ID'])
-'''
-
-def ncaa_scrape_game(game_ids,remove=[]):
-    #Given list of NCAA game id, return parsed play-by-play data
-    # param 'game_ids' - NHL game ids (or list formatted as ['random', num_of_games, start_year, end_year])
-    # param 'remove' - list of events to remove from final dataframe
-    
-    pbps = []
-    for game_id in game_ids:
-        api = f"https://ncaa-api.henrygd.me/game/{game_id}/play-by-play"
-        scoring = f"https://ncaa-api.henrygd.me/game/{game_id}/scoring-summary"
-
-        print(f'Scraping data from game {game_id}...',end="")
-        start = time.perf_counter()
-        try:
-            #Retreive data
-            data = rs.get(api).json()
-            scores = rs.get(scoring).json()
-
-            #Append data to list
-            no_data = False
-            pbps.append(ncaa_parse_json(game_id,data,scores))
-
-            end = time.perf_counter()
-            secs = end - start
-            print(f" finished in {secs:.2f} seconds.")
-
-        except:
-            #Games such as the all-star game and pre-season games will incur this error
-            print(f"\nUnable to scrape game {game_id}.  Ensure the ID is properly inputted and formatted.")
-            no_data = True
-            pbps.append(pd.DataFrame())
-
-    #Add all pbps together
-    df = pd.concat(pbps)
-
-    #Return: complete play-by-play with data removed or split as necessary
-    if no_data:
-        return pd.DataFrame()
-    else:
-        return df.loc[~df['event_type'].isin(remove)]
 
 def repo_load_rosters(seasons = []):
     #Returns roster data from repository
@@ -583,3 +578,18 @@ def repo_load_pbp(seasons = []):
     dfs = [pd.read_parquet(f"https://github.com/owensingh38/wsba_hockey/raw/refs/heads/main/src/wsba_hockey/pbp/parquet/nhl_pbp_{season}.parquet") for season in seasons]
 
     return pd.concat(dfs)
+
+def repo_load_seasons():
+    #List of available seasons to scrape
+
+    return seasons
+
+def admin_convert_to_parquet(seasons):
+    for season in seasons:
+        load = pd.read_csv(f'pbp/csv/nhl_pbp_{season}.csv')
+
+        load.to_parquet(f'pbp/parquet/nhl_pbp_{season}.parquet',index=False)
+
+#for season in seasons[6:12]:
+#    data = pd.read_csv(f"pbp/csv/nhl_pbp_{season}.csv")
+#    data.to_parquet(f'pbp/parquet/nhl_pbp_{season}.parquet',index=False)

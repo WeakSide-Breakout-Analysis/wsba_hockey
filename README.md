@@ -36,7 +36,7 @@ wsba.nhl_scrape_standings(arg = '2024-03-20')
 ### NHL Rosters and Player Information
 
 ```python
-wsba.nhl_scrape_player_info(wsba.nhl_scrape_roster('20242025'))
+wsba.nhl_scrape_roster('20242025')
 wsba.nhl_scrape_team_info()
 ```
 

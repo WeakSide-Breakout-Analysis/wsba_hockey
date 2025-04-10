@@ -1,35 +1,62 @@
-Name,Team,Logo,Location,Full Team Name,Division,Primary Color,Secondary Color,P2,S2,P3,S3
-Ducks,ANA,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/ANA.png,Anaheim,Anaheim Ducks,Pacific,#F47A38,#B9975B,#FF9860,#C8B07E,#FFB688,#D7C9A1
-Coyotes,ARI,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/ARI.png,Arizona,Arizona Coyotes,Central,#8C2633,#E2D6B5,#A0445B,#F1EFD8,#B46283,#FFFFFF
-Thrashers,ATL,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/ATL.png,Atlanta,Atlanta Thrashers,Southeast,#5C88DA,#FFA300,#70A6FF,#FFBC23,#84C4127,#FFD546
-Bruins,BOS,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/BOS.png,Boston,Boston Bruins,Atlantic,#FFB81C,#FFFFFF,#FFD644,#D7D7D7,#FFF46C,#AFAFAF
-Sabres,BUF,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/BUF.png,Buffalo,Buffalo Sabres,Atlantic,#003087,#FFB81C,#144EAF,#FFD13F,#286CD7,#FFEA62
-Hurricanes,CAR,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/CAR.png,Carolina,Carolina Hurricanes,Metropolitan,#CE1126,#A4A9AD,#E22F4E,#B3C2D0,#F64D76,#C2DBF3
-Blue Jackets,CBJ,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/CBJ.png,Columbus,Columbus Blue Jackets,Metropolitan,#002654,#CE1126,#14447C,#DD2A49,#2862A4,#EC436C
-Flames,CGY,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/CGY.png,Calgary,Calgary Flames,Pacific,#D2001C,#FAAF19,#E61E44,#FFC83C,#FA3C6C,#FFE15F
-Blackhawks,CHI,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/CHI.png,Chicago,Chicago Blackhawks,Central,#CF0A2C,#FFFFFF,#E32854,#D7D7D7,#F7467C,#AFAFAF
-Avalanche,COL,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/COL.png,Colorado,Colorado Avalanche,Central,#6F263D,#236192,#834465,#327AB5,#97628D,#4193D8
-Stars,DAL,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/DAL.png,Dallas,Dallas Stars,Central,#006847,#8F8F8C,#14866F,#9EA8AF,#28A497,#ADC1D2
-Red Wings,DET,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/DET.png,Detroit,Detroit Red Wings,Atlantic,#CE1126,#FFFFFF,#E22F4E,#D7D7D7,#F64D76,#AFAFAF
-Oilers,EDM,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/EDM.png,Edmonton,Edmonton Oilers,Pacific,#041E42,#FF4C00,#183C6A,#FF6523,#2C5A92,#FF7E46
-Panthers,FLA,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/FLA.png,Florida,Florida Panthers,Atlantic,#C8102E,#B9975B,#DC2E56,#C8B07E,#F04C7E,#D7C9A1
-Kings,LAK,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/L.A.png,Los Angeles,Los Angeles Kings,Pacific,#A2AAAD,#FFFFFF,#B6C8D5,#D7D7D7,#CAE6FD,#AFAFAF
-Wild,MIN,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/MIN.png,Minnesota,Minnesota Wild,Central,#154734,#A6192E,#29655C,#B53251,#3D8384,#C44B74
-Canadiens,MTL,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/MTL.png,Montreal,Montreal Canadiens,Atlantic,#AF1E2D,#192168,#C33C55,#283A8B,#D75A7D,#3753AE
-Devils,NJD,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/N.J.png,New Jersey,New Jersey Devils,Metropolitan,#CE1126,#FFFFFF,#E22F4E,#D7D7D7,#F64D76,#AFAFAF
-Predators,NSH,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/NSH.png,Nashville,Nashville Predators,Central,#FFB81C,#041E42,#FFD644,#133765,#FFF46C,#225088
-Islanders,NYI,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/NYI.png,New York,New York Islanders,Metropolitan,#00539B,#F47D30,#1471C3,#FF9653,#288FEB,#FFAF76
-Rangers,NYR,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/NYR.png,New York,New York Rangers,Metropolitan,#0038A8,#CE1126,#1456D0,#DD2A49,#2874F8,#EC436C
-Senators,OTT,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/OTT.png,Ottawa,Ottawa Senators,Metropolitan,#DA1A32,#B79257,#EE385A,#C6AB7A,#FF5682,#D5C49D
-Flyers,PHI,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/PHI.png,Philadelphia,Philadelphia Flyers,Metropolitan,#F74902,#FFFFFF,#FF672A,#D7D7D7,#FF8552,#AFAFAF
-Penguins,PIT,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/PIT.png,Pittsburgh,Pittsburgh Penguins,Metropolitan,#FCB514,#FFFFFF,#FFD33C,#D7D7D7,#FFF164,#AFAFAF
-Sharks,SJS,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/S.J.png,San Jose,San Jose Sharks,Pacific,#006D75,#FFFFFF,#148B9D,#D7D7D7,#28A9C5,#AFAFAF
-Blues,STL,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/STL.png,St Louis,St Louis Blues,Central,#002F87,#FCB514,#144DAF,#FFCE37,#286BD7,#FFE75A
-Lightning,TBL,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/T.B.png,Tampa Bay,Tampa Bay Lightning,Atlantic,#002868,#FFFFFF,#144690,#D7D7D7,#2864B8,#AFAFAF
-Maple Leafs,TOR,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/TOR.png,Toronto,Toronto Maple Leafs,Atlantic,#00205B,#FFFFFF,#143E83,#D7D7D7,#285CAB,#AFAFAF
-Canucks,VAN,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/VAN.png,Vancouver,Vancouver Canucks,Pacific,#00205B,#00843D,#143E83,#149D60,#285CAB,#23B683
-Capitals,WSH,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/WSH.png,Washington,Washington Capitals,Metropolitan,#C8102E,#041E42,#DC2E56,#133765,#F04C7E,#225088
-Jets,WPG,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/WPG.png,Winnipeg,Winnipeg Jets,Central,#041E42,#55565A,#183C6A,#646F7D,#2C5A92,#7388A0
-Golden Knights,VGK,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/VGK.png,Vegas,Vegas Golden Knights,Pacific,#B4975A,#333F42,#C8B582,#425865,#DCD3AA,#517188
-Kraken,SEA,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/SEA.png,Seattle,Seattle Kraken,Pacific,#001628,#E9072B,#143450,#F8204E,#285278,#FF3971
-Utah HC,UTA,https://raw.githubusercontent.com/owensingh38/nhllogos/refs/heads/main/UTA.png,Utah,Utah Hockey Club,Central,#69B3E7,#FFFFFF,#5F9FC9,#D7D7D7,#558BAB,#AFAFAF
+id,franchiseId,fullName,leagueId,rawTricode,triCode,logo_light,logo_dark,Location,Division,Primary Color,Secondary Color,P2,S2,P3,S3
+24,32,Anaheim Ducks,133,ANA,ANA,https://assets.nhle.com/logos/nhl/svg/ANA_light.svg,https://assets.nhle.com/logos/nhl/svg/ANA_dark.svg,Anaheim,Pacific,#F47A38,#B9975B,#FF9860,#C8B07E,#FFB688,#D7C9A1
+53,28,Arizona Coyotes,133,ARI,ARI,https://assets.nhle.com/logos/nhl/svg/ARI_light.svg,https://assets.nhle.com/logos/nhl/svg/ARI_dark.svg,Arizona,Central,#8C2633,#E2D6B5,#A0445B,#F1EFD8,#B46283,#FFFFFF
+47,21,Atlanta Flames,133,AFM,AFM,https://assets.nhle.com/logos/nhl/svg/AFM_light.svg,https://assets.nhle.com/logos/nhl/svg/AFM_dark.svg,,,,,,,,
+11,35,Atlanta Thrashers,133,ATL,ATL,https://assets.nhle.com/logos/nhl/svg/ATL_light.svg,https://assets.nhle.com/logos/nhl/svg/ATL_dark.svg,Atlanta,Southeast,#5C88DA,#FFA300,#70A6FF,#FFBC23,#84C4127,#FFD546
+6,6,Boston Bruins,133,BOS,BOS,https://assets.nhle.com/logos/nhl/svg/BOS_light.svg,https://assets.nhle.com/logos/nhl/svg/BOS_dark.svg,Boston,Atlantic,#FFB81C,#FFFFFF,#FFD644,#D7D7D7,#FFF46C,#AFAFAF
+51,8,Brooklyn Americans,133,BRK,BRK,https://assets.nhle.com/logos/nhl/svg/BRK_light.svg,https://assets.nhle.com/logos/nhl/svg/BRK_dark.svg,,,,,,,,
+7,19,Buffalo Sabres,133,BUF,BUF,https://assets.nhle.com/logos/nhl/svg/BUF_light.svg,https://assets.nhle.com/logos/nhl/svg/BUF_dark.svg,Buffalo,Atlantic,#003087,#FFB81C,#144EAF,#FFD13F,#286CD7,#FFEA62
+20,21,Calgary Flames,133,CGY,CGY,https://assets.nhle.com/logos/nhl/svg/CGY_light.svg,https://assets.nhle.com/logos/nhl/svg/CGY_dark.svg,Calgary,Pacific,#D2001C,#FAAF19,#E61E44,#FFC83C,#FA3C6C,#FFE15F
+56,13,California Golden Seals,133,CGS,CGS,https://assets.nhle.com/logos/nhl/svg/CGS_light.svg,https://assets.nhle.com/logos/nhl/svg/CGS_dark.svg,,,,,,,,
+12,26,Carolina Hurricanes,133,CAR,CAR,https://assets.nhle.com/logos/nhl/svg/CAR_light.svg,https://assets.nhle.com/logos/nhl/svg/CAR_dark.svg,Carolina,Metropolitan,#CE1126,#A4A9AD,#E22F4E,#B3C2D0,#F64D76,#C2DBF3
+16,11,Chicago Blackhawks,133,CHI,CHI,https://assets.nhle.com/logos/nhl/svg/CHI_light.svg,https://assets.nhle.com/logos/nhl/svg/CHI_dark.svg,Chicago,Central,#CF0A2C,#FFFFFF,#E32854,#D7D7D7,#F7467C,#AFAFAF
+49,13,Cleveland Barons,133,CLE,CLE,https://assets.nhle.com/logos/nhl/svg/CLE_light.svg,https://assets.nhle.com/logos/nhl/svg/CLE_dark.svg,,,,,,,,
+21,27,Colorado Avalanche,133,COL,COL,https://assets.nhle.com/logos/nhl/svg/COL_light.svg,https://assets.nhle.com/logos/nhl/svg/COL_dark.svg,Colorado,Central,#6F263D,#236192,#834465,#327AB5,#97628D,#4193D8
+35,23,Colorado Rockies,133,CLR,CLR,https://assets.nhle.com/logos/nhl/svg/CLR_light.svg,https://assets.nhle.com/logos/nhl/svg/CLR_dark.svg,,,,,,,,
+29,36,Columbus Blue Jackets,133,CBJ,CBJ,https://assets.nhle.com/logos/nhl/svg/CBJ_light.svg,https://assets.nhle.com/logos/nhl/svg/CBJ_dark.svg,Columbus,Metropolitan,#002654,#CE1126,#14447C,#DD2A49,#2862A4,#EC436C
+25,15,Dallas Stars,133,DAL,DAL,https://assets.nhle.com/logos/nhl/svg/DAL_light.svg,https://assets.nhle.com/logos/nhl/svg/DAL_dark.svg,Dallas,Central,#006847,#8F8F8C,#14866F,#9EA8AF,#28A497,#ADC1D2
+40,12,Detroit Cougars,133,DCG,DCG,https://assets.nhle.com/logos/nhl/svg/DCG_light.svg,https://assets.nhle.com/logos/nhl/svg/DCG_dark.svg,,,,,,,,
+50,12,Detroit Falcons,133,DFL,DFL,https://assets.nhle.com/logos/nhl/svg/DFL_light.svg,https://assets.nhle.com/logos/nhl/svg/DFL_dark.svg,,,,,,,,
+17,12,Detroit Red Wings,133,DET,DET,https://assets.nhle.com/logos/nhl/svg/DET_light.svg,https://assets.nhle.com/logos/nhl/svg/DET_dark.svg,Detroit,Atlantic,#CE1126,#FFFFFF,#E22F4E,#D7D7D7,#F64D76,#AFAFAF
+22,25,Edmonton Oilers,133,EDM,EDM,https://assets.nhle.com/logos/nhl/svg/EDM_light.svg,https://assets.nhle.com/logos/nhl/svg/EDM_dark.svg,Edmonton,Pacific,#041E42,#FF4C00,#183C6A,#FF6523,#2C5A92,#FF7E46
+13,33,Florida Panthers,133,FLA,FLA,https://assets.nhle.com/logos/nhl/svg/FLA_light.svg,https://assets.nhle.com/logos/nhl/svg/FLA_dark.svg,Florida,Atlantic,#C8102E,#B9975B,#DC2E56,#C8B07E,#F04C7E,#D7C9A1
+37,4,Hamilton Tigers,133,HAM,HAM,https://assets.nhle.com/logos/nhl/svg/HAM_light.svg,https://assets.nhle.com/logos/nhl/svg/HAM_dark.svg,,,,,,,,
+34,26,Hartford Whalers,133,HFD,HFD,https://assets.nhle.com/logos/nhl/svg/HFD_light.svg,https://assets.nhle.com/logos/nhl/svg/HFD_dark.svg,,,,,,,,
+48,23,Kansas City Scouts,133,KCS,KCS,https://assets.nhle.com/logos/nhl/svg/KCS_light.svg,https://assets.nhle.com/logos/nhl/svg/KCS_dark.svg,,,,,,,,
+26,14,Los Angeles Kings,133,LAK,LAK,https://assets.nhle.com/logos/nhl/svg/LAK_light.svg,https://assets.nhle.com/logos/nhl/svg/LAK_dark.svg,Los Angeles,Pacific,#A2AAAD,#FFFFFF,#B6C8D5,#D7D7D7,#CAE6FD,#AFAFAF
+31,15,Minnesota North Stars,133,MNS,MNS,https://assets.nhle.com/logos/nhl/svg/MNS_light.svg,https://assets.nhle.com/logos/nhl/svg/MNS_dark.svg,,,,,,,,
+30,37,Minnesota Wild,133,MIN,MIN,https://assets.nhle.com/logos/nhl/svg/MIN_light.svg,https://assets.nhle.com/logos/nhl/svg/MIN_dark.svg,Minnesota,Central,#154734,#A6192E,#29655C,#B53251,#3D8384,#C44B74
+43,7,Montreal Maroons,133,MMR,MMR,https://assets.nhle.com/logos/nhl/svg/MMR_light.svg,https://assets.nhle.com/logos/nhl/svg/MMR_dark.svg,,,,,,,,
+41,2,Montreal Wanderers,133,MWN,MWN,https://assets.nhle.com/logos/nhl/svg/MWN_light.svg,https://assets.nhle.com/logos/nhl/svg/MWN_dark.svg,,,,,,,,
+8,1,Montréal Canadiens,133,MTL,MTL,https://assets.nhle.com/logos/nhl/svg/MTL_light.svg,https://assets.nhle.com/logos/nhl/svg/MTL_dark.svg,Montreal,Atlantic,#AF1E2D,#192168,#C33C55,#283A8B,#D75A7D,#3753AE
+99,,NHL,133,NHL,NHL,https://assets.nhle.com/logos/nhl/svg/NHL_light.svg,https://assets.nhle.com/logos/nhl/svg/NHL_dark.svg,,,,,,,,
+18,34,Nashville Predators,133,NSH,NSH,https://assets.nhle.com/logos/nhl/svg/NSH_light.svg,https://assets.nhle.com/logos/nhl/svg/NSH_dark.svg,Nashville,Central,#FFB81C,#041E42,#FFD644,#133765,#FFF46C,#225088
+1,23,New Jersey Devils,133,NJD,NJD,https://assets.nhle.com/logos/nhl/svg/NJD_light.svg,https://assets.nhle.com/logos/nhl/svg/NJD_dark.svg,New Jersey,Metropolitan,#CE1126,#FFFFFF,#E22F4E,#D7D7D7,#F64D76,#AFAFAF
+44,8,New York Americans,133,NYA,NYA,https://assets.nhle.com/logos/nhl/svg/NYA_light.svg,https://assets.nhle.com/logos/nhl/svg/NYA_dark.svg,,,,,,,,
+2,22,New York Islanders,133,NYI,NYI,https://assets.nhle.com/logos/nhl/svg/NYI_light.svg,https://assets.nhle.com/logos/nhl/svg/NYI_dark.svg,New York,Metropolitan,#00539B,#F47D30,#1471C3,#FF9653,#288FEB,#FFAF76
+3,10,New York Rangers,133,NYR,NYR,https://assets.nhle.com/logos/nhl/svg/NYR_light.svg,https://assets.nhle.com/logos/nhl/svg/NYR_dark.svg,New York,Metropolitan,#0038A8,#CE1126,#1456D0,#DD2A49,#2874F8,#EC436C
+46,13,Oakland Seals,133,OAK,OAK,https://assets.nhle.com/logos/nhl/svg/OAK_light.svg,https://assets.nhle.com/logos/nhl/svg/OAK_dark.svg,,,,,,,,
+9,30,Ottawa Senators,133,OTT,OTT,https://assets.nhle.com/logos/nhl/svg/OTT_light.svg,https://assets.nhle.com/logos/nhl/svg/OTT_dark.svg,Ottawa,Metropolitan,#DA1A32,#B79257,#EE385A,#C6AB7A,#FF5682,#D5C49D
+36,3,Ottawa Senators (1917),133,SEN,SEN,https://assets.nhle.com/logos/nhl/svg/SEN_light.svg,https://assets.nhle.com/logos/nhl/svg/SEN_dark.svg,,,,,,,,
+4,16,Philadelphia Flyers,133,PHI,PHI,https://assets.nhle.com/logos/nhl/svg/PHI_light.svg,https://assets.nhle.com/logos/nhl/svg/PHI_dark.svg,Philadelphia,Metropolitan,#F74902,#FFFFFF,#FF672A,#D7D7D7,#FF8552,#AFAFAF
+39,9,Philadelphia Quakers,133,QUA,QUA,https://assets.nhle.com/logos/nhl/svg/QUA_light.svg,https://assets.nhle.com/logos/nhl/svg/QUA_dark.svg,,,,,,,,
+27,28,Phoenix Coyotes,133,PHX,PHX,https://assets.nhle.com/logos/nhl/svg/PHX_light.svg,https://assets.nhle.com/logos/nhl/svg/PHX_dark.svg,,,,,,,,
+5,17,Pittsburgh Penguins,133,PIT,PIT,https://assets.nhle.com/logos/nhl/svg/PIT_light.svg,https://assets.nhle.com/logos/nhl/svg/PIT_dark.svg,Pittsburgh,Metropolitan,#FCB514,#FFFFFF,#FFD33C,#D7D7D7,#FFF164,#AFAFAF
+38,9,Pittsburgh Pirates,133,PIR,PIR,https://assets.nhle.com/logos/nhl/svg/PIR_light.svg,https://assets.nhle.com/logos/nhl/svg/PIR_dark.svg,,,,,,,,
+42,4,Quebec Bulldogs,133,QBD,QBD,https://assets.nhle.com/logos/nhl/svg/QBD_light.svg,https://assets.nhle.com/logos/nhl/svg/QBD_dark.svg,,,,,,,,
+32,27,Quebec Nordiques,133,QUE,QUE,https://assets.nhle.com/logos/nhl/svg/QUE_light.svg,https://assets.nhle.com/logos/nhl/svg/QUE_dark.svg,,,,,,,,
+28,29,San Jose Sharks,133,SJS,SJS,https://assets.nhle.com/logos/nhl/svg/SJS_light.svg,https://assets.nhle.com/logos/nhl/svg/SJS_dark.svg,San Jose,Pacific,#006D75,#FFFFFF,#148B9D,#D7D7D7,#28A9C5,#AFAFAF
+55,39,Seattle Kraken,133,SEA,SEA,https://assets.nhle.com/logos/nhl/svg/SEA_light.svg,https://assets.nhle.com/logos/nhl/svg/SEA_dark.svg,Seattle,Pacific,#001628,#E9072B,#143450,#F8204E,#285278,#FF3971
+19,18,St. Louis Blues,133,STL,STL,https://assets.nhle.com/logos/nhl/svg/STL_light.svg,https://assets.nhle.com/logos/nhl/svg/STL_dark.svg,St Louis,Central,#002F87,#FCB514,#144DAF,#FFCE37,#286BD7,#FFE75A
+45,3,St. Louis Eagles,133,SLE,SLE,https://assets.nhle.com/logos/nhl/svg/SLE_light.svg,https://assets.nhle.com/logos/nhl/svg/SLE_dark.svg,,,,,,,,
+14,31,Tampa Bay Lightning,133,TBL,TBL,https://assets.nhle.com/logos/nhl/svg/TBL_light.svg,https://assets.nhle.com/logos/nhl/svg/TBL_dark.svg,Tampa Bay,Atlantic,#002868,#FFFFFF,#144690,#D7D7D7,#2864B8,#AFAFAF
+70,,To be determined,133,TBD,TBD,https://assets.nhle.com/logos/nhl/svg/TBD_light.svg,https://assets.nhle.com/logos/nhl/svg/TBD_dark.svg,,,,,,,,
+57,5,Toronto Arenas,133,TAN,TAN,https://assets.nhle.com/logos/nhl/svg/TAN_light.svg,https://assets.nhle.com/logos/nhl/svg/TAN_dark.svg,,,,,,,,
+10,5,Toronto Maple Leafs,133,TOR,TOR,https://assets.nhle.com/logos/nhl/svg/TOR_light.svg,https://assets.nhle.com/logos/nhl/svg/TOR_dark.svg,Toronto,Atlantic,#00205B,#FFFFFF,#143E83,#D7D7D7,#285CAB,#AFAFAF
+58,5,Toronto St. Patricks,133,TSP,TSP,https://assets.nhle.com/logos/nhl/svg/TSP_light.svg,https://assets.nhle.com/logos/nhl/svg/TSP_dark.svg,,,,,,,,
+59,40,Utah Hockey Club,133,UTA,UTA,https://assets.nhle.com/logos/nhl/svg/UTA_light.svg,https://assets.nhle.com/logos/nhl/svg/UTA_dark.svg,Utah,Central,#69B3E7,#FFFFFF,#5F9FC9,#D7D7D7,#558BAB,#AFAFAF
+23,20,Vancouver Canucks,133,VAN,VAN,https://assets.nhle.com/logos/nhl/svg/VAN_light.svg,https://assets.nhle.com/logos/nhl/svg/VAN_dark.svg,Vancouver,Pacific,#00205B,#00843D,#143E83,#149D60,#285CAB,#23B683
+54,38,Vegas Golden Knights,133,VGK,VGK,https://assets.nhle.com/logos/nhl/svg/VGK_light.svg,https://assets.nhle.com/logos/nhl/svg/VGK_dark.svg,Vegas,Pacific,#B4975A,#333F42,#C8B582,#425865,#DCD3AA,#517188
+15,24,Washington Capitals,133,WSH,WSH,https://assets.nhle.com/logos/nhl/svg/WSH_light.svg,https://assets.nhle.com/logos/nhl/svg/WSH_dark.svg,Washington,Metropolitan,#C8102E,#041E42,#DC2E56,#133765,#F04C7E,#225088
+52,35,Winnipeg Jets,133,WPG,WPG,https://assets.nhle.com/logos/nhl/svg/WPG_light.svg,https://assets.nhle.com/logos/nhl/svg/WPG_dark.svg,Winnipeg,Central,#041E42,#55565A,#183C6A,#646F7D,#2C5A92,#7388A0
+33,28,Winnipeg Jets (1979),133,WIN,WIN,https://assets.nhle.com/logos/nhl/svg/WIN_light.svg,https://assets.nhle.com/logos/nhl/svg/WIN_dark.svg,,,,,,,,
