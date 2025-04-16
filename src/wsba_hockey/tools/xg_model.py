@@ -9,6 +9,11 @@ import requests as rs
 ### XG_MODEL FUNCTIONS ###
 # Provided in this file are functions vital to the goal prediction model in the WSBA Hockey Python package. #
 
+## GLOBAL VARIABLES ##
+#Newest season
+new_full = '20242025'
+new = '2024'
+
 def prep_xG_data(pbp):
     #Prep data for xG training and calculation
 
@@ -16,10 +21,17 @@ def prep_xG_data(pbp):
     shot_types = ['wrist','deflected','tip-in','slap','backhand','snap','wrap-around','poke','bat','cradle','between-legs']
     fenwick_events = ['missed-shot','shot-on-goal','goal']
     
-    #Create last event columns
+    #Informal groupby
     data = pbp.sort_values(by=['season','game_id','period','seconds_elapsed','event_num'])
 
-    data["seconds_since_last"] = data['seconds_elapsed']-data['seconds_elapsed'].shift(1)
+    #Add event time details - prevent leaking between games by setting value to zero when no time has occured in game
+    try: 
+        data['seconds_since_last']
+    except:
+        data["seconds_since_last"] = np.where(data['seconds_elapsed']==0,0,data['seconds_elapsed']-data['seconds_elapsed'].shift(1))
+        data["event_length"] = np.where(data['seconds_elapsed']==0,0,data['seconds_since_last'].shift(-1))
+    
+    #Create last event columns
     data["event_team_last"] = data['event_team_abbr'].shift(1)
     data["event_type_last"] = data['event_type'].shift(1)
     data["x_fixed_last"] = data['x_fixed'].shift(1)
@@ -48,6 +60,7 @@ def prep_xG_data(pbp):
         data[f'prior_{event}_opp'] = ((data['event_type_last']==event)&(data['event_team_last']!=data['event_team_abbr'])).astype(int)
     
     data['prior_faceoff'] = (data['event_type_last']=='faceoff').astype(int)
+    
     #Return: pbp data prepared to train and calculate the xG model
     return data
 
@@ -268,7 +281,7 @@ def wsba_xG(pbp, train = False, overwrite = False, model_path = "tools/xg_model/
         pbp['xG'] = np.where(pbp['event_type'].isin(fenwick_events),model.predict(xgb_matrix),"")
         return pbp
 
-def moneypuck_xG(pbp,repo_path = "tools/xg_model/moneypuck/shots_2007-2023.zip",new = '2024'):
+def moneypuck_xG(pbp,repo_path = "tools/xg_model/moneypuck/shots_2007-2023.zip"):
     #Given play-by-play, return itself with xG column sourced from MoneyPuck.com
 
     #If file is already in the repository downloading is not necessary
@@ -293,27 +306,29 @@ def moneypuck_xG(pbp,repo_path = "tools/xg_model/moneypuck/shots_2007-2023.zip",
         db = pd.read_csv("tools/xg_model/moneypuck/shots/shots_2007-2023.csv")  
     
     #Repeat process with active/most recent season
-    #For the new/recent season, always scrape new data
-    url = f'https://peter-tanner.com/moneypuck/downloads/shots_{new}.zip'
-    repo_path = f"tools/xg_model/moneypuck/shots_{new}.zip"
+    #For the new/recent season, only scrape if the supplied pbp data contains the season
+    if new in list(pbp['season'].astype(str).str[0:4]):
+        url = f'https://peter-tanner.com/moneypuck/downloads/shots_{new}.zip'
+        repo_path = f"tools/xg_model/moneypuck/shots_{new}.zip"
 
-    response = rs.get(url)
+        response = rs.get(url)
 
-    if response.status_code == 200:
-        with open(repo_path, 'wb') as file:
-            file.write(response.content)
-        print('File downloaded successfully')
+        if response.status_code == 200:
+            with open(repo_path, 'wb') as file:
+                file.write(response.content)
+            print('File downloaded successfully')
+        else:
+            print('Failed to download file')
+
+        with ZipFile(repo_path, 'r') as zObject: 
+            zObject.extractall( 
+                path="tools/xg_model/moneypuck/shots/")
+            
+        new_season = pd.read_csv(f"tools/xg_model/moneypuck/shots/shots_{new}.csv")
+        #Convert to parquet
+        new_season.to_parquet(f"tools/xg_model/moneypuck/shots/shots_{new}.csv",index=False)
     else:
-        print('Failed to download file')
-
-    with ZipFile(repo_path, 'r') as zObject: 
-        zObject.extractall( 
-            path="tools/xg_model/moneypuck/shots/")
-        
-    new_season = pd.read_csv(f"tools/xg_model/moneypuck/shots/shots_{new}.csv")
-    #Convert to parquet
-    new_season.to_parquet(f"tools/xg_model/moneypuck/shots/shots_{new}.csv",index=False)
-
+        new_season = pd.DataFrame()
     #Combine shots
     moneypuck = pd.concat([db,new_season])
 

@@ -27,17 +27,18 @@ def get_col():
     return [
         'season','season_type','game_id','game_date',"start_time","venue","venue_location",
         'away_team_abbr','home_team_abbr','event_num','period','period_type',
-        'seconds_elapsed',"situation_code","strength_state","home_team_defending_side",
+        'seconds_elapsed',"situation_code","strength_state","strength_state_venue","home_team_defending_side",
         "event_type_code","event_type","description","penalty_duration",
-        "event_team_abbr",'num_on', 'players_on','ids_on','num_off','players_off','ids_off','shift_type',
-        "event_team_venue",
+        "event_team_abbr","event_team_venue",
+        'num_on', 'players_on','ids_on','num_off','players_off','ids_off','shift_type',
         "event_player_1_name","event_player_2_name","event_player_3_name",
         "event_player_1_id","event_player_2_id","event_player_3_id",
         "event_player_1_pos","event_player_2_pos","event_player_3_pos",
         "event_goalie_name","event_goalie_id",
         "shot_type","zone_code","x","y","x_fixed","y_fixed","x_adj","y_adj",
         "event_skaters","away_skaters","home_skaters",
-        "event_distance","event_angle","away_score","home_score", "away_fenwick", "home_fenwick",
+        "event_distance","event_angle","event_length","seconds_since_last",
+        "away_score","home_score", "away_fenwick", "home_fenwick","away_sog","home_sog",
         "away_on_1","away_on_2","away_on_3","away_on_4","away_on_5","away_on_6","away_goalie",
         "home_on_1","home_on_2","home_on_3","home_on_4","home_on_5","home_on_6","home_goalie",
         "away_on_1_id","away_on_2_id","away_on_3_id","away_on_4_id","away_on_5_id","away_on_6_id","away_goalie_id",
@@ -1075,6 +1076,13 @@ def combine_data(info):
         df['event_type_code'] = np.where(df['event_type']=='change',499,df['event_type_code'])
     except:
         ""
+
+    #Add time since last event and overall event length
+    df['seconds_since_last'] = df['seconds_elapsed'] - df['seconds_elapsed'].shift(1)
+    df['event_length'] = df['seconds_since_last'].shift(-1)
+
+    #Add fixed strength state column
+    df['strength_state_venue'] = df['away_skaters'].astype(str)+'v'+df['home_skaters'].astype(str)
 
     #Retrieve coaches
     coaches = info['coaches']

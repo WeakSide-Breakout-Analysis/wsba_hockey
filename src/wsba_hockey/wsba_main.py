@@ -452,7 +452,85 @@ def nhl_scrape_draft_rankings(arg = 'now', category = ''):
     #Return: prospect rankings
     return data
 
-def nhl_calculate_stats(pbp,season,season_types,game_strength,roster_path="rosters/nhl_rosters.csv",xg="moneypuck"):
+def nhl_shooting_impacts(agg):
+    #Given stats table generated from the nhl_calculate_stats function, return table with shot impacts
+    #Only 5v5 is supported as of now
+
+    #param 'agg' - stats table
+
+    #COMPOSITE IMPACT EVALUATIONS:
+
+    #SR = Shot Rate
+    #SQ = Shot Quality
+    #FN = Finishing
+
+    #I = Impact
+
+    #INDV = Individual
+    #OOFF = On-Ice Offense
+    #ODEF = On-Ice Defense
+
+    #Grouping-Metric Code: XXXX-YYI
+
+    #Goal Composition Formula
+    #The aggregation of goals is composed of three factors: shot rate, shot quality, and finishing
+    #These are represented by their own metrics in which Goals = (Fenwick*(League Average Fenwick SH%)) + ((xGoals/Fenwick - League Average Fenwick SH%)*Fenwick) + (Goals - xGoals)
+    def goal_comp(fenwick,xg_fen,xg,g,fsh):
+        rate = fenwick * fsh
+        qual = (xg_fen-fsh)*fenwick
+        fini = g-xg
+
+        return rate+qual+fini
+
+    #Rename indvidual stat columns (these will be reverted back as they are for ease of use in the calc loops)
+    agg = agg.rename(columns={
+        'iFsh%':'Fshi%',
+        'iFF/60':'Fi/60',
+        'ixG/60':'xGi/60',
+        'G/60':'Gi/60',
+        'ixG/iFF':'xGi/Fi'
+    })
+
+    #Remove skaters with less than 150 minutes of TOI then split between forwards and dmen
+    agg = agg.loc[agg['TOI']>=150]
+    forwards = agg.loc[agg['Position']!='D']
+    defensemen = agg.loc[agg['Position']=='D']
+
+    #Loop through both positions, all groupings (INDV, OOFF, and ODEF) generating impacts
+    for pos in [forwards,defensemen]:
+        for group in [('INDV','i'),('OOFF','F'),('ODEF','A')]:
+            #Have to set this columns for compatibility with df.apply
+            pos['fsh'] = pos[f'Fsh{group[1]}%']
+            pos['fenwick'] =  pos[f'F{group[1]}/60']
+            pos['xg'] = pos[f'xG{group[1]}/60']
+            pos['g'] = pos[f'G{group[1]}/60']
+            pos['xg_fen'] = pos[f'xG{group[1]}/F{group[1]}']
+            
+            #Find average for position in frame
+            avg_fen = pos['fenwick'].mean()
+            avg_xg = pos['xg'].mean()
+            avg_g = pos['g'].mean()
+            avg_fsh = avg_g/avg_fen
+            avg_xg_fen = avg_xg/avg_fen
+
+            #Calculate shot rate, shot quality, and finishing impacts
+            pos[f'{group[0]}-SRI'] = pos['g'] - pos.apply(lambda x: goal_comp(avg_fen,x.xg_fen,x.xg,x.g,avg_fsh),axis=1)
+            pos[f'{group[0]}-SQI'] = pos['g'] - pos.apply(lambda x: goal_comp(x.fenwick,avg_xg_fen,x.xg,x.g,avg_fsh),axis=1)
+            pos[f'{group[0]}-FNI'] = pos['g'] - pos.apply(lambda x: goal_comp(x.fenwick,x.xg_fen,avg_xg,avg_g,avg_fsh),axis=1)
+
+    #Add positions back together
+    complete = pd.concat([forwards,defensemen])
+
+    #Return: skater stats with shooting impacts
+    return complete.drop(columns=['fsh','fenwick','xg_fen','xg','g']).rename(columns={
+        'Fshi%':'iFsh%',
+        'Fi/60':'iFF/60',
+        'xGi/60':'ixG/60',
+        'Gi/60':'G/60',
+        'xGi/Fi':'ixG/iFF'
+    }).sort_values(['Player','Season','Team','ID'])
+
+def nhl_calculate_stats(pbp,season_types,game_strength,roster_path="rosters/nhl_rosters.csv",xg="moneypuck",shot_impact=False):
     #Given play-by-play, seasonal information, game_strength, rosters, and xG model, return aggregated stats
     # param 'pbp' - Scraped play-by-play
     # param 'season' - season or timeframe of events in play-by-play
@@ -460,8 +538,11 @@ def nhl_calculate_stats(pbp,season,season_types,game_strength,roster_path="roste
     # param 'game_strength' - list of game_strengths to include in aggregation
     # param 'roster_path' - path to roster file
     # param 'xg' - xG model to apply to pbp for aggregation
+    # param 'shot_impact' - boolean determining if the shot impact model will be applied to the dataset
 
-    print("Calculating stats for play-by-play and shifts data provided in the frame: " + season + "...")
+    print(f"Calculating statistics for all games in the provided play-by-play data...\nSeasons included: {pbp['season'].drop_duplicates().to_list()}...")
+    start = time.perf_counter()
+
     #Add extra data
     pbp = prep_xG_data(pbp)
 
@@ -474,6 +555,7 @@ def nhl_calculate_stats(pbp,season,season_types,game_strength,roster_path="roste
         else:
             pbp = moneypuck_xG(pbp)
 
+    #Filter by season types and remove shootouts
     pbp = pbp.loc[(pbp['season_type'].isin(season_types)) & (pbp['period'] < 5)]
     
     # Filter by game strength if not "all"
@@ -482,67 +564,87 @@ def nhl_calculate_stats(pbp,season,season_types,game_strength,roster_path="roste
 
     indv_stats = calc_indv(pbp)
     onice_stats = calc_onice(pbp)
-    #info = calc_toi(pbp)
 
     #IDs sometimes set as objects
     indv_stats['ID'] = indv_stats['ID'].astype(float)
     onice_stats['ID'] = onice_stats['ID'].astype(float)
-    #info['ID'] = info['ID'].astype(float)
 
-    complete = pd.merge(indv_stats,onice_stats,how="outer",on=['ID','Team'])
-    #complete = pd.merge(complete,info,how="outer",on=['ID','Team'])
-    complete['Season'] = season
+    #Merge and add columns for extra stats
+    complete = pd.merge(indv_stats,onice_stats,how="outer",on=['ID','Team','Season'])
     complete['GC%'] = complete['G']/complete['GF']
     complete['AC%'] = (complete['A1']+complete['A2'])/complete['GF']
     complete['GI%'] = (complete['G']+complete['A1']+complete['A2'])/complete['GF']
     complete['FC%'] = complete['iFF']/complete['FF']
     complete['xGC%'] = complete['ixG']/complete['xGF']
-    #complete['RC%'] = complete['Rush']/complete['iFF']
-    #complete['AVG_Rush_POW'] = complete['Rush_POW']/complete['Rush']
     
+    #Remove entries with no ID listed
+    complete = complete.loc[complete['ID'].notna()]
+
     #Import rosters and player info
     rosters = pd.read_csv(roster_path)
-    names = rosters[['id','fullName']].drop_duplicates()
+    names = rosters[['id','fullName',
+                     'headshot','positionCode','shootsCatches',
+                     'heightInInches','weightInPounds',
+                     'birthDate','birthCountry']].drop_duplicates(subset=['id','fullName'],keep='last')
 
     #Add names
     complete = pd.merge(complete,names,how='left',left_on='ID',right_on='id')
 
-    try:
-        #Find missing IDs (typically players who feature in one or two games)
-        miss = complete.loc[complete['fullName'].isna(),'ID'].astype(int)
-        
-        #Create df with extra names
-        add = [nhl_scrape_player_data(player_id) for player_id in list(miss)]
-        extra = pd.concat(add)[['playerId','fullName']].drop_duplicates()
-        
-        #Add extra names
-        complete = pd.merge(complete,extra,how='left',left_on='ID',right_on='playerId')
+    #Rename if there are no missing names
+    complete = complete.rename(columns={'fullName':'Player',
+                                        'headshot':'Headshot',
+                                        'positionCode':'Position',
+                                        'shootsCatches':'Handedness',
+                                        'heightInInches':'Height (in)',
+                                        'weightInPounds':'Weight (lbs)',
+                                        'birthDate':'Birthday',
+                                        'birthCountry':'Nationality'})
 
-        #Combine columns as necessary
-        complete['Player'] = complete['fullName_x'].combine_first(complete['fullName_y'])
-    except:
-        #Rename if there are no missing names
-        complete = complete.rename(columns={'fullName':'Player'})
-
-    #Still working on fix to time-on-ice calculation, using substitution for now
-    toi_data = pd.read_csv('tools/xg_model/moneypuck/toi_ref.csv')
-    toi_data['season'] = toi_data['season'].astype(str).replace(convert_seasons).astype(object)
-    toi_data['team_abbr'] = toi_data['team'].replace(convert_team_abbr)
-    toi_data['strength_state'] = toi_data['situation'].str.replace("on","v")
-    if game_strength !='all':
-        toi_data = toi_data.loc[toi_data['strength_state'].isin(game_strength)]
-    complete = pd.merge(complete,toi_data,how='left',left_on=['ID','Season','Team'],right_on=['playerId','season','team_abbr']).rename(columns={'games_played':'GP','icetime':'TOI'})
     #Set TOI to minute
     complete['TOI'] = complete['TOI']/60
 
-    return complete[[
-        'Player','ID',"Season","Team",
+    #Add per 60 stats
+    per_sixty = ['iFF','ixG','G','A1','A2','P1','P','FF','FA','xGF','xGA','GF','GA']
+    for stat in per_sixty:
+        complete[f'{stat}/60'] = (complete[stat]/complete['TOI'])*60
+
+    #Add player age
+    complete['Birthday'] = pd.to_datetime(complete['Birthday'])
+    complete['season_year'] = complete['Season'].astype(str).str[4:8].astype(int)
+    complete['Age'] = complete['season_year'] - complete['Birthday'].dt.year
+
+    #Find player headshot
+    complete['Headshot'] = 'https://assets.nhle.com/mugs/nhl/'+complete['Season'].astype(str)+'/'+complete['Team']+'/'+complete['ID'].astype(int).astype(str)+'.png'
+
+    end = time.perf_counter()
+    length = end-start
+    #Return: aggregated stats dataframe
+    print(f'...finished in {(length if length <60 else length/60):.2f} {'seconds' if length <60 else 'minutes'}.')
+    #Remove goalies that occasionally appear in a set
+    complete = complete.loc[complete['Position']!='G']
+
+    complete = complete[[
+        'Player','ID',
+        "Season","Team",
+        'Headshot','Position','Handedness',
+        'Height (in)','Weight (lbs)',
+        'Birthday','Age','Nationality',
         'GP','TOI',
-        "G","A1","A2","iFF","ixG",'ixG/iFF',"G/ixG","iFsh%",
+        "G","A1","A2",'P1','P',
+        "iFF","ixG",'ixG/iFF',"G/ixG","iFsh%",
         "GF","FF","xGF","xGF/FF","GF/xGF","FshF%",
         "GA","FA","xGA","xGA/FA","GA/xGA","FshA%",
-        "GC%","AC%","GI%","FC%","xGC%"
-    ]].fillna(0).sort_values(['Player','Season','Team','ID'])
+        'Rush',"GC%","AC%","GI%","FC%","xGC%",
+    ]+[f'{stat}/60' for stat in per_sixty]].fillna(0).sort_values(['Player','Season','Team','ID'])
+
+    #Apply shot impacts if necessary (Note: this will remove skaters with fewer than 150 minutes of TOI due to the shot impact TOI rule)
+    if shot_impact:
+        return nhl_shooting_impacts(complete)
+    else:
+        return complete
+
+#stats = [nhl_calculate_stats(pd.read_parquet(f'pbp/parquet/nhl_pbp_{season}.parquet'),[2],['5v5'],shot_impact=True) for season in seasons[6:18]]
+#pd.concat(stats).to_csv(f'stats/db/wsba_nhl_skater_db.csv',index=False)
 
 def repo_load_rosters(seasons = []):
     #Returns roster data from repository

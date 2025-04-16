@@ -1,14 +1,4 @@
-src/wsba_hockey/pbp/csv/nhl_pbp_20132014.csv
-src/wsba_hockey/pbp/csv/nhl_pbp_20142015.csv
-src/wsba_hockey/pbp/csv/nhl_pbp_20152016.csv
-src/wsba_hockey/pbp/csv/nhl_pbp_20162017.csv
-src/wsba_hockey/pbp/csv/nhl_pbp_20172018.csv
-src/wsba_hockey/pbp/csv/nhl_pbp_20182019.csv
-src/wsba_hockey/pbp/csv/nhl_pbp_20212022.csv
-src/wsba_hockey/pbp/csv/nhl_pbp_20202021.csv
-src/wsba_hockey/pbp/csv/nhl_pbp_20192020.csv
-src/wsba_hockey/pbp/csv/nhl_pbp_20222023.csv
-src/wsba_hockey/pbp/csv/nhl_pbp_20232024.csv
-src/wsba_hockey/pbp/csv/nhl_pbp_20242025.csv
+src/wsba_hockey/pbp/csv/
+src/wsba_hockey/stats/
 src/wsba_hockey/tools/xg_model/moneypuck/shots/shots_2024.csv
 src/wsba_hockey/tools/xg_model/moneypuck/shots_2024.zip
