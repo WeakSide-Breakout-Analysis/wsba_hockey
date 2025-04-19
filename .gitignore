@@ -2,3 +2,8 @@ src/wsba_hockey/pbp/csv/
 src/wsba_hockey/stats/
 src/wsba_hockey/tools/xg_model/moneypuck/shots/shots_2024.csv
 src/wsba_hockey/tools/xg_model/moneypuck/shots_2024.zip
+src/wsba_hockey/tools/xg_model/moneypuck/shots_2007-2023.parquet
+src/wsba_hockey/pbp/parquet/nhl_pbp_20222023.parquet
+src/wsba_hockey/pbp/parquet/nhl_pbp_20232024.parquet
+src/wsba_hockey/pbp/parquet/nhl_pbp_20242025.parquet
+src/wsba_hockey/pbp/parquet/nhl_pbp_20242025.parquet

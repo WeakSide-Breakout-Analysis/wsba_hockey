@@ -56,7 +56,16 @@ wsba.nhl_scrape_prospects('BOS')
 pbp = wsba.nhl_scrape_season('20232024',remove=[], local = True)
 wsba.nhl_calculate_stats(pbp,'20232024',[2],['5v5','4v4','3v3'],xg='moneypuck',shot_impact = True)
 ```
-### Shot Plotting (Plots, Heatmaps, etc.)*
+### Shot Plotting (Plots, Heatmaps, etc.)
+```python
+skater_dict = {
+    'Patrice Bergeron':['20212022','BOS']
+}
+pbp = wsba.nhl_scrape_season('20212022',remove=[], local = True)
+
+wsba.nhl_plot_skater_shots(pbp,skater_dict,['5v5'],legend=True)
+wsba.nhl_plot_games(pbp,legend=True)
+```
 
 ## REPOSITORY 
 ### Past Season Play-by-Play
