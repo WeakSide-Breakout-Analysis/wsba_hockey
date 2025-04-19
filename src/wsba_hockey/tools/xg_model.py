@@ -25,11 +25,8 @@ def prep_xG_data(pbp):
     data = pbp.sort_values(by=['season','game_id','period','seconds_elapsed','event_num'])
 
     #Add event time details - prevent leaking between games by setting value to zero when no time has occured in game
-    try: 
-        data['seconds_since_last']
-    except:
-        data["seconds_since_last"] = np.where(data['seconds_elapsed']==0,0,data['seconds_elapsed']-data['seconds_elapsed'].shift(1))
-        data["event_length"] = np.where(data['seconds_elapsed']==0,0,data['seconds_since_last'].shift(-1))
+    data["seconds_since_last"] = np.where(data['seconds_elapsed']==0,0,data['seconds_elapsed']-data['seconds_elapsed'].shift(1))
+    data["event_length"] = np.where(data['seconds_elapsed']==0,0,data['seconds_since_last'].shift(-1))
     
     #Create last event columns
     data["event_team_last"] = data['event_team_abbr'].shift(1)
