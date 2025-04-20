@@ -8,3 +8,4 @@ src/wsba_hockey/pbp/parquet/nhl_pbp_20232024.parquet
 src/wsba_hockey/pbp/parquet/nhl_pbp_20242025.parquet
 src/wsba_hockey/pbp/parquet/nhl_pbp_20242025.parquet
 src/wsba_hockey/tools/xg_model/moneypuck/shots/shots_2007-2023.parquet
+src/wsba_hockey/workspace.py
