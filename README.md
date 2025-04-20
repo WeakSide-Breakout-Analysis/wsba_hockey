@@ -63,7 +63,7 @@ skater_dict = {
 }
 pbp = wsba.nhl_scrape_season('20212022',remove=[], local = True)
 
-wsba.nhl_plot_skater_shots(pbp,skater_dict,['5v5'],legend=True)
+wsba.nhl_plot_skaters_shots(pbp,skater_dict,['5v5'],onice='for',legend=True)
 wsba.nhl_plot_games(pbp,legend=True)
 ```
 

@@ -771,13 +771,14 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
         else:
             return complete
 
-def nhl_plot_skaters_shots(pbp,skater_dict,strengths,marker_dict=event_markers,onice = 'indv',legend=False,xg='moneypuck'):
+def nhl_plot_skaters_shots(pbp,skater_dict,strengths,marker_dict=event_markers,onice = 'indv',title = True,legend=False,xg='moneypuck'):
     #Returns list of plots for specified skaters
     # param 'pbp' - pbp to plot data
     # param 'skater_dict' - skaters to plot shots for (format: {'Patrice Bergeron':['20242025','BOS']})
     # param 'strengths' - strengths to include in plotting
     # param 'marker_dict' - dict with markers to use for events
     # param 'onice' - can set which shots to include in plotting for the specified skater ('indv', 'for', 'against')
+    # param 'title' - bool including title when true
     # param 'legend' - bool which includes legend if true
     # param 'xg' - xG model to apply to pbp for plotting
 
@@ -787,7 +788,7 @@ def nhl_plot_skaters_shots(pbp,skater_dict,strengths,marker_dict=event_markers,o
     skater_plots = []
     for skater in skater_dict.keys():
         skater_info = skater_dict[skater]
-        title = f'{skater} Fenwick Shots for {skater_info[1]} in {skater_info[0][2:4]}-{skater_info[0][6:8]}'
+        title = f'{skater} Fenwick Shots for {skater_info[1]} in {skater_info[0][2:4]}-{skater_info[0][6:8]}' if title else ''
         skater_plots.append(plot_skater_shots(pbp,skater,skater_info[0],skater_info[1],strengths,title,marker_dict,onice,legend,xg))
 
     #Return: list of plotted skater shot charts
