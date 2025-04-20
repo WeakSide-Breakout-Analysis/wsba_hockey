@@ -5,7 +5,7 @@ import pandas as pd
 pd.options.mode.chained_assignment = None
 from scipy.interpolate import griddata
 from scipy.ndimage import gaussian_filter
-from tools.xg_model import *
+from .xg_model import *
 from hockey_rink import NHLRink
 from hockey_rink import CircularImage
 

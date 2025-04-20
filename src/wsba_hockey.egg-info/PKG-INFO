@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: wsba_hockey
-Version: 0.1.2
+Version: 1.0.0
 Summary: WeakSide Breakout's complete Python package of access to hockey data, primairly including the scraping of National Hockey League schedule, play-by-play, and shifts information.
 Author-email: Owen Singh <owenbksingh@gmail.com>
 Project-URL: Homepage, https://github.com/owensingh38/wsba_hockey/
@@ -44,36 +44,67 @@ wsba.nhl_scrape_season('20242025',split_shifts=False,remove=['game-end'],local=T
 
 ```python
 wsba.nhl_scrape_schedule('20242025')
-wsba.nhl_scrape_seasons_info(seasons=['20212022','20222023','20232024','20242025])
+wsba.nhl_scrape_seasons_info(seasons=['20212022','20222023','20232024','20242025'])
 wsba.nhl_scrape_standings(arg = '2024-03-20')
 ```
 
 ### NHL Rosters and Player Information
 
 ```python
-wsba.nhl_scrape_player_info(wsba.nhl_scrape_roster('20242025'))
+wsba.nhl_scrape_roster('20242025')
+wsba.nhl_scrape_team_info()
 ```
 
+### NHL Draft Rankings and Prospects
+
+```python
+wsba.nhl_scrape_draft_rankings()
+wsba.nhl_scrape_prospects('BOS')
+```
+
+
 ## DATA ANALYTICS
-### Expected Goals (WeakSide Breakout and MoneyPuck models)*
-### Goal Impacts and Shot Analysis*
-### Stat Aggregation*
-### Shot Plotting (Plots, Heatmaps, etc.)*
+### Expected Goals (WeakSide Breakout and MoneyPuck models)
+### Goal Impacts and Shot Analysis
+### Stat Aggregation
+```python
+pbp = wsba.nhl_scrape_season('20232024',remove=[], local = True)
+wsba.nhl_calculate_stats(pbp,'skater',[2],['5v5','4v4','3v3'],xg='moneypuck',shot_impact = True)
+```
+### Shot Plotting (Plots, Heatmaps, etc.)
+```python
+skater_dict = {
+    'Patrice Bergeron':['20212022','BOS']
+}
+pbp = wsba.nhl_scrape_season('20212022',remove=[], local = True)
+
+wsba.nhl_plot_skater_shots(pbp,skater_dict,['5v5'],legend=True)
+wsba.nhl_plot_games(pbp,legend=True)
+```
 
 ## REPOSITORY 
-### Past Season Play-by-Play*
+### Past Season Play-by-Play
+```python
+wsba.repo_load_pbp(seasons=['20212022','20222023','20232024','20242025'])
+```
 ### Team Information
 ```python
 wsba.repo_load_teaminfo()
-wsba.repo_load_rosters(seasons=['20212022','20222023','20232024','20242025])
+wsba.repo_load_rosters(seasons=['20212022','20222023','20232024','20242025'])
 ```
 ### Schedule
 ```python
-wsba.repo_load_schedule(seasons=['20212022','20222023','20232024','20242025])
+wsba.repo_load_schedule(seasons=['20212022','20222023','20232024','20242025'])
 ```
 
 ## ACKNOWLEDGEMENTS AND CREDITS 
 ### Huge thanks to the following:
-Harry Shomer - Creator of the hockey_scraper package, which contains select utils functions utilized in this package and otherwise inspires the creation of this package.
+Harry Shomer - Creator of the hockey_scraper package, which contains select utils functions within this package and otherwise inspires the creation of this package.
 
 Dan Morse - Creator of the hockeyR package; another important inspiration and model for developing an NHL scraper.
+
+Patrick Bacon - Creator of TopDownHockey package
+
+MoneyPuck - Source of available xG data in the package
+
+Anyone in the NHL Public Analytics community who has stuck around and supported WeakSide Breakout Analysis hockey.

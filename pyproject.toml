@@ -1,6 +1,6 @@
 [project]
 name = "wsba_hockey"
-version = "0.1.3"
+version = "1.0.0"
 authors = [
   { name="Owen Singh", email="owenbksingh@gmail.com" },
 ]

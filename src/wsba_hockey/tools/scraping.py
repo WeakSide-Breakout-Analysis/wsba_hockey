@@ -2,7 +2,7 @@ import re
 from bs4 import BeautifulSoup
 import requests as rs
 import json as json_lib
-from tools.utils.shared import *
+from .utils.shared import *
 import numpy as np
 import pandas as pd
 import warnings

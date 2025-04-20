@@ -7,5 +7,14 @@ src/wsba_hockey.egg-info/PKG-INFO
 src/wsba_hockey.egg-info/SOURCES.txt
 src/wsba_hockey.egg-info/dependency_links.txt
 src/wsba_hockey.egg-info/top_level.txt
+src/wsba_hockey/stats/calculate_viz/shot_impact.py
+src/wsba_hockey/tools/__init__.py
+src/wsba_hockey/tools/agg.py
+src/wsba_hockey/tools/plotting.py
 src/wsba_hockey/tools/scraping.py
 src/wsba_hockey/tools/xg_model.py
+src/wsba_hockey/tools/archive/old_scraping.py
+src/wsba_hockey/tools/utils/__init__.py
+src/wsba_hockey/tools/utils/config.py
+src/wsba_hockey/tools/utils/save_pages.py
+src/wsba_hockey/tools/utils/shared.py

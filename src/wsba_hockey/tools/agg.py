@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from tools.xg_model import *
+from .xg_model import *
 
 ## AGGREGATE FUNCTIONS ##
 
