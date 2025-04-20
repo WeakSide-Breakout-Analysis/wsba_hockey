@@ -337,13 +337,6 @@ def nhl_scrape_season(season,split_shifts = False, season_types = [2,3], remove 
         else:
             return pbp
 
-#errors = []
-#for season in seasons[10:12]:
-#    data = nhl_scrape_season(season,remove=[],local=True,errors=True)
-#    errors.append(data['errors'])
-#    data['pbp'].to_csv(f'pbp/csv/nhl_pbp_{season}.csv',index=False)
-#print(f'Errors: {errors}')
-
 def nhl_scrape_seasons_info(seasons = []):
     #Returns info related to NHL seasons (by default, all seasons are included)
     # param 'season' - list of seasons to include
@@ -393,9 +386,6 @@ def nhl_scrape_standings(arg = "now", season_type = 2):
         data = rs.get(api).json()['standings']
 
         return pd.json_normalize(data)
-
-#stand = [nhl_scrape_standings(season) for season in seasons]
-#pd.concat(stand).to_csv('teaminfo/nhl_standings.csv',index=False)
 
 def nhl_scrape_roster(season):
     #Given a nhl season, return rosters for all participating teams
@@ -782,14 +772,6 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
         else:
             return complete
 
-#stats = []
-#for season in seasons[6:18]:
-#    pbp = pd.read_parquet(f'pbp/parquet/nhl_pbp_{season}.parquet')
-#    stat = nhl_calculate_stats(pbp,'skater',[2],['5v5'],shot_impact=True)
-#    stat.to_csv(f'stats/skater/wsba_nhl_{season}.csv',index=False)
-#    stats.append(stat)
-#pd.concat(stats).to_csv('stats/db/wsba_nhl_skater_db.csv',index=False)
-
 def nhl_plot_skaters_shots(pbp,skater_dict,strengths,color_dict=event_colors,legend=False,xg='moneypuck'):
     #Returns list of plots for specified skaters
     # param 'pbp' - pbp to plot data
@@ -878,7 +860,3 @@ def admin_convert_to_parquet(seasons):
         load = pd.read_csv(f'pbp/csv/nhl_pbp_{season}.csv')
 
         load.to_parquet(f'pbp/parquet/nhl_pbp_{season}.parquet',index=False)
-
-#for season in seasons[6:12]:
-#    data = pd.read_csv(f"pbp/csv/nhl_pbp_{season}.csv")
-#    data.to_parquet(f'pbp/parquet/nhl_pbp_{season}.parquet',index=False)
