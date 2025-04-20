@@ -4,10 +4,10 @@ import numpy as np
 from datetime import datetime, timedelta, date
 import time
 import random
-from tools.scraping import *
-from tools.xg_model import *
-from tools.agg import *
-from tools.plotting import *
+from .tools.scraping import *
+from .tools.xg_model import *
+from .tools.agg import *
+from .tools.plotting import *
 
 ### WSBA HOCKEY ###
 ## Provided below are all integral functions in the WSBA Hockey Python package. ##
