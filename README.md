@@ -50,11 +50,11 @@ wsba.nhl_scrape_prospects('BOS')
 
 ## DATA ANALYTICS
 ### Expected Goals (WeakSide Breakout and MoneyPuck models)
-### Goal Impacts and Shot Analysis*
+### Goal Impacts and Shot Analysis
 ### Stat Aggregation
 ```python
 pbp = wsba.nhl_scrape_season('20232024',remove=[], local = True)
-wsba.nhl_calculate_stats(pbp,'20232024',[2],['5v5','4v4','3v3'],xg='moneypuck',shot_impact = True)
+wsba.nhl_calculate_stats(pbp,'skater',[2],['5v5','4v4','3v3'],xg='moneypuck',shot_impact = True)
 ```
 ### Shot Plotting (Plots, Heatmaps, etc.)
 ```python
