@@ -328,8 +328,7 @@ def nhl_scrape_season(season,split_shifts = False, season_types = [2,3], remove 
             pbp_dict.update({'errors':data['errors']})
         return pbp_dict
     else:
-        pbp = data['pbp']
-
+        pbp = data
         if errors:
             pbp_dict = {'pbp':pbp,
                         'errors':data['errors']}
@@ -772,12 +771,13 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
         else:
             return complete
 
-def nhl_plot_skaters_shots(pbp,skater_dict,strengths,color_dict=event_colors,legend=False,xg='moneypuck'):
+def nhl_plot_skaters_shots(pbp,skater_dict,strengths,marker_dict=event_markers,onice = 'indv',legend=False,xg='moneypuck'):
     #Returns list of plots for specified skaters
     # param 'pbp' - pbp to plot data
     # param 'skater_dict' - skaters to plot shots for (format: {'Patrice Bergeron':['20242025','BOS']})
     # param 'strengths' - strengths to include in plotting
-    # param 'color_dict' - dict with colors to use for events
+    # param 'marker_dict' - dict with markers to use for events
+    # param 'onice' - can set which shots to include in plotting for the specified skater ('indv', 'for', 'against')
     # param 'legend' - bool which includes legend if true
     # param 'xg' - xG model to apply to pbp for plotting
 
@@ -788,18 +788,18 @@ def nhl_plot_skaters_shots(pbp,skater_dict,strengths,color_dict=event_colors,leg
     for skater in skater_dict.keys():
         skater_info = skater_dict[skater]
         title = f'{skater} Fenwick Shots for {skater_info[1]} in {skater_info[0][2:4]}-{skater_info[0][6:8]}'
-        skater_plots.append(plot_skater_shots(pbp,skater,skater_info[0],skater_info[1],strengths,title,color_dict,legend,xg))
+        skater_plots.append(plot_skater_shots(pbp,skater,skater_info[0],skater_info[1],strengths,title,marker_dict,onice,legend,xg))
 
     #Return: list of plotted skater shot charts
     return skater_plots
 
-def nhl_plot_games(pbp,events,strengths,game_ids='all',color_dict=event_colors,legend=False,xg='moneypuck'):
+def nhl_plot_games(pbp,events,strengths,game_ids='all',marker_dict=event_markers,legend=False,xg='moneypuck'):
     #Returns list of plots for specified games
     # param 'pbp' - pbp to plot data
     # param 'events' - type of events to plot
     # param 'strengths' - strengths to include in plotting
     # param 'game_ids' - games to plot (list if not set to 'all')
-    # param 'color_dict' - dict with colors to use for events
+    # param 'marker_dict' - dict with colors to use for events
     # param 'legend' - bool which includes legend if true
     # param 'xg' - xG model to apply to pbp for plotting
 
@@ -810,7 +810,7 @@ def nhl_plot_games(pbp,events,strengths,game_ids='all',color_dict=event_colors,l
     print(f'Plotting the following games: {game_ids}...')
 
     #Iterate through games, adding plot to list
-    game_plots = [plot_game_events(pbp,game,events,strengths,color_dict,legend,xg) for game in game_ids]
+    game_plots = [plot_game_events(pbp,game,events,strengths,marker_dict,legend,xg) for game in game_ids]
 
     #Return: list of plotted game events
     return game_plots
