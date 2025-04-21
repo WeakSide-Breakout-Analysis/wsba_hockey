@@ -541,15 +541,15 @@ def nhl_shooting_impacts(agg,team=False):
         pos['RushF/60'] = (pos['RushF']/pos['TOI'])*60
         pos['RushA/60'] = (pos['RushA']/pos['TOI'])*60
         pos['Rushes FF'] = pos['RushF/60'].rank(pct=True)
-        pos['Rushes FA'] = pos['RushA/60'].rank(pct=True)
+        pos['Rushes FA'] = 1 - pos['RushA/60'].rank(pct=True)
         pos['RushFxG/60'] = (pos['RushFxG']/pos['TOI'])*60
         pos['RushAxG/60'] = (pos['RushAxG']/pos['TOI'])*60
         pos['Rushes xGF'] = pos['RushFxG/60'].rank(pct=True)
-        pos['Rushes xGA'] = pos['RushAxG/60'].rank(pct=True)
+        pos['Rushes xGA'] = 1 - pos['RushAxG/60'].rank(pct=True)
         pos['RushFG/60'] = (pos['RushFG']/pos['TOI'])*60
         pos['RushAG/60'] = (pos['RushAG']/pos['TOI'])*60
         pos['Rushes GF'] = pos['RushFG/60'].rank(pct=True)
-        pos['Rushes GA'] = pos['RushAG/60'].rank(pct=True)
+        pos['Rushes GA'] = 1 - pos['RushAG/60'].rank(pct=True)
 
         #Flip against metric percentiles
         pos['ODEF-SR'] = 1-pos['ODEF-SR']
@@ -642,7 +642,7 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
     # param 'xg' - xG model to apply to pbp for aggregation
     # param 'shot_impact' - boolean determining if the shot impact model will be applied to the dataset
 
-    print(f"Calculating statistics for all games in the provided play-by-play data...\nSeasons included: {pbp['season'].drop_duplicates().to_list()}...")
+    print(f"Calculating statistics for all games in the provided play-by-play data for {type}s...\nSeasons included: {pbp['season'].drop_duplicates().to_list()}...")
     start = time.perf_counter()
 
     #Add extra data and apply team changes
@@ -674,12 +674,23 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
     if type == 'team':
         complete = calc_team(pbp)
 
+        #WSBA
+        complete['WSBA'] = complete['Team']+complete['Season'].astype(str)
+
         #Set TOI to minute
         complete['TOI'] = complete['TOI']/60
 
         #Add per 60 stats
         for stat in per_sixty[7:13]:
             complete[f'{stat}/60'] = (complete[stat]/complete['TOI'])*60
+
+        #Rank per 60 stats
+        for stat in per_sixty[7:13]:
+            complete[f'{stat}/60 Percentile'] = complete[f'{stat}/60'].rank(pct=True)
+
+        #Flip percentiles for against stats
+        for stat in ['FA','xGA','GA']:
+            complete[f'{stat}/60 Percentile'] = 1-complete[f'{stat}/60 Percentile']
 
         end = time.perf_counter()
         length = end-start
@@ -735,6 +746,14 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
         for stat in per_sixty:
             complete[f'{stat}/60'] = (complete[stat]/complete['TOI'])*60
 
+        #Rank per 60 stats
+        for stat in per_sixty:
+            complete[f'{stat}/60 Percentile'] = complete[f'{stat}/60'].rank(pct=True)
+
+        #Flip percentiles for against stats
+        for stat in ['FA','xGA','GA']:
+            complete[f'{stat}/60 Percentile'] = 1-complete[f'{stat}/60 Percentile']
+
         #Add player age
         complete['Birthday'] = pd.to_datetime(complete['Birthday'])
         complete['season_year'] = complete['Season'].astype(str).str[4:8].astype(int)
@@ -768,7 +787,7 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
             "GF","FF","xGF","xGF/FF","GF/xGF","FshF%",
             "GA","FA","xGA","xGA/FA","GA/xGA","FshA%",
             'Rush',"Rush xG",'Rush G',"GC%","AC%","GI%","FC%","xGC%",
-        ]+[f'{stat}/60' for stat in per_sixty]+type_metrics].fillna(0).sort_values(['Player','Season','Team','ID'])
+        ]+[f'{stat}/60' for stat in per_sixty]+[f'{stat}/60 Percentile' for stat in per_sixty]+type_metrics].fillna(0).sort_values(['Player','Season','Team','ID'])
         
         print(f'...finished in {(length if length <60 else length/60):.2f} {'seconds' if length <60 else 'minutes'}.')
         #Apply shot impacts if necessary (Note: this will remove skaters with fewer than 150 minutes of TOI due to the shot impact TOI rule)

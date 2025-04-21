@@ -108,7 +108,7 @@ def wsba_xG(pbp, train = False, overwrite = False, model_path = "tools/xg_model/
             'prior_faceoff']
     
     #Prep Data
-    pbp = prep_xG_data(pbp)
+    pbp_prep = prep_xG_data(pbp)
     #Filter unwanted date:
     #Shots must occur in specified events and strength states, occur before the shootout, and have valid coordinates
     events = ['faceoff','hit','giveaway','takeaway','blocked-shot','missed-shot','shot-on-goal','goal']
@@ -127,12 +127,12 @@ def wsba_xG(pbp, train = False, overwrite = False, model_path = "tools/xg_model/
                 '6v4',
                 '6v5']
     
-    data = pbp.loc[(pbp['event_type'].isin(events))&
-                   (pbp['strength_state'].isin(strengths))&
-                   (pbp['period'] < 5)&
-                   (pbp['x_fixed'].notna())&
-                   (pbp['y_fixed'].notna())&
-                   ~((pbp['x_fixed']==0)&(pbp['y_fixed']==0)&(pbp['x_fixed'].isin(fenwick_events))&(pbp['event_distance']!=90))]
+    data = pbp_prep.loc[(pbp_prep['event_type'].isin(events))&
+                   (pbp_prep['strength_state'].isin(strengths))&
+                   (pbp_prep['period'] < 5)&
+                   (pbp_prep['x_fixed'].notna())&
+                   (pbp_prep['y_fixed'].notna())&
+                   ~((pbp_prep['x_fixed']==0)&(pbp_prep['y_fixed']==0)&(pbp_prep['x_fixed'].isin(fenwick_events))&(pbp_prep['event_distance']!=90))]
 
     #Convert to sparse
     data_sparse = sp.csr_matrix(data[[target]+continous+boolean])
@@ -199,11 +199,11 @@ def wsba_xG(pbp, train = False, overwrite = False, model_path = "tools/xg_model/
         best_all = best_all.sort_values(by="auc", ascending=False)
 
         if overwrite == True:
-            best_all.to_csv("xg_model/testing/xg_model_training_runs.csv",index=False)
+            best_all.to_csv("tools/xg_model/testing/xg_model_training_runs.csv",index=False)
         else: 
-            best_old = pd.read_csv("xg_model/testing/xg_model_training_runs.csv")
+            best_old = pd.read_csv("tools/xg_model/testing/xg_model_training_runs.csv")
             best_comb = pd.concat([best_old,best_all])
-            best_comb.to_csv("xg_model/testing/xg_model_training_runs.csv",index=False)
+            best_comb.to_csv("tools/xg_model/testing/xg_model_training_runs.csv",index=False)
 
         # Final parameters
         param_7_EV = {
@@ -250,11 +250,11 @@ def wsba_xG(pbp, train = False, overwrite = False, model_path = "tools/xg_model/
         # Clean results and sort to find the number of rounds to use and seed
         cv_final = cv_test.sort_values(by="AUC", ascending=False)
         if overwrite == True:
-            cv_final.to_csv("xg_model/testing/xg_model_cv_runs.csv",index=False)
+            cv_final.to_csv("tools/xg_model/testing/xg_model_cv_runs.csv",index=False)
         else:
-            cv_old = pd.read_csv("xg_model/testing/xg_model_cv_runs.csv")
+            cv_old = pd.read_csv("tools/xg_model/testing/xg_model_cv_runs.csv")
             cv_comb = pd.concat([cv_old,cv_final])
-            cv_comb.to_csv("xg_model/testing/xg_model_cv_runs.csv")
+            cv_comb.to_csv("tools/xg_model/testing/xg_model_cv_runs.csv")
         cv_final.loc[len(cv_final)] = cv_test.mean()
 
         # Train the final model
@@ -276,8 +276,34 @@ def wsba_xG(pbp, train = False, overwrite = False, model_path = "tools/xg_model/
         
     else:
         model = joblib.load(model_path)
-        pbp['xG'] = np.where(pbp['event_type'].isin(fenwick_events),model.predict(xgb_matrix),"")
-        return pbp
+
+        #Predict goal
+        data['xG'] = model.predict(xgb_matrix)
+        data['xG'] = np.where(data['event_type'].isin(fenwick_events),data['xG'],np.nan)
+
+        #Avoid merging errors
+        merge_col = ['game_id','period','seconds_elapsed','event_type','event_team_abbr','event_player_1_id']
+        
+        for df in [pbp,data]:
+            df = df.astype({
+              'game_id':'int',
+              'period':'int',
+              'seconds_elapsed':'int',
+              'event_type':'str',
+              'event_team_abbr':'str',
+              'event_player_1_id':'float'
+            })
+
+        #Drop previous xG if it exists
+        try: pbp = pbp.drop(columns=['xG'])
+        except KeyError:
+            ''
+
+        #Merge
+        data = data[merge_col+['xG']]
+        pbp_xg = pd.merge(pbp,data,how='left')
+
+        return pbp_xg
 
 def moneypuck_xG(pbp,repo_path = "tools/xg_model/moneypuck/shots_2007-2023.zip"):
     #Given play-by-play, return itself with xG column sourced from MoneyPuck.com

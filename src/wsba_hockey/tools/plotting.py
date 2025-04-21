@@ -14,9 +14,9 @@ event_markers = {
     'faceoff':'X',
     'hit':'P',
     'blocked-shot':'v',
-    'missed-shot':'H',
+    'missed-shot':'o',
     'shot-on-goal':'D',
-    'goal':'o',
+    'goal':'*',
     'giveaway':'1',
     'takeaway':'2',
 }
@@ -135,7 +135,7 @@ def plot_game_events(pbp,game_id,events,strengths,marker_dict=event_markers,team
 
     for event in events:
         plays = pbp.loc[pbp['event_type']==event]
-        ax.scatter(plays['x_adj'],plays['y_adj'],plays['size'],plays['color'],marker=event_markers[event],label=event,zorder=5)
+        ax.scatter(plays['x_adj'],plays['y_adj'],plays['size'],plays['color'],marker=event_markers[event],edgecolors='white',label=event,zorder=5)
 
     ax.set_title(f'{away_abbr} @ {home_abbr} - {date}')
     ax.legend(bbox_to_anchor =(0.5,-0.35), loc='lower center',ncol=1).set_visible(legend)
