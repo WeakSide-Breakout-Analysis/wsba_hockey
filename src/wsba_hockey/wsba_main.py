@@ -660,6 +660,12 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
     #Filter by season types and remove shootouts
     pbp = pbp.loc[(pbp['season_type'].isin(season_types)) & (pbp['period'] < 5)]
     
+    #Convert all columns with player ids to float in order to avoid merging errors
+    for col in get_col():
+        if "_id" in col:
+            try: pbp[col] = pbp[col].astype(float)
+            except KeyError: continue
+
     # Filter by game strength if not "all"
     if game_strength != "all":
         pbp = pbp.loc[pbp['strength_state'].isin(game_strength)]
@@ -794,7 +800,7 @@ def nhl_plot_skaters_shots(pbp,skater_dict,strengths,marker_dict=event_markers,o
     #Return: list of plotted skater shot charts
     return skater_plots
 
-def nhl_plot_games(pbp,events,strengths,game_ids='all',marker_dict=event_markers,legend=False,xg='moneypuck'):
+def nhl_plot_games(pbp,events,strengths,game_ids='all',marker_dict=event_markers,team_colors={'away':'primary','home':'primary'},legend=False,xg='moneypuck'):
     #Returns list of plots for specified games
     # param 'pbp' - pbp to plot data
     # param 'events' - type of events to plot
@@ -811,7 +817,7 @@ def nhl_plot_games(pbp,events,strengths,game_ids='all',marker_dict=event_markers
     print(f'Plotting the following games: {game_ids}...')
 
     #Iterate through games, adding plot to list
-    game_plots = [plot_game_events(pbp,game,events,strengths,marker_dict,legend,xg) for game in game_ids]
+    game_plots = [plot_game_events(pbp,game,events,strengths,marker_dict,team_colors,legend,xg) for game in game_ids]
 
     #Return: list of plotted game events
     return game_plots

@@ -1,9 +1,11 @@
 import matplotlib.pyplot as plt
-import matplotlib.image as img
+import matplotlib.image as mpimg
 import numpy as np
 import pandas as pd
 from scipy.interpolate import griddata
 from scipy.ndimage import gaussian_filter
+import urllib.request
+import PIL
 from .xg_model import *
 from hockey_rink import NHLRink
 from hockey_rink import CircularImage
@@ -109,7 +111,7 @@ def plot_skater_shots(pbp, player, season, team, strengths, title = None, marker
     
     return fig
     
-def plot_game_events(pbp,game_id,events,strengths,marker_dict=event_markers,legend=False,xg='moneypuck'):
+def plot_game_events(pbp,game_id,events,strengths,marker_dict=event_markers,team_colors={'away':'secondary','home':'primary'},legend=False,xg='moneypuck'):
     pbp = prep_plot_data(pbp,events,strengths,marker_dict,xg)
     pbp = pbp.loc[pbp['game_id'].astype(str)==game_id]
 
@@ -119,10 +121,14 @@ def plot_game_events(pbp,game_id,events,strengths,marker_dict=event_markers,lege
     season = f'{game_id[0:4]}{int(game_id[0:4])+1}'
 
     team_data = pd.read_csv('teaminfo/nhl_teaminfo.csv')
-    away_color = list(team_data.loc[team_data['WSBA']==f'{away_abbr}{season}','Primary Color'])[0]
-    home_color = list(team_data.loc[team_data['WSBA']==f'{home_abbr}{season}','Primary Color'])[0]
-    
-    pbp['color'] = np.where(pbp['event_team_abbr']==away_abbr,away_color,home_color)
+    team_info ={
+        'away_color':'#000000' if list(team_data.loc[team_data['WSBA']==f'{away_abbr}{season}','Secondary Color'])[0]=='#FFFFFF' else list(team_data.loc[team_data['WSBA']==f'{away_abbr}{season}',f'{team_colors['away'].capitalize()} Color'])[0],
+        'home_color': list(team_data.loc[team_data['WSBA']==f'{home_abbr}{season}',f'{team_colors['home'].capitalize()} Color'])[0],
+        'away_logo': f'tools/logos/png/{away_abbr}{season}.png',
+        'home_logo': f'tools/logos/png/{home_abbr}{season}.png',
+    }
+
+    pbp['color'] = np.where(pbp['event_team_abbr']==away_abbr,team_info['away_color'],team_info['home_color'])
 
     fig, ax = plt.subplots()
     wsba_rink(display_range='full')

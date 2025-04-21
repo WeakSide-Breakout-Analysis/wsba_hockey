@@ -38,6 +38,7 @@ def prep_xG_data(pbp):
     data.sort_values(['season','game_id','period','seconds_elapsed','event_num'],inplace=True)
     data['score_state'] = np.where(data['away_team_abbr']==data['event_team_abbr'],data['away_score']-data['home_score'],data['home_score']-data['away_score'])
     data['strength_diff'] = np.where(data['away_team_abbr']==data['event_team_abbr'],data['away_skaters']-data['home_skaters'],data['home_skaters']-data['away_skaters'])
+    data['strength_state_venue'] = data['away_skaters'].astype(str)+'v'+data['home_skaters'].astype(str)
     data['fenwick_state'] = np.where(data['away_team_abbr']==data['event_team_abbr'],data['away_fenwick']-data['home_fenwick'],data['home_fenwick']-data['away_fenwick'])
     data['distance_from_last'] = np.sqrt((data['x_fixed'] - data['x_fixed_last'])**2 + (data['y_fixed'] - data['y_fixed_last'])**2)
 
