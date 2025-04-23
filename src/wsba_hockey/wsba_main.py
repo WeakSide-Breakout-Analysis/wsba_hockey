@@ -755,6 +755,9 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
         #Set TOI to minute
         complete['TOI'] = complete['TOI']/60
 
+        #Average shift length
+        complete['TOI/Shift'] = complete['TOI']/complete['Shifts']
+
         #Add player age
         complete['Birthday'] = pd.to_datetime(complete['Birthday'])
         complete['season_year'] = complete['Season'].astype(str).str[4:8].astype(int)
@@ -797,7 +800,7 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
             'Rush',"Rush xG",'Rush G',"GC%","AC%","GI%","FC%","xGC%",
             'F','FW','FL','F%',
             'Penl','Draw','PIM','PENL%',
-            'Shifts','AZS','OTF','OTF%',
+            'Shifts','TOI/Shift','AZS','OTF','OTF%',
             'OZF','NZF','DZF',
             'OZF%','NZF%','DZF%',
         ]+[f'{stat}/60' for stat in per_sixty]+type_metrics].fillna(0).sort_values(['Player','Season','Team','ID'])
