@@ -59,7 +59,7 @@ convert_team_abbr = {'L.A':'LAK',
                      'T.B':'TBL',
                      'PHX':'ARI'}
 
-per_sixty = ['Fi','xGi','Gi','A1','A2','P1','P','FF','FA','xGF','xGA','GF','GA']
+per_sixty = ['Fi','xGi','Gi','A1','A2','P1','P','FF','FA','xGF','xGA','GF','GA','Give','Take']
 
 #Some games in the API are specifically known to cause errors in scraping.
 #This list is updated as frequently as necessary
@@ -266,6 +266,7 @@ def nhl_scrape_schedule(season,start = "09-01", end = "08-01"):
         for i in range(0,len(gameWeek)):
             game.append(pd.DataFrame({
                 "id": [gameWeek[i]['id']],
+                "date":[get['gameWeek'][0]['date']],
                 "season": [gameWeek[i]['season']],
                 "season_type":[gameWeek[i]['gameType']],
                 "away_team_abbr":[gameWeek[i]['awayTeam']['abbrev']],
@@ -604,6 +605,14 @@ def nhl_shooting_impacts(agg,team=False):
             pos['Rushes xG'] = pos['RushxG/60'].rank(pct=True)
             pos['Rushes FF'] = pos['Rush/60'].rank(pct=True)
 
+            #Rank per 60 stats
+            for stat in per_sixty:
+                pos[f'{stat}/60 Percentile'] = pos[f'{stat}/60'].rank(pct=True)
+
+            #Flip percentiles for against stats
+            for stat in ['FA','xGA','GA','Give']:
+                pos[f'{stat}/60 Percentile'] = 1-pos[f'{stat}/60 Percentile']
+
         #Add positions back together
         complete = pd.concat([forwards,defensemen])
 
@@ -631,7 +640,7 @@ def nhl_shooting_impacts(agg,team=False):
         #Return: skater stats with shooting impacts
         return complete.drop(columns=['fsh','fenwick','xg_fen','xg','g','finishing']).sort_values(['Player','Season','Team','ID'])
 
-def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters/nhl_rosters.csv",xg="moneypuck",shot_impact=False):
+def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters/nhl_rosters.csv",xg='wsba',shot_impact=False):
     #Given play-by-play, seasonal information, game_strength, rosters, and xG model, return aggregated stats
     # param 'pbp' - play-by-play dataframe
     # param 'type' - type of stats to calculate ('skater', 'goaltender', or 'team')
@@ -715,6 +724,10 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
         complete['GI%'] = (complete['Gi']+complete['A1']+complete['A2'])/complete['GF']
         complete['FC%'] = complete['Fi']/complete['FF']
         complete['xGC%'] = complete['xGi']/complete['xGF']
+        complete['GF%'] = complete['GF']/(complete['GF']+complete['GA'])
+        complete['xGF%'] = complete['xGF']/(complete['xGF']+complete['xGA'])
+        complete['FF%'] = complete['FF']/(complete['FF']+complete['FA'])
+        complete['CF%'] = complete['CF']/(complete['CF']+complete['CA'])
 
         #Remove entries with no ID listed
         complete = complete.loc[complete['ID'].notna()]
@@ -742,18 +755,6 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
         #Set TOI to minute
         complete['TOI'] = complete['TOI']/60
 
-        #Add per 60 stats
-        for stat in per_sixty:
-            complete[f'{stat}/60'] = (complete[stat]/complete['TOI'])*60
-
-        #Rank per 60 stats
-        for stat in per_sixty:
-            complete[f'{stat}/60 Percentile'] = complete[f'{stat}/60'].rank(pct=True)
-
-        #Flip percentiles for against stats
-        for stat in ['FA','xGA','GA']:
-            complete[f'{stat}/60 Percentile'] = 1-complete[f'{stat}/60 Percentile']
-
         #Add player age
         complete['Birthday'] = pd.to_datetime(complete['Birthday'])
         complete['season_year'] = complete['Season'].astype(str).str[4:8].astype(int)
@@ -769,6 +770,10 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
         #Add WSBA ID
         complete['WSBA'] = complete['Player']+complete['Season'].astype(str)+complete['Team']
 
+        #Add per 60 stats
+        for stat in per_sixty:
+            complete[f'{stat}/60'] = (complete[stat]/complete['TOI'])*60
+
         #Shot Type Metrics
         type_metrics = []
         for type in shot_types:
@@ -783,11 +788,19 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
             'Birthday','Age','Nationality',
             'GP','TOI',
             "Gi","A1","A2",'P1','P',
+            'Give','Take','PM%',
             "Fi","xGi",'xGi/Fi',"Gi/xGi","Fshi%",
             "GF","FF","xGF","xGF/FF","GF/xGF","FshF%",
             "GA","FA","xGA","xGA/FA","GA/xGA","FshA%",
+            'Ci','CF','CA','CF%',
+            'FF%','xGF%','GF%',
             'Rush',"Rush xG",'Rush G',"GC%","AC%","GI%","FC%","xGC%",
-        ]+[f'{stat}/60' for stat in per_sixty]+[f'{stat}/60 Percentile' for stat in per_sixty]+type_metrics].fillna(0).sort_values(['Player','Season','Team','ID'])
+            'F','FW','FL','F%',
+            'Penl','Draw','PIM','PENL%',
+            'Shifts','AZS','OTF','OTF%',
+            'OZF','NZF','DZF',
+            'OZF%','NZF%','DZF%',
+        ]+[f'{stat}/60' for stat in per_sixty]+type_metrics].fillna(0).sort_values(['Player','Season','Team','ID'])
         
         print(f'...finished in {(length if length <60 else length/60):.2f} {'seconds' if length <60 else 'minutes'}.')
         #Apply shot impacts if necessary (Note: this will remove skaters with fewer than 150 minutes of TOI due to the shot impact TOI rule)
@@ -796,8 +809,8 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
         else:
             return complete
 
-def nhl_plot_skaters_shots(pbp,skater_dict,strengths,marker_dict=event_markers,onice = 'indv',title = True,legend=False,xg='moneypuck'):
-    #Returns list of plots for specified skaters
+def nhl_plot_skaters_shots(pbp,skater_dict,strengths,marker_dict=event_markers,onice = 'indv',title = True,legend=False,xg='wsba'):
+    #Returns dict of plots for specified skaters
     # param 'pbp' - pbp to plot data
     # param 'skater_dict' - skaters to plot shots for (format: {'Patrice Bergeron':['20242025','BOS']})
     # param 'strengths' - strengths to include in plotting
@@ -809,18 +822,19 @@ def nhl_plot_skaters_shots(pbp,skater_dict,strengths,marker_dict=event_markers,o
 
     print(f'Plotting the following skater shots: {skater_dict}...')
 
-    #Iterate through games, adding plot to list
-    skater_plots = []
+    #Iterate through skaters, adding plots to dict
+    skater_plots = {}
     for skater in skater_dict.keys():
         skater_info = skater_dict[skater]
         title = f'{skater} Fenwick Shots for {skater_info[1]} in {skater_info[0][2:4]}-{skater_info[0][6:8]}' if title else ''
-        skater_plots.append(plot_skater_shots(pbp,skater,skater_info[0],skater_info[1],strengths,title,marker_dict,onice,legend,xg))
+        #Key is formatted as PLAYERSEASONTEAM (i.e. PATRICE BERGERON20212022BOS)
+        skater_plots.update({f'{skater}{skater_info[0]}{skater_info[1]}':[plot_skater_shots(pbp,skater,skater_info[0],skater_info[1],strengths,title,marker_dict,onice,legend,xg)]})
 
     #Return: list of plotted skater shot charts
     return skater_plots
 
-def nhl_plot_games(pbp,events,strengths,game_ids='all',marker_dict=event_markers,team_colors={'away':'primary','home':'primary'},legend=False,xg='moneypuck'):
-    #Returns list of plots for specified games
+def nhl_plot_games(pbp,events,strengths,game_ids='all',marker_dict=event_markers,team_colors={'away':'primary','home':'primary'},legend=False,xg='wsba'):
+    #Returns dict of plots for specified games
     # param 'pbp' - pbp to plot data
     # param 'events' - type of events to plot
     # param 'strengths' - strengths to include in plotting
@@ -835,8 +849,10 @@ def nhl_plot_games(pbp,events,strengths,game_ids='all',marker_dict=event_markers
 
     print(f'Plotting the following games: {game_ids}...')
 
-    #Iterate through games, adding plot to list
-    game_plots = [plot_game_events(pbp,game,events,strengths,marker_dict,team_colors,legend,xg) for game in game_ids]
+    game_plots = {}
+    #Iterate through games, adding plot to dict
+    for game in game_ids:
+        game_plots.update({game:[plot_game_events(pbp,game,events,strengths,marker_dict,team_colors,legend,xg)]})
 
     #Return: list of plotted game events
     return game_plots
