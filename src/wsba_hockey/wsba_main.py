@@ -59,7 +59,7 @@ convert_team_abbr = {'L.A':'LAK',
                      'T.B':'TBL',
                      'PHX':'ARI'}
 
-per_sixty = ['Fi','xGi','Gi','A1','A2','P1','P','FF','FA','xGF','xGA','GF','GA','Give','Take']
+per_sixty = ['Fi','xGi','Gi','A1','A2','P1','P','FF','FA','xGF','xGA','GF','GA','CF','CA','Give','Take','Penl','Draw','OZF','NZF','DZF']
 
 #Some games in the API are specifically known to cause errors in scraping.
 #This list is updated as frequently as necessary
@@ -596,14 +596,14 @@ def nhl_shooting_impacts(agg,team=False):
                 pos[f'{group[0]}-FNI'] = pos['g'] - pos.apply(lambda x: goal_comp(x.fenwick,x.xg_fen,avg_xg,avg_g,avg_fsh),axis=1)
 
             #Calculate On-Ice Involvement Percentiles
-            pos['Fenwick'] = pos['FC%'].rank(pct=True)
-            pos['xG'] = pos['xGC%'].rank(pct=True)
-            pos['Goal Factor'] = pos['GI%'].rank(pct=True)
-            pos['Goal Scoring'] = pos['GC%'].rank(pct=True)
+            pos['Fi/F'] = pos['FC%'].rank(pct=True)
+            pos['xGi/F'] = pos['xGC%'].rank(pct=True)
+            pos['Pi/F'] = pos['GI%'].rank(pct=True)
+            pos['Gi/F'] = pos['GC%'].rank(pct=True)
             pos['Rush/60'] = (pos['Rush']/pos['TOI'])*60
             pos['RushxG/60'] = (pos['Rush xG']/pos['TOI'])*60
-            pos['Rushes xG'] = pos['RushxG/60'].rank(pct=True)
-            pos['Rushes FF'] = pos['Rush/60'].rank(pct=True)
+            pos['Rushes xGi'] = pos['RushxG/60'].rank(pct=True)
+            pos['Rushes Fi'] = pos['Rush/60'].rank(pct=True)
 
             #Rank per 60 stats
             for stat in per_sixty:
@@ -690,20 +690,26 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
         complete['TOI'] = complete['TOI']/60
 
         #Add per 60 stats
-        for stat in per_sixty[7:13]:
+        for stat in per_sixty[7:15]:
             complete[f'{stat}/60'] = (complete[stat]/complete['TOI'])*60
 
         #Rank per 60 stats
-        for stat in per_sixty[7:13]:
+        for stat in per_sixty[7:15]:
             complete[f'{stat}/60 Percentile'] = complete[f'{stat}/60'].rank(pct=True)
 
         #Flip percentiles for against stats
         for stat in ['FA','xGA','GA']:
             complete[f'{stat}/60 Percentile'] = 1-complete[f'{stat}/60 Percentile']
+            
+        complete['GF%'] = complete['GF']/(complete['GF']+complete['GA'])
+        complete['xGF%'] = complete['xGF']/(complete['xGF']+complete['xGA'])
+        complete['FF%'] = complete['FF']/(complete['FF']+complete['FA'])
+        complete['CF%'] = complete['CF']/(complete['CF']+complete['CA'])
 
         end = time.perf_counter()
         length = end-start
         print(f'...finished in {(length if length <60 else length/60):.2f} {'seconds' if length <60 else 'minutes'}.')
+
         #Apply shot impacts if necessary (Note: this will remove skaters with fewer than 150 minutes of TOI due to the shot impact TOI rule)
         if shot_impact:
             return nhl_shooting_impacts(complete,True)
