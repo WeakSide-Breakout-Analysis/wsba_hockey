@@ -59,7 +59,7 @@ convert_team_abbr = {'L.A':'LAK',
                      'T.B':'TBL',
                      'PHX':'ARI'}
 
-per_sixty = ['Fi','xGi','Gi','A1','A2','P1','P','FF','FA','xGF','xGA','GF','GA','CF','CA','Give','Take','Penl','Draw','OZF','NZF','DZF']
+per_sixty = ['Fi','xGi','Gi','A1','A2','P1','P','OZF','NZF','DZF','FF','FA','xGF','xGA','GF','GA','CF','CA','HF','HA','Give','Take','Penl','Penl2','Penl5','Draw']
 
 #Some games in the API are specifically known to cause errors in scraping.
 #This list is updated as frequently as necessary
@@ -538,6 +538,14 @@ def nhl_shooting_impacts(agg,team=False):
                 pos[f'{group[0]}-SQI'] = pos['g'] - pos.apply(lambda x: goal_comp(x.fenwick,avg_xg_fen,x.xg,x.g,avg_fsh),axis=1)
                 pos[f'{group[0]}-FNI'] = pos['g'] - pos.apply(lambda x: goal_comp(x.fenwick,x.xg_fen,avg_xg,avg_g,avg_fsh),axis=1)
        
+       #Rank per 60 stats
+        for stat in per_sixty[10:len(per_sixty)]:
+            pos[f'{stat}/60 Percentile'] = pos[f'{stat}/60'].rank(pct=True)
+
+        #Flip percentiles for against stats
+        for stat in ['FA','xGA','GA','CA','HA','Give','Penl','Penl2','Penl5']:
+            pos[f'{stat}/60 Percentile'] = 1-pos[f'{stat}/60 Percentile']
+
         #Add extra metrics
         pos['RushF/60'] = (pos['RushF']/pos['TOI'])*60
         pos['RushA/60'] = (pos['RushA']/pos['TOI'])*60
@@ -600,17 +608,17 @@ def nhl_shooting_impacts(agg,team=False):
             pos['xGi/F'] = pos['xGC%'].rank(pct=True)
             pos['Pi/F'] = pos['GI%'].rank(pct=True)
             pos['Gi/F'] = pos['GC%'].rank(pct=True)
-            pos['Rush/60'] = (pos['Rush']/pos['TOI'])*60
-            pos['RushxG/60'] = (pos['Rush xG']/pos['TOI'])*60
-            pos['Rushes xGi'] = pos['RushxG/60'].rank(pct=True)
-            pos['Rushes Fi'] = pos['Rush/60'].rank(pct=True)
+            pos['RushFi/60'] = (pos['Rush']/pos['TOI'])*60
+            pos['RushxGi/60'] = (pos['Rush xG']/pos['TOI'])*60
+            pos['Rushes xGi'] = pos['RushxGi/60'].rank(pct=True)
+            pos['Rushes Fi'] = pos['RushFi/60'].rank(pct=True)
 
             #Rank per 60 stats
             for stat in per_sixty:
                 pos[f'{stat}/60 Percentile'] = pos[f'{stat}/60'].rank(pct=True)
 
             #Flip percentiles for against stats
-            for stat in ['FA','xGA','GA','Give']:
+            for stat in ['FA','xGA','GA','CA','HA','Give','Penl','Penl2','Penl5']:
                 pos[f'{stat}/60 Percentile'] = 1-pos[f'{stat}/60 Percentile']
 
         #Add positions back together
@@ -690,16 +698,8 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
         complete['TOI'] = complete['TOI']/60
 
         #Add per 60 stats
-        for stat in per_sixty[7:15]:
+        for stat in per_sixty[10:len(per_sixty)]:
             complete[f'{stat}/60'] = (complete[stat]/complete['TOI'])*60
-
-        #Rank per 60 stats
-        for stat in per_sixty[7:15]:
-            complete[f'{stat}/60 Percentile'] = complete[f'{stat}/60'].rank(pct=True)
-
-        #Flip percentiles for against stats
-        for stat in ['FA','xGA','GA']:
-            complete[f'{stat}/60 Percentile'] = 1-complete[f'{stat}/60 Percentile']
             
         complete['GF%'] = complete['GF']/(complete['GF']+complete['GA'])
         complete['xGF%'] = complete['xGF']/(complete['xGF']+complete['xGA'])
@@ -710,7 +710,7 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
         length = end-start
         print(f'...finished in {(length if length <60 else length/60):.2f} {'seconds' if length <60 else 'minutes'}.')
 
-        #Apply shot impacts if necessary (Note: this will remove skaters with fewer than 150 minutes of TOI due to the shot impact TOI rule)
+        #Apply shot impacts if necessary
         if shot_impact:
             return nhl_shooting_impacts(complete,True)
         else:
@@ -797,7 +797,7 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
             'Birthday','Age','Nationality',
             'GP','TOI',
             "Gi","A1","A2",'P1','P',
-            'Give','Take','PM%',
+            'Give','Take','PM%','HF','HA','HF%',
             "Fi","xGi",'xGi/Fi',"Gi/xGi","Fshi%",
             "GF","FF","xGF","xGF/FF","GF/xGF","FshF%",
             "GA","FA","xGA","xGA/FA","GA/xGA","FshA%",
@@ -805,7 +805,8 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
             'FF%','xGF%','GF%',
             'Rush',"Rush xG",'Rush G',"GC%","AC%","GI%","FC%","xGC%",
             'F','FW','FL','F%',
-            'Penl','Draw','PIM','PENL%',
+            'Penl','Penl2','Penl5',
+            'Draw','PIM','PENL%',
             'Shifts','TOI/Shift','AZS','OTF','OTF%',
             'OZF','NZF','DZF',
             'OZF%','NZF%','DZF%',
