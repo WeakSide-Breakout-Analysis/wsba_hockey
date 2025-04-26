@@ -293,9 +293,17 @@ def nhl_scrape_season(season,split_shifts = False, season_types = [2,3], remove 
     # param 'errors' - boolean returning game ids which did not scrape if true
 
     #Determine whether to use schedule data in repository or to scrape
-    if local == True:
+    if local:
         load = pd.read_csv(local_path)
-        load = load.loc[(load['season'].astype(str)==season)&(load['season_type'].isin(season_types))]
+        load['date'] = pd.to_datetime(load['date'])
+        
+        start = f'{(season[0:4] if int(start[0:2])>=9 else season[4:8])}-{int(start[0:2])}-{int(start[3:5])}'
+        end =  f'{(season[0:4] if int(end[0:2])>=9 else season[4:8])}-{int(end[0:2])}-{int(end[3:5])}'
+        
+        load = load.loc[(load['season'].astype(str)==season)&
+                        (load['season_type'].isin(season_types))&
+                        (load['date']>=start)&(load['date']<=end)]
+        
         game_ids = list(load['id'].astype(str))
     else:
         load = nhl_scrape_schedule(season,start,end)
@@ -311,7 +319,7 @@ def nhl_scrape_season(season,split_shifts = False, season_types = [2,3], remove 
     start = time.perf_counter()
 
     #Perform scrape
-    if split_shifts == True:
+    if split_shifts:
         data = nhl_scrape_game(game_ids,split_shifts=True,remove=remove,verbose=verbose,errors=errors)
     else:
         data = nhl_scrape_game(game_ids,remove=remove,verbose=verbose,errors=errors)
@@ -321,21 +329,7 @@ def nhl_scrape_season(season,split_shifts = False, season_types = [2,3], remove 
     
     print(f'Finished season scrape in {(secs/60)/60:.2f} hours.')
     #Return: Complete pbp and shifts data for specified season as well as dataframe of game_ids which failed to return data
-    if split_shifts == True:
-        pbp_dict = {'pbp':data['pbp'],
-            'shifts':data['shifts']}
-        
-        if errors:
-            pbp_dict.update({'errors':data['errors']})
-        return pbp_dict
-    else:
-        pbp = data
-        if errors:
-            pbp_dict = {'pbp':pbp,
-                        'errors':data['errors']}
-            return pbp_dict
-        else:
-            return pbp
+    return data
 
 def nhl_scrape_seasons_info(seasons = []):
     #Returns info related to NHL seasons (by default, all seasons are included)
