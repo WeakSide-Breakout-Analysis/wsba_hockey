@@ -1,13 +1,12 @@
 import requests as rs
 import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta, date
 import time
 import random
-from .tools.scraping import *
-from .tools.xg_model import *
-from .tools.agg import *
-from .tools.plotting import *
+from datetime import datetime, timedelta, date
+from tools.scraping import *
+from tools.xg_model import *
+from tools.agg import *
+from tools.plotting import *
 
 ### WSBA HOCKEY ###
 ## Provided below are all integral functions in the WSBA Hockey Python package. ##
@@ -59,7 +58,7 @@ convert_team_abbr = {'L.A':'LAK',
                      'T.B':'TBL',
                      'PHX':'ARI'}
 
-per_sixty = ['Fi','xGi','Gi','A1','A2','P1','P','OZF','NZF','DZF','FF','FA','xGF','xGA','GF','GA','CF','CA','HF','HA','Give','Take','Penl','Penl2','Penl5','Draw']
+per_sixty = ['Fi','xGi','Gi','A1','A2','P1','P','OZF','NZF','DZF','FF','FA','xGF','xGA','GF','GA','CF','CA','HF','HA','Give','Take','Penl','Penl2','Penl5','Draw','Block']
 
 #Some games in the API are specifically known to cause errors in scraping.
 #This list is updated as frequently as necessary
@@ -73,13 +72,10 @@ known_probs ={
     '2009020658':'Missing shifts data for game between New York Islanders and Dallas.',
     '2009020885':'Missing shifts data for game between Sharks and Blue Jackets.',
     '2010020124':'Game between Capitals and Hurricanes is sporadically missing player on-ice data',
+    '2012020018':'HTML events contain mislabeled events.',
     '2013020971':'On March 10th, 2014, Stars forward Rich Peverley suffered from a cardiac episode midgame and as a result, the remainder of the game was postponed.  \nThe game resumed on April 9th, and the only goal scorer in the game, Blue Jackets forward Nathan Horton, did not appear in the resumed game due to injury.  Interestingly, Horton would never play in the NHL again.',
     '2018021133':'Game between Lightning and Capitals has incorrectly labeled event teams (i.e. WSH TAKEAWAY - #71 CIRELLI (Cirelli is a Tampa Bay skater in this game)).',
     '2019020876':'Due to the frightening collapse of Blues defensemen Jay Bouwmeester, a game on February 2nd, 2020 between the Ducks and Blues was postponed.  \nWhen the game resumed, Ducks defensemen Hampus Lindholm, who assisted on a goal in the inital game, did not play in the resumed match.'
-}
-
-name_change = {
-    "":"",
 }
 
 shot_types = ['wrist','deflected','tip-in','slap','backhand','snap','wrap-around','poke','bat','cradle','between-legs']
@@ -108,13 +104,14 @@ standings_end = {
 }
 
 ## SCRAPE FUNCTIONS ##
-def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','period-end','challenge','stoppage'],verbose = False, errors = False):
+def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','period-end','challenge','stoppage','shootout-complete','game-end'],verbose = False, sources = False, errors = False):
     #Given a set of game_ids (NHL API), return complete play-by-play information as requested
     # param 'game_ids' - NHL game ids (or list formatted as ['random', num_of_games, start_year, end_year])
     # param 'split_shifts' - boolean which splits pbp and shift events if true
     # param 'remove' - list of events to remove from final dataframe
     # param 'xg' - xG model to apply to pbp for aggregation
     # param 'verbose' - boolean which adds additional event info if true
+    # param 'sources - boolean scraping the html and json sources to a master directory if true 
     # param 'errors' - boolean returning game ids which did not scrape if true
 
     pbps = []
@@ -154,6 +151,7 @@ def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','per
     #Scrape each game
     #Track Errors
     error_ids = []
+    prog = 0
     for game_id in game_ids:
         print("Scraping data from game " + str(game_id) + "...",end="")
         start = time.perf_counter()
@@ -161,15 +159,25 @@ def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','per
         try:
             #Retrieve data
             info = get_game_info(game_id)
-            data = combine_data(info)
+            data = combine_data(info, sources)
                 
             #Append data to list
             pbps.append(data)
 
             end = time.perf_counter()
             secs = end - start
-            print(f" finished in {secs:.2f} seconds.")
+            prog += 1
+            
+            #Export if sources is true
+            if sources:
+                dirs = f'sources/{info['season']}/'
 
+                if not os.path.exists(dirs):
+                    os.makedirs(dirs)
+
+                data.to_csv(f'{dirs}{info['game_id']}.csv',index=False)
+
+            print(f" finished in {secs:.2f} seconds. {prog}/{len(game_ids)} ({(prog/len(game_ids))*100:.2f}%)")
         except:
             #Games such as the all-star game and pre-season games will incur this error
             #Other games have known problems
@@ -180,7 +188,7 @@ def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','per
             
             #Track error
             error_ids.append(game_id)
-     
+ 
     #Add all pbps together
     if len(pbps) == 0:
         print("\rNo data returned.")
@@ -280,7 +288,7 @@ def nhl_scrape_schedule(season,start = "09-01", end = "08-01"):
     #Return: specificed schedule data
     return df
 
-def nhl_scrape_season(season,split_shifts = False, season_types = [2,3], remove = ['period-start','period-end','game-end','challenge','stoppage'], start = "09-01", end = "08-01", local=False, local_path = "schedule/schedule.csv", verbose = False, errors = False):
+def nhl_scrape_season(season,split_shifts = False, season_types = [2,3], remove = ['period-start','period-end','game-end','challenge','stoppage'], start = "09-01", end = "08-01", local=False, local_path = "schedule/schedule.csv", verbose = False, sources = False, errors = False):
     #Given season, scrape all play-by-play occuring within the season
     # param 'season' - NHL season to scrape
     # param 'split_shifts' - boolean which splits pbp and shift events if true
@@ -290,6 +298,7 @@ def nhl_scrape_season(season,split_shifts = False, season_types = [2,3], remove 
     # param 'local' - boolean indicating whether to use local file to scrape game_ids
     # param 'local_path' - path of local file
     # param 'verbose' - boolean which adds additional event info if true
+    # param 'sources - boolean scraping the html and json sources to a master directory if true 
     # param 'errors' - boolean returning game ids which did not scrape if true
 
     #Determine whether to use schedule data in repository or to scrape
@@ -320,9 +329,9 @@ def nhl_scrape_season(season,split_shifts = False, season_types = [2,3], remove 
 
     #Perform scrape
     if split_shifts:
-        data = nhl_scrape_game(game_ids,split_shifts=True,remove=remove,verbose=verbose,errors=errors)
+        data = nhl_scrape_game(game_ids,split_shifts=True,remove=remove,verbose=verbose,sources=sources,errors=errors)
     else:
-        data = nhl_scrape_game(game_ids,remove=remove,verbose=verbose,errors=errors)
+        data = nhl_scrape_game(game_ids,remove=remove,verbose=verbose,sources=sources,errors=errors)
     
     end = time.perf_counter()
     secs = end - start
@@ -444,17 +453,24 @@ def nhl_scrape_team_info(country = False):
 
     return data.sort_values(by=(['country3Code','countryCode','iocCode','countryName'] if country else ['fullName','triCode','id']))
 
-def nhl_scrape_player_data(player_id):
+def nhl_scrape_player_data(player_ids):
     #Given player id, return player information
-    api = f'https://api-web.nhle.com/v1/player/{player_id}/landing'
+    infos = []
+    for player_id in player_ids:
+        player_id = int(player_id)
+        api = f'https://api-web.nhle.com/v1/player/{player_id}/landing'
 
-    data = pd.json_normalize(rs.get(api).json())
+        data = pd.json_normalize(rs.get(api).json())
 
-    #Add name column
-    data['fullName'] = (data['firstName.default'] + " " + data['lastName.default']).str.upper()
+        #Add name column
+        data['fullName'] = (data['firstName.default'] + " " + data['lastName.default']).str.upper()
 
+        #Append
+        infos.append(data)
+
+    df = pd.concat(infos)
     #Return: player data
-    return data
+    return df
 
 def nhl_scrape_draft_rankings(arg = 'now', category = ''):
     #Given url argument for timeframe and prospect category, return draft rankings
@@ -473,12 +489,12 @@ def nhl_scrape_draft_rankings(arg = 'now', category = ''):
     #Return: prospect rankings
     return data
 
-def nhl_shooting_impacts(agg,team=False):
+def nhl_shooting_impacts(agg,type):
     #Given stats table generated from the nhl_calculate_stats function, return table with shot impacts
     #Only 5v5 is supported as of now
 
     #param 'agg' - stats table
-    #param 'team' - boolean determining if team stats are calculated instead of skater stats
+    #param 'type' - type of stats to calculate ('skater', 'goalie', or 'team')
 
     #COMPOSITE IMPACT EVALUATIONS:
 
@@ -504,7 +520,7 @@ def nhl_shooting_impacts(agg,team=False):
 
         return rate+qual+fini
 
-    if team:
+    if type == 'goalie':
         pos = agg
         for group in [('OOFF','F'),('ODEF','A')]:
             #Have to set this columns for compatibility with df.apply
@@ -531,43 +547,172 @@ def nhl_shooting_impacts(agg,team=False):
                 pos[f'{group[0]}-SRI'] = pos['g'] - pos.apply(lambda x: goal_comp(avg_fen,x.xg_fen,x.xg,x.g,avg_fsh),axis=1)
                 pos[f'{group[0]}-SQI'] = pos['g'] - pos.apply(lambda x: goal_comp(x.fenwick,avg_xg_fen,x.xg,x.g,avg_fsh),axis=1)
                 pos[f'{group[0]}-FNI'] = pos['g'] - pos.apply(lambda x: goal_comp(x.fenwick,x.xg_fen,avg_xg,avg_g,avg_fsh),axis=1)
+
+                #Convert impacts to totals
+                #Calculate shot rate, shot quality, and finishing impacts
+                pos[f'{group[0]}-SRI-T'] = (pos[f'{group[0]}-SRI']/60)*pos['TOI']
+                pos[f'{group[0]}-SQI-T'] = (pos[f'{group[0]}-SQI']/60)*pos['TOI']
+                pos[f'{group[0]}-FNI-T'] = (pos[f'{group[0]}-FNI']/60)*pos['TOI']
        
        #Rank per 60 stats
-        for stat in per_sixty[10:len(per_sixty)]:
-            pos[f'{stat}/60 Percentile'] = pos[f'{stat}/60'].rank(pct=True)
+        for stat in ['FF','FA','xGF','xGA','GF','GA','CF','CA','GSAx']:
+            pos[f'{stat}/60-P'] = pos[f'{stat}/60'].rank(pct=True)
 
         #Flip percentiles for against stats
-        for stat in ['FA','xGA','GA','CA','HA','Give','Penl','Penl2','Penl5']:
-            pos[f'{stat}/60 Percentile'] = 1-pos[f'{stat}/60 Percentile']
+        for stat in ['FA','xGA','GA','CA']:
+            pos[f'{stat}/60-P'] = 1-pos[f'{stat}/60-P']
 
         #Add extra metrics
         pos['RushF/60'] = (pos['RushF']/pos['TOI'])*60
         pos['RushA/60'] = (pos['RushA']/pos['TOI'])*60
-        pos['Rushes FF'] = pos['RushF/60'].rank(pct=True)
-        pos['Rushes FA'] = 1 - pos['RushA/60'].rank(pct=True)
+        pos['RushesFF'] = pos['RushF/60'].rank(pct=True)
+        pos['RushesFA'] = 1 - pos['RushA/60'].rank(pct=True)
         pos['RushFxG/60'] = (pos['RushFxG']/pos['TOI'])*60
         pos['RushAxG/60'] = (pos['RushAxG']/pos['TOI'])*60
-        pos['Rushes xGF'] = pos['RushFxG/60'].rank(pct=True)
-        pos['Rushes xGA'] = 1 - pos['RushAxG/60'].rank(pct=True)
+        pos['RushesxGF'] = pos['RushFxG/60'].rank(pct=True)
+        pos['RushesxGA'] = 1 - pos['RushAxG/60'].rank(pct=True)
         pos['RushFG/60'] = (pos['RushFG']/pos['TOI'])*60
         pos['RushAG/60'] = (pos['RushAG']/pos['TOI'])*60
-        pos['Rushes GF'] = pos['RushFG/60'].rank(pct=True)
-        pos['Rushes GA'] = 1 - pos['RushAG/60'].rank(pct=True)
+        pos['RushesGF'] = pos['RushFG/60'].rank(pct=True)
+        pos['RushesGA'] = 1 - pos['RushAG/60'].rank(pct=True)
 
         #Flip against metric percentiles
         pos['ODEF-SR'] = 1-pos['ODEF-SR']
         pos['ODEF-SQ'] = 1-pos['ODEF-SQ']
         pos['ODEF-FN'] = 1-pos['ODEF-FN']
 
+        #Extraneous Values
+        pos['EGF'] = pos['OOFF-SRI']+pos['OOFF-SQI']+pos['OOFF-FNI']
+        pos['ExGF'] = pos['OOFF-SRI']+pos['OOFF-SQI']
+        pos['EGA'] = pos['ODEF-SRI']+pos['ODEF-SQI']+pos['ODEF-FNI']
+        pos['ExGA'] = pos['ODEF-SRI']+pos['ODEF-SQI']
+
+        #...and their percentiles
+        pos['EGF-P'] = pos['EGF'].rank(pct=True)
+        pos['ExGF-P'] = pos['ExGF'].rank(pct=True)
+        pos['EGA-P'] = pos['EGA'].rank(pct=True)
+        pos['ExGA-P'] = pos['ExGA'].rank(pct=True)
+
+        pos['EGA-P'] = 1-pos['EGA']
+        pos['ExGA-P'] = 1-pos['ExGA']
+
+        #...and then their totals
+        pos['EGF-T'] = (pos['EGF']/60)*pos['TOI']
+        pos['ExGF-T'] = (pos['ExGF']/60)*pos['TOI']
+        pos['EGA-T'] = (pos['EGA']/60)*pos['TOI']
+        pos['ExGA-T'] = (pos['ExGA']/60)*pos['TOI']
+
+        #Goal Composites...
+        pos['Team-Adjusted-EGI'] = pos['ODEF-FNI']-pos['ExGA']
+        pos['GISAx'] = pos['ExGA']-pos['EGA']
+        pos['NetGI'] = pos['EGF'] - pos['EGA']
+        pos['NetxGI'] = pos['ExGF'] - pos['ExGA']
+
+        #...and their percentiles
+        pos['Team-Adjusted-EGI-P'] = pos['Team-Adjusted-EGI'].rank(pct=True)
+        pos['GISAx-P'] = pos['GISAx'].rank(pct=True)
+        pos['NetGI-P'] = pos['NetGI'].rank(pct=True)
+        pos['NetxGI-P'] = pos['NetxGI'].rank(pct=True)
+
+        #...and then their totals
+        pos['Team-Adjusted-EGI-T'] = (pos['Team-Adjusted-EGI']/60)*pos['TOI']
+        pos['GISAx-T'] = (pos['GISAx']/60)*pos['TOI']
+        pos['NetGI-T'] = (pos['NetGI']/60)*pos['TOI']
+        pos['NetxGI-T'] = (pos['NetxGI']/60)*pos['TOI']
+
+        #Return: team stats with shooting impacts
+        return pos.drop(columns=['fsh','fenwick','xg_fen','xg','g','finishing']).sort_values(['Goalie','Season','Team'])
+
+    elif type =='team':
+        pos = agg
+        for group in [('OOFF','F'),('ODEF','A')]:
+            #Have to set this columns for compatibility with df.apply
+                pos['fsh'] = pos[f'Fsh{group[1]}%']
+                pos['fenwick'] =  pos[f'F{group[1]}/60']
+                pos['xg'] = pos[f'xG{group[1]}/60']
+                pos['g'] = pos[f'G{group[1]}/60']
+                pos['xg_fen'] = pos[f'xG{group[1]}/F{group[1]}']
+                pos['finishing'] = pos[f'G{group[1]}/xG{group[1]}']
+
+                #Find average for position in frame
+                avg_fen = pos['fenwick'].mean()
+                avg_xg = pos['xg'].mean()
+                avg_g = pos['g'].mean()
+                avg_fsh = avg_g/avg_fen
+                avg_xg_fen = avg_xg/avg_fen
+
+                #Calculate composite percentiles
+                pos[f'{group[0]}-SR'] = pos['fenwick'].rank(pct=True)
+                pos[f'{group[0]}-SQ'] = pos['xg_fen'].rank(pct=True)
+                pos[f'{group[0]}-FN'] = pos['finishing'].rank(pct=True)
+
+                #Calculate shot rate, shot quality, and finishing impacts
+                pos[f'{group[0]}-SRI'] = pos['g'] - pos.apply(lambda x: goal_comp(avg_fen,x.xg_fen,x.xg,x.g,avg_fsh),axis=1)
+                pos[f'{group[0]}-SQI'] = pos['g'] - pos.apply(lambda x: goal_comp(x.fenwick,avg_xg_fen,x.xg,x.g,avg_fsh),axis=1)
+                pos[f'{group[0]}-FNI'] = pos['g'] - pos.apply(lambda x: goal_comp(x.fenwick,x.xg_fen,avg_xg,avg_g,avg_fsh),axis=1)
+
+                #Convert impacts to totals
+                #Calculate shot rate, shot quality, and finishing impacts
+                pos[f'{group[0]}-SRI-T'] = (pos[f'{group[0]}-SRI']/60)*pos['TOI']
+                pos[f'{group[0]}-SQI-T'] = (pos[f'{group[0]}-SQI']/60)*pos['TOI']
+                pos[f'{group[0]}-FNI-T'] = (pos[f'{group[0]}-FNI']/60)*pos['TOI']
+       
+       #Rank per 60 stats
+        for stat in per_sixty[10:len(per_sixty)]:
+            pos[f'{stat}/60-P'] = pos[f'{stat}/60'].rank(pct=True)
+
+        #Flip percentiles for against stats
+        for stat in ['FA','xGA','GA','CA','HA','Give','Penl','Penl2','Penl5']:
+            pos[f'{stat}/60-P'] = 1-pos[f'{stat}/60-P']
+
+        #Add extra metrics
+        pos['RushF/60'] = (pos['RushF']/pos['TOI'])*60
+        pos['RushA/60'] = (pos['RushA']/pos['TOI'])*60
+        pos['RushesFF'] = pos['RushF/60'].rank(pct=True)
+        pos['RushesFA'] = 1 - pos['RushA/60'].rank(pct=True)
+        pos['RushFxG/60'] = (pos['RushFxG']/pos['TOI'])*60
+        pos['RushAxG/60'] = (pos['RushAxG']/pos['TOI'])*60
+        pos['RushesxGF'] = pos['RushFxG/60'].rank(pct=True)
+        pos['RushesxGA'] = 1 - pos['RushAxG/60'].rank(pct=True)
+        pos['RushFG/60'] = (pos['RushFG']/pos['TOI'])*60
+        pos['RushAG/60'] = (pos['RushAG']/pos['TOI'])*60
+        pos['RushesGF'] = pos['RushFG/60'].rank(pct=True)
+        pos['RushesGA'] = 1 - pos['RushAG/60'].rank(pct=True)
+
+        #Flip against metric percentiles
+        pos['ODEF-SR'] = 1-pos['ODEF-SR']
+        pos['ODEF-SQ'] = 1-pos['ODEF-SQ']
+        pos['ODEF-FN'] = 1-pos['ODEF-FN']
+
+        pos['EGF'] = pos['OOFF-SRI']+pos['OOFF-SQI']+pos['OOFF-FNI']
+        pos['ExGF'] = pos['OOFF-SRI']+pos['OOFF-SQI']
+        pos['EGA'] = pos['ODEF-SRI']+pos['ODEF-SQI']+pos['ODEF-FNI']
+        pos['ExGA'] = pos['ODEF-SRI']+pos['ODEF-SQI']
+
+        #...and their percentiles
+        pos['EGF-P'] = pos['EGF'].rank(pct=True)
+        pos['ExGF-P'] = pos['ExGF'].rank(pct=True)
+        pos['EGA-P'] = pos['EGA'].rank(pct=True)
+        pos['ExGA-P'] = pos['ExGA'].rank(pct=True)
+
+        pos['EGA-P'] = 1-pos['EGA']
+        pos['ExGA-P'] = 1-pos['ExGA']
+
+        #...and then their totals
+        pos['EGF-T'] = (pos['EGF']/60)*pos['TOI']
+        pos['ExGF-T'] = (pos['ExGF']/60)*pos['TOI']
+        pos['EGA-T'] = (pos['EGA']/60)*pos['TOI']
+        pos['ExGA-T'] = (pos['ExGA']/60)*pos['TOI']
+
         #Return: team stats with shooting impacts
         return pos.drop(columns=['fsh','fenwick','xg_fen','xg','g','finishing']).sort_values(['Season','Team'])
 
-
     else:
         #Remove skaters with less than 150 minutes of TOI then split between forwards and dmen
-        agg = agg.loc[agg['TOI']>=150]
-        forwards = agg.loc[agg['Position']!='D']
-        defensemen = agg.loc[agg['Position']=='D']
+        #These are added back in after the fact
+        forwards = agg.loc[(agg['Position']!='D')&(agg['TOI']>=150)]
+        defensemen = agg.loc[(agg['Position']=='D')&(agg['TOI']>=150)]
+        non_players = agg.loc[agg['TOI']<150]
 
         #Loop through both positions, all groupings (INDV, OOFF, and ODEF) generating impacts
         for pos in [forwards,defensemen]:
@@ -597,6 +742,12 @@ def nhl_shooting_impacts(agg,team=False):
                 pos[f'{group[0]}-SQI'] = pos['g'] - pos.apply(lambda x: goal_comp(x.fenwick,avg_xg_fen,x.xg,x.g,avg_fsh),axis=1)
                 pos[f'{group[0]}-FNI'] = pos['g'] - pos.apply(lambda x: goal_comp(x.fenwick,x.xg_fen,avg_xg,avg_g,avg_fsh),axis=1)
 
+                #Convert impacts to totals
+                #Calculate shot rate, shot quality, and finishing impacts
+                pos[f'{group[0]}-SRI-T'] = (pos[f'{group[0]}-SRI']/60)*pos['TOI']
+                pos[f'{group[0]}-SQI-T'] = (pos[f'{group[0]}-SQI']/60)*pos['TOI']
+                pos[f'{group[0]}-FNI-T'] = (pos[f'{group[0]}-FNI']/60)*pos['TOI']
+
             #Calculate On-Ice Involvement Percentiles
             pos['Fi/F'] = pos['FC%'].rank(pct=True)
             pos['xGi/F'] = pos['xGC%'].rank(pct=True)
@@ -604,16 +755,16 @@ def nhl_shooting_impacts(agg,team=False):
             pos['Gi/F'] = pos['GC%'].rank(pct=True)
             pos['RushFi/60'] = (pos['Rush']/pos['TOI'])*60
             pos['RushxGi/60'] = (pos['Rush xG']/pos['TOI'])*60
-            pos['Rushes xGi'] = pos['RushxGi/60'].rank(pct=True)
-            pos['Rushes Fi'] = pos['RushFi/60'].rank(pct=True)
+            pos['RushesxGi'] = pos['RushxGi/60'].rank(pct=True)
+            pos['RushesFi'] = pos['RushFi/60'].rank(pct=True)
 
             #Rank per 60 stats
             for stat in per_sixty:
-                pos[f'{stat}/60 Percentile'] = pos[f'{stat}/60'].rank(pct=True)
+                pos[f'{stat}/60-P'] = pos[f'{stat}/60'].rank(pct=True)
 
             #Flip percentiles for against stats
             for stat in ['FA','xGA','GA','CA','HA','Give','Penl','Penl2','Penl5']:
-                pos[f'{stat}/60 Percentile'] = 1-pos[f'{stat}/60 Percentile']
+                pos[f'{stat}/60-P'] = 1-pos[f'{stat}/60-P']
 
         #Add positions back together
         complete = pd.concat([forwards,defensemen])
@@ -624,28 +775,65 @@ def nhl_shooting_impacts(agg,team=False):
         complete['ODEF-FN'] = 1-complete['ODEF-FN']
 
         #Extraneous Values
-        complete['Extraneous Gi'] = complete['INDV-SRI']+complete['INDV-SQI']+complete['INDV-FNI']
-        complete['Extraneous xGi'] = complete['INDV-SRI']+complete['INDV-SQI']
-        complete['Extraneous GF'] = complete['OOFF-SRI']+complete['OOFF-SQI']+complete['OOFF-FNI']
-        complete['Extraneous xGF'] = complete['OOFF-SRI']+complete['OOFF-SQI']
-        complete['Extraneous GA'] = complete['ODEF-SRI']+complete['ODEF-SQI']+complete['ODEF-FNI']
-        complete['Extraneous xGA'] = complete['ODEF-SRI']+complete['ODEF-SQI']
+        complete['EGi'] = complete['INDV-SRI']+complete['INDV-SQI']+complete['INDV-FNI']
+        complete['ExGi'] = complete['INDV-SRI']+complete['INDV-SQI']
+        complete['EGF'] = complete['OOFF-SRI']+complete['OOFF-SQI']+complete['OOFF-FNI']
+        complete['ExGF'] = complete['OOFF-SRI']+complete['OOFF-SQI']
+        complete['EGA'] = complete['ODEF-SRI']+complete['ODEF-SQI']+complete['ODEF-FNI']
+        complete['ExGA'] = complete['ODEF-SRI']+complete['ODEF-SQI']
 
-        #Goal Composites
-        complete['Linemate Extraneous Goals'] = complete['Extraneous GF'] - complete['Extraneous Gi']
-        complete['Linemate Goal Induction'] = complete['Linemate Extraneous Goals']*complete['AC%']
-        complete['Composite Goal Impact'] = complete['Extraneous Gi'] + complete['Linemate Goal Induction'] 
-        complete['Linemate Rel. Goal Impact'] = complete['Composite Goal Impact'] - (complete['Extraneous GF']-complete['Composite Goal Impact'])
-        complete['Net Goal Impact'] = complete['Extraneous GF'] - complete['Extraneous GA']
-        complete['Net xGoal Impact'] = complete['Extraneous xGF'] - complete['Extraneous xGA']
+        #...and their percentiles
+        complete['EGi-P'] = complete['EGi'].rank(pct=True)
+        complete['ExGi-P'] = complete['ExGi'].rank(pct=True)
+        complete['EGF-P'] = complete['EGF'].rank(pct=True)
+        complete['ExGF-P'] = complete['ExGF'].rank(pct=True)
+        complete['EGA-P'] = complete['EGA'].rank(pct=True)
+        complete['ExGA-P'] = complete['ExGA'].rank(pct=True)
 
+        complete['EGA-P'] = 1-complete['EGA']
+        complete['ExGA-P'] = 1-complete['ExGA']
+
+        #...and then their totals
+        complete['EGi-T'] = (complete['EGi']/60)*complete['TOI']
+        complete['ExGi-T'] = (complete['ExGi']/60)*complete['TOI']
+        complete['EGF-T'] = (complete['EGF']/60)*complete['TOI']
+        complete['ExGF-T'] = (complete['ExGF']/60)*complete['TOI']
+        complete['EGA-T'] = (complete['EGA']/60)*complete['TOI']
+        complete['ExGA-T'] = (complete['ExGA']/60)*complete['TOI']
+
+        #Goal Composites...
+        complete['LiEG'] = complete['EGF'] - complete['EGi']
+        complete['LiGIn'] = complete['LiEG']*complete['AC%']
+        complete['CompGI'] = complete['EGi'] + complete['LiGIn'] 
+        complete['LiRelGI'] = complete['CompGI'] - (complete['EGF']-complete['CompGI'])
+        complete['NetGI'] = complete['EGF'] - complete['EGA']
+        complete['NetxGI'] = complete['ExGF'] - complete['ExGA']
+
+        #...and their percentiles
+        complete['LiEG-P'] = complete['LiEG'].rank(pct=True)
+        complete['LiGIn-P'] = complete['LiGIn'].rank(pct=True)
+        complete['CompGI-P'] = complete['CompGI'].rank(pct=True)
+        complete['LiRelGI-P'] = complete['LiRelGI'].rank(pct=True)
+        complete['NetGI-P'] = complete['NetGI'].rank(pct=True)
+        complete['NetxGI-P'] = complete['NetxGI'].rank(pct=True)
+
+        #..and then their totals
+        complete['LiEG-T'] = (complete['LiEG']/60)*complete['TOI']
+        complete['LiGIn-T'] = (complete['LiGIn']/60)*complete['TOI']
+        complete['CompGI-T'] = (complete['CompGI']/60)*complete['TOI']
+        complete['LiRelGI-T'] = (complete['LiRelGI']/60)*complete['TOI']
+        complete['NetGI-T'] = (complete['NetGI']/60)*complete['TOI']
+        complete['NetxGI-T'] = (complete['NetxGI']/60)*complete['TOI']
+
+        #Add back skaters with less than 150 minutes TOI
+        df = pd.concat([complete,non_players]).drop(columns=['fsh','fenwick','xg_fen','xg','g','finishing']).sort_values(['Player','Season','Team','ID'])
         #Return: skater stats with shooting impacts
-        return complete.drop(columns=['fsh','fenwick','xg_fen','xg','g','finishing']).sort_values(['Player','Season','Team','ID'])
+        return df
 
-def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters/nhl_rosters.csv",xg='wsba',shot_impact=False):
+def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters/nhl_rosters.csv",shot_impact=False):
     #Given play-by-play, seasonal information, game_strength, rosters, and xG model, return aggregated stats
     # param 'pbp' - play-by-play dataframe
-    # param 'type' - type of stats to calculate ('skater', 'goaltender', or 'team')
+    # param 'type' - type of stats to calculate ('skater', 'goalie', or 'team')
     # param 'season' - season or timeframe of events in play-by-play
     # param 'season_type' - list of season types (preseason, regular season, or playoffs) to include in aggregation
     # param 'game_strength' - list of game_strengths to include in aggregation
@@ -653,37 +841,111 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
     # param 'xg' - xG model to apply to pbp for aggregation
     # param 'shot_impact' - boolean determining if the shot impact model will be applied to the dataset
 
-    print(f"Calculating statistics for all games in the provided play-by-play data for {type}s...\nSeasons included: {pbp['season'].drop_duplicates().to_list()}...")
+    print(f"Calculating statistics for all games in the provided play-by-play data at {game_strength} for {type}s...\nSeasons included: {pbp['season'].drop_duplicates().to_list()}...")
     start = time.perf_counter()
-
-    #Add extra data and apply team changes
-    pbp = prep_xG_data(pbp).replace(convert_team_abbr)
 
     #Check if xG column exists and apply model if it does not
     try:
         pbp['xG']
-    except KeyError:
-        if xg == 'wsba':
-            pbp = wsba_xG(pbp)
-        else:
-            pbp = moneypuck_xG(pbp)
+    except KeyError: 
+        pbp = wsba_xG(pbp)
 
-    #Filter by season types and remove shootouts
-    pbp = pbp.loc[(pbp['season_type'].isin(season_types)) & (pbp['period'] < 5)]
-    
+    #Add venue-relative strength state columns (for on-ice stat calculation)
+    pbp['strength_state_away'] = pbp['strength_state_venue']
+    pbp['strength_state_home'] = pbp['strength_state_venue'][::-1]
+
+    #Filter by season types, remove shootouts, remove shots with no coordinates, and remove shots on empty nets
+    pbp_noshot = pbp.loc[(pbp['season_type'].isin(season_types)) & (pbp['period'] < 5) & ~(pbp['event_type'].isin(fenwick_events))]
+    pbp_shot = pbp.loc[(pbp['season_type'].isin(season_types)) & (pbp['period'] < 5) & (pbp['event_type'].isin(fenwick_events)) & (pbp['empty_net']<1) & (pbp['x'].notna()) & (pbp['y'].notna())]
+
+    pbp = pd.concat([pbp_shot,pbp_noshot])
+
     #Convert all columns with player ids to float in order to avoid merging errors
     for col in get_col():
         if "_id" in col:
             try: pbp[col] = pbp[col].astype(float)
             except KeyError: continue
 
-    # Filter by game strength if not "all"
-    if game_strength != "all":
-        pbp = pbp.loc[pbp['strength_state'].isin(game_strength)]
-
     #Split calculation
-    if type == 'team':
-        complete = calc_team(pbp)
+    if type == 'goalie':
+        complete = calc_goalie(pbp,game_strength)
+
+        #Set TOI to minute
+        complete['TOI'] = complete['TOI']/60
+
+        #Add per 60 stats
+        for stat in ['FF','FA','xGF','xGA','GF','GA','CF','CA','GSAx']:
+            complete[f'{stat}/60'] = (complete[stat]/complete['TOI'])*60
+            
+        complete['GF%'] = complete['GF']/(complete['GF']+complete['GA'])
+        complete['xGF%'] = complete['xGF']/(complete['xGF']+complete['xGA'])
+        complete['FF%'] = complete['FF']/(complete['FF']+complete['FA'])
+        complete['CF%'] = complete['CF']/(complete['CF']+complete['CA'])
+
+        #Remove entries with no ID listed
+        complete = complete.loc[complete['ID'].notna()]
+
+        #Import rosters and player info
+        rosters = pd.read_csv(roster_path)
+        names = rosters[['id','fullName',
+                            'headshot','positionCode','shootsCatches',
+                            'heightInInches','weightInPounds',
+                            'birthDate','birthCountry']].drop_duplicates(subset=['id','fullName'],keep='last')
+
+        #Add names
+        complete = pd.merge(complete,names,how='left',left_on='ID',right_on='id')
+
+        #Rename if there are no missing names
+        complete = complete.rename(columns={'fullName':'Goalie',
+                                            'headshot':'Headshot',
+                                            'positionCode':'Position',
+                                            'shootsCatches':'Handedness',
+                                            'heightInInches':'Height (in)',
+                                            'weightInPounds':'Weight (lbs)',
+                                            'birthDate':'Birthday',
+                                            'birthCountry':'Nationality'})
+        
+        #WSBA
+        complete['WSBA'] = complete['Goalie']+complete['Team']+complete['Season'].astype(str)
+
+        #Add player age
+        complete['Birthday'] = pd.to_datetime(complete['Birthday'])
+        complete['season_year'] = complete['Season'].astype(str).str[4:8].astype(int)
+        complete['Age'] = complete['season_year'] - complete['Birthday'].dt.year
+
+        #Find player headshot
+        complete['Headshot'] = 'https://assets.nhle.com/mugs/nhl/'+complete['Season'].astype(str)+'/'+complete['Team']+'/'+complete['ID'].astype(int).astype(str)+'.png'
+
+        end = time.perf_counter()
+        length = end-start
+        print(f'...finished in {(length if length <60 else length/60):.2f} {'seconds' if length <60 else 'minutes'}.')
+
+        complete = complete[[
+            'Goalie','ID',
+            "Season","Team",'WSBA',
+            'Headshot','Position','Handedness',
+            'Height (in)','Weight (lbs)',
+            'Birthday','Age','Nationality',
+            'GP','TOI',
+            "GF","FF","xGF","xGF/FF","GF/xGF","FshF%",
+            "GA","FA","xGA","xGA/FA","GA/xGA","FshA%",
+            'CF','CA',
+            'GSAx',
+            'RushF','RushA','RushFxG','RushAxG','RushFG','RushAG'
+        ]+[f'{stat}/60' for stat in ['FF','FA','xGF','xGA','GF','GA','CF','CA','GSAx']]]
+
+        #Apply shot impacts if necessary
+        if shot_impact:
+            complete = nhl_shooting_impacts(complete,'goalie')
+        
+        end = time.perf_counter()
+        length = end-start
+        print(f'...finished in {(length if length <60 else length/60):.2f} {'seconds' if length <60 else 'minutes'}.')
+
+        return complete
+        
+    elif type == 'team':
+        complete = calc_team(pbp,game_strength)
 
         #WSBA
         complete['WSBA'] = complete['Team']+complete['Season'].astype(str)
@@ -700,18 +962,32 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
         complete['FF%'] = complete['FF']/(complete['FF']+complete['FA'])
         complete['CF%'] = complete['CF']/(complete['CF']+complete['CA'])
 
+        complete = complete[[
+            'Team',
+            'Season','WSBA',
+            'GP','TOI',
+            "GF","FF","xGF","xGF/FF","GF/xGF","FshF%",
+            "GA","FA","xGA","xGA/FA","GA/xGA","FshA%",
+            'CF','CA',
+            'GF%','FF%','xGF%','CF%',
+            'HF','HA','HF%',
+            'Penl','Penl2','Penl5','PIM','Draw','PENL%',
+            'Give','Take','PM%',
+            'Block',
+            'RushF','RushA','RushFxG','RushAxG','RushFG','RushAG'
+        ]+[f'{stat}/60' for stat in per_sixty[10:len(per_sixty)]]]
+        #Apply shot impacts if necessary
+        if shot_impact:
+            complete = nhl_shooting_impacts(complete,'team')
+        
         end = time.perf_counter()
         length = end-start
         print(f'...finished in {(length if length <60 else length/60):.2f} {'seconds' if length <60 else 'minutes'}.')
 
-        #Apply shot impacts if necessary
-        if shot_impact:
-            return nhl_shooting_impacts(complete,True)
-        else:
-            return complete
+        return complete
     else:
-        indv_stats = calc_indv(pbp)
-        onice_stats = calc_onice(pbp)
+        indv_stats = calc_indv(pbp,game_strength)
+        onice_stats = calc_onice(pbp,game_strength)
 
         #IDs sometimes set as objects
         indv_stats['ID'] = indv_stats['ID'].astype(float)
@@ -755,9 +1031,6 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
         #Set TOI to minute
         complete['TOI'] = complete['TOI']/60
 
-        #Average shift length
-        complete['TOI/Shift'] = complete['TOI']/complete['Shifts']
-
         #Add player age
         complete['Birthday'] = pd.to_datetime(complete['Birthday'])
         complete['season_year'] = complete['Season'].astype(str).str[4:8].astype(int)
@@ -766,8 +1039,6 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
         #Find player headshot
         complete['Headshot'] = 'https://assets.nhle.com/mugs/nhl/'+complete['Season'].astype(str)+'/'+complete['Team']+'/'+complete['ID'].astype(int).astype(str)+'.png'
 
-        end = time.perf_counter()
-        length = end-start
         #Remove goalies that occasionally appear in a set
         complete = complete.loc[complete['Position']!='G']
         #Add WSBA ID
@@ -801,19 +1072,22 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
             'F','FW','FL','F%',
             'Penl','Penl2','Penl5',
             'Draw','PIM','PENL%',
-            'Shifts','TOI/Shift','AZS','OTF','OTF%',
+            'Block',
             'OZF','NZF','DZF',
             'OZF%','NZF%','DZF%',
         ]+[f'{stat}/60' for stat in per_sixty]+type_metrics].fillna(0).sort_values(['Player','Season','Team','ID'])
         
-        print(f'...finished in {(length if length <60 else length/60):.2f} {'seconds' if length <60 else 'minutes'}.')
         #Apply shot impacts if necessary (Note: this will remove skaters with fewer than 150 minutes of TOI due to the shot impact TOI rule)
         if shot_impact:
-            return nhl_shooting_impacts(complete,False)
-        else:
-            return complete
+            complete = nhl_shooting_impacts(complete,'skater')
+        
+        end = time.perf_counter()
+        length = end-start
+        print(f'...finished in {(length if length <60 else length/60):.2f} {'seconds' if length <60 else 'minutes'}.')
 
-def nhl_plot_skaters_shots(pbp,skater_dict,strengths,marker_dict=event_markers,onice = 'indv',title = True,legend=False,xg='wsba'):
+        return complete
+
+def nhl_plot_skaters_shots(pbp,skater_dict,strengths,marker_dict=event_markers,onice = 'indv',title = True,legend=False):
     #Returns dict of plots for specified skaters
     # param 'pbp' - pbp to plot data
     # param 'skater_dict' - skaters to plot shots for (format: {'Patrice Bergeron':['20242025','BOS']})
@@ -832,12 +1106,12 @@ def nhl_plot_skaters_shots(pbp,skater_dict,strengths,marker_dict=event_markers,o
         skater_info = skater_dict[skater]
         title = f'{skater} Fenwick Shots for {skater_info[1]} in {skater_info[0][2:4]}-{skater_info[0][6:8]}' if title else ''
         #Key is formatted as PLAYERSEASONTEAM (i.e. PATRICE BERGERON20212022BOS)
-        skater_plots.update({f'{skater}{skater_info[0]}{skater_info[1]}':[plot_skater_shots(pbp,skater,skater_info[0],skater_info[1],strengths,title,marker_dict,onice,legend,xg)]})
+        skater_plots.update({f'{skater}{skater_info[0]}{skater_info[1]}':[plot_skater_shots(pbp,skater,skater_info[0],skater_info[1],strengths,title,marker_dict,onice,legend)]})
 
     #Return: list of plotted skater shot charts
     return skater_plots
 
-def nhl_plot_games(pbp,events,strengths,game_ids='all',marker_dict=event_markers,team_colors={'away':'primary','home':'primary'},legend=False,xg='wsba'):
+def nhl_plot_games(pbp,events,strengths,game_ids='all',marker_dict=event_markers,team_colors={'away':'primary','home':'primary'},legend=False):
     #Returns dict of plots for specified games
     # param 'pbp' - pbp to plot data
     # param 'events' - type of events to plot
@@ -856,7 +1130,7 @@ def nhl_plot_games(pbp,events,strengths,game_ids='all',marker_dict=event_markers
     game_plots = {}
     #Iterate through games, adding plot to dict
     for game in game_ids:
-        game_plots.update({game:[plot_game_events(pbp,game,events,strengths,marker_dict,team_colors,legend,xg)]})
+        game_plots.update({game:[plot_game_events(pbp,game,events,strengths,marker_dict,team_colors,legend)]})
 
     #Return: list of plotted game events
     return game_plots
@@ -900,9 +1174,3 @@ def repo_load_seasons():
     #List of available seasons to scrape
 
     return seasons
-
-def admin_convert_to_parquet(seasons):
-    for season in seasons:
-        load = pd.read_csv(f'pbp/csv/nhl_pbp_{season}.csv')
-
-        load.to_parquet(f'pbp/parquet/nhl_pbp_{season}.parquet',index=False)

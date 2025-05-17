@@ -6,6 +6,7 @@ from .utils.shared import *
 import numpy as np
 import pandas as pd
 import warnings
+import os
 warnings.filterwarnings('ignore')
 
 ### SCRAPING FUNCTIONS ###
@@ -27,8 +28,9 @@ def get_col():
     return [
         'season','season_type','game_id','game_date',"start_time","venue","venue_location",
         'away_team_abbr','home_team_abbr','event_num','period','period_type',
-        'seconds_elapsed',"situation_code","strength_state","strength_state_venue","home_team_defending_side",
-        "event_type_code","event_type","description","penalty_duration",
+        'seconds_elapsed',"strength_state","strength_state_venue","home_team_defending_side",
+        "event_type_code","event_type","description","event_reason",
+        "penalty_type","penalty_duration","penalty_attribution",
         "event_team_abbr","event_team_venue",
         'num_on', 'players_on','ids_on','num_off','players_off','ids_off','shift_type',
         "event_player_1_name","event_player_2_name","event_player_3_name",
@@ -38,7 +40,7 @@ def get_col():
         "shot_type","zone_code","x","y","x_fixed","y_fixed","x_adj","y_adj",
         "event_skaters","away_skaters","home_skaters",
         "event_distance","event_angle","event_length","seconds_since_last",
-        "away_score","home_score", "away_fenwick", "home_fenwick","away_sog","home_sog",
+        "away_score","home_score", "away_fenwick", "home_fenwick",
         "away_on_1","away_on_2","away_on_3","away_on_4","away_on_5","away_on_6","away_goalie",
         "home_on_1","home_on_2","home_on_3","home_on_4","home_on_5","home_on_6","home_goalie",
         "away_on_1_id","away_on_2_id","away_on_3_id","away_on_4_id","away_on_5_id","away_on_6_id","away_goalie_id",
@@ -226,14 +228,15 @@ def parse_json(info):
         "typeDescKey":"event_type",
         "details.shotType":"shot_type",
         "details.duration":"penalty_duration",
-        "details.descKey":"penalty_description",
-        "details.reason":"reason",
+        "details.descKey":"penalty_type",
+        "details.typeCode":'penalty_attribution',
+        "details.reason":"event_reason",
         "details.zoneCode":"zone_code",
         "details.xCoord":"x",
         "details.yCoord":"y",
         "details.goalieInNetId": "event_goalie_id",
-        "details.awaySOG":"away_SOG",
-        "details.homeSOG":"home_SOG"
+        "details.awaySOG":"away_sog",
+        "details.homeSOG":"home_sog"
     })
 
     #Period time adjustments (only 'seconds_elapsed' is included in the resulting data)
@@ -241,38 +244,6 @@ def parse_json(info):
     events['seconds_elapsed'] = ((events['period']-1)*1200)+events['period_seconds_elapsed']
 
     events = events.loc[(events['event_type']!="")]
-    
-    #Assign score and fenwick for each event
-    fenwick_events = ['missed-shot','shot-on-goal','goal']
-    ag = 0
-    ags = []
-    hg = 0
-    hgs = []
-
-    af = 0
-    afs = []
-    hf = 0
-    hfs = []
-    for event,team in zip(list(events['event_type']),list(events['event_team_venue'])):
-        if event in fenwick_events:
-            if team == "home":
-                hf += 1
-                if event == 'goal':
-                    hg += 1
-            else:
-                af += 1
-                if event == 'goal':
-                    ag += 1
-       
-        ags.append(ag)
-        hgs.append(hg)
-        afs.append(af)
-        hfs.append(hf)
-
-    events['away_score'] = ags
-    events['home_score'] = hgs
-    events['away_fenwick'] = afs
-    events['home_fenwick'] = hfs
 
     #Return: dataframe with parsed game
     return events
@@ -527,9 +498,10 @@ def parse_html(info):
     
     #Parsing
     event_log = []
+    target = 0
     for event in events:
         events_dict = {}
-        if event[0] == "#" or event[4] in ['GOFF', 'EGT', 'PGSTR', 'PGEND', 'ANTHEM','SPC','PBOX','SOC'] or event[3]=='-16:0-':
+        if event[0] == "#" or event[4] in ['GOFF', 'EGT', 'PGSTR', 'PGEND', 'ANTHEM', 'SPC', 'PBOX', 'EISTR', 'EIEND','EGPID'] or event[3]=='-16:0-':
             continue
         else:
             #Event info
@@ -660,10 +632,15 @@ def parse_html(info):
                 status = teams[team]
                 data = rosters[status[0]]
 
-                events_dict[f'event_player_{i+1}_name'] = data[str(num)][2]
-                events_dict[f'event_player_{i+1}_id'] = data[str(num)][4]
-                events_dict[f'event_player_{i+1}_pos'] = data[str(num)][1]
+                #In rare instances the event player is not on the event team (i.e. "WSH TAKEAWAY - #71 CIRELLI, Off. Zone" when #71 CIRELLI is on TBL)
+                try:
+                    events_dict[f'event_player_{i+1}_name'] = data[str(num)][2]
+                    events_dict[f'event_player_{i+1}_id'] = data[str(num)][4]
+                    events_dict[f'event_player_{i+1}_pos'] = data[str(num)][1]
+                except:
+                    ''
 
+            #Event skaters and strength-state information
             events_dict['away_skaters'] = away_skaters
             events_dict['home_skaters'] = home_skaters
             events_dict['away_goalie_in'] = away_goalie
@@ -683,7 +660,7 @@ def parse_html(info):
      'GSTR':"game-start",
      "ANTHEM":"anthem",
      "PSTR":"period-start",
-     'FAC':"faceoff",
+     "FAC":"faceoff",
      "SHOT":"shot-on-goal",
      "BLOCK":"blocked-shot",
      "STOP":"stoppage",
@@ -695,14 +672,38 @@ def parse_html(info):
      "DELPEN":"delayed-penalty",
      "PENL":"penalty",
      "CHL":"challenge",
+     "SOC":'shootout-complete',
      "PEND":"period-end",
      "GEND":"game-end"
     })
-
+    
     #Return: parsed HTML pbp
     return data
 
-def combine_pbp(info):
+def assign_target(data):
+    #Assign target number to plays to assist with merging
+
+    #New sort
+    data = data.sort_values(['period','seconds_elapsed','event_type','event_team_abbr','event_player_1_id','event_player_2_id'])
+
+    target = []
+    i = 0
+    #Target number distingushes events that occur in the same second to assist in merging the JSON and HTML
+    #Sometimes the target number may not reflect the same order as the event number in either document (especially in earlier seasons where the events are out of order in the HTML or JSON)
+    for event in data['event_type']:
+        if event in ['penalty','blocked-shot','missed-shot','shot-on-goal','goal']:
+            i += 1
+            target.append(i)
+        else:
+            target.append(0)
+
+    #Add event target number
+    data['target_num'] = target
+
+    #Revert sort and return dataframe
+    return data.reset_index()
+
+def combine_pbp(info,sources):
     #Given game info, return complete play-by-play data for provided game
 
     html_pbp = parse_html(info)
@@ -710,23 +711,48 @@ def combine_pbp(info):
     #Route data combining - json if season is after 2009-2010:
     if str(info['season']) in ['20052006','20062007','20072008','20082009','20092010']:
         #ESPN x HTML
-        espn_pbp = parse_espn(str(info['game_date']),info['away_team_abbr'],info['home_team_abbr']).rename(columns={'coords_x':'x',"coords_y":'y'})
+        espn_pbp = parse_espn(str(info['game_date']),info['away_team_abbr'],info['home_team_abbr']).rename(columns={'coords_x':'x',"coords_y":'y'}).sort_values(['period','seconds_elapsed']).reset_index()
         merge_col = ['period','seconds_elapsed','event_type','event_team_abbr']
 
+        #Merge pbp
         df = pd.merge(html_pbp,espn_pbp,how='left',on=merge_col)
 
     else:
         #JSON x HTML
         json_pbp = parse_json(info)
-        #Modify merge conditions and merge pbps
-        merge_col = ['period','seconds_elapsed','event_type','event_team_abbr','event_player_1_id']
-        html_pbp = html_pbp.drop(columns=['event_player_2_id','event_player_3_id','shot_type','zone_code'],errors='ignore')
 
-        #While rare sometimes column 'event_player_1_id' is interpreted differently between the two dataframes. 
-        html_pbp['event_player_1_id'] = html_pbp['event_player_1_id'].astype(object)
-        json_pbp['event_player_1_id'] = json_pbp['event_player_1_id'].astype(object)
+        if sources:
+            dirs_html = f'sources/{info['season']}/HTML/'
+            dirs_json = f'sources/{info['season']}/JSON/'
 
-        df = pd.merge(html_pbp,json_pbp,how='left',on=merge_col)
+            if not os.path.exists(dirs_html):
+                os.makedirs(dirs_html)
+            if not os.path.exists(dirs_json):
+                os.makedirs(dirs_json)
+
+            html_pbp.to_csv(f'{dirs_html}{info['game_id']}_HTML.csv',index=False)
+            json_pbp.to_csv(f'{dirs_json}{info['game_id']}_JSON.csv',index=False)
+        
+        #Assign target numbers
+        html_pbp = assign_target(html_pbp)
+        json_pbp = assign_target(json_pbp)
+
+        #Merge on index if the df lengths are the same and the events are in the same general order; merge on columns otherwise
+        if (len(html_pbp) == len(json_pbp)) and (html_pbp['event_type'].equals(json_pbp['event_type'])) and (html_pbp['seconds_elapsed'].equals(json_pbp['seconds_elapsed'])):
+            html_pbp = html_pbp.drop(columns=['period','seconds_elapsed','event_type','event_team_abbr','event_player_1_id','event_player_2_id','event_player_3_id','shot_type','zone_code'],errors='ignore').reset_index()
+            df = pd.merge(html_pbp,json_pbp,how='left',left_index=True,right_index=True).sort_values(['event_num'])
+        else:
+            print(f' merging on columns...',end="")
+            #Modify merge conditions and merge pbps
+            merge_col = ['period','seconds_elapsed','event_type','event_team_abbr','event_player_1_id','target_num']
+            html_pbp = html_pbp.drop(columns=['event_player_2_id','event_player_3_id','shot_type','zone_code'],errors='ignore')
+
+            #While rare sometimes column 'event_player_1_id' is interpreted differently between the two dataframes. 
+            html_pbp['event_player_1_id'] = html_pbp['event_player_1_id'].astype(object)
+            json_pbp['event_player_1_id'] = json_pbp['event_player_1_id'].astype(object)
+
+            #Merge pbp
+            df = pd.merge(html_pbp,json_pbp,how='left',on=merge_col).sort_values(['event_num'])
 
     #Add game info
     info_col = ['season','season_type','game_id','game_date',"venue","venue_location",
@@ -977,7 +1003,7 @@ def parse_shift_events(info,home):
     return pd.merge(shifts,on_players,how="outer",on=['row']).replace(np.nan,"")
 
 ## FINALIZE PBP FUNCTIONS ##
-def combine_shifts(info):
+def combine_shifts(info,sources):
     #Given game info, return complete shift events
 
     #JSON Prep
@@ -1027,20 +1053,34 @@ def combine_shifts(info):
     data['home_skaters'] = data[home_on].replace(r'^\s*$', np.nan, regex=True).notna().sum(axis=1)
     data['strength_state'] = np.where(data['event_team_abbr']==data['away_team_abbr'],data['away_skaters'].astype(str)+"v"+data['home_skaters'].astype(str),data['home_skaters'].astype(str)+"v"+data['away_skaters'].astype(str))
 
-    #Return: full shifts data converted to play-by-play format
+    #Create final shifts df
     col = [col for col in get_col() if col in data.columns.to_list()]
-    return data[col]
+    full_shifts = data[col]
+    
+    #Export sources if true
+    if sources:
+        dirs = f'sources/{info['season']}/SHIFTS/'
 
-def combine_data(info):
+        if not os.path.exists(dirs):
+            os.makedirs(dirs)
+
+        full_shifts.to_csv(f'{dirs}{info['game_id']}_SHIFTS.csv',index=False)
+
+    #Return: full shifts data converted to play-by-play format
+    return full_shifts
+
+def combine_data(info,sources):
     #Given game info, return complete play-by-play data
 
     game_id = info['game_id']
 
-    pbp = combine_pbp(info)
-    shifts = combine_shifts(info)
+    pbp = combine_pbp(info,sources)
+    shifts = combine_shifts(info,sources)
 
     #Combine data    
     df = pd.concat([pbp,shifts])
+
+    df['event_num'] = df['event_num'].replace(np.nan,0)
 
     #Create priority columns designed to order events that occur at the same time in a game
     even_pri = ['takeaway','giveaway','missed-shot','hit','shot-on-goal','blocked-shot']
@@ -1054,9 +1094,9 @@ def combine_data(info):
                               np.where(df['event_type']=='game-end',8,
                               np.where(df['event_type']=='period-start',9,
                               np.where(df['event_type']=='faceoff',10,0))))))))))
-                              
+
     df[['period','seconds_elapsed']] =  df[['period','seconds_elapsed']].astype(int)
-    df = df.sort_values(['period','seconds_elapsed','priority'])
+    df = df.sort_values(['period','seconds_elapsed','event_num','priority'])
     
     #Recalibrate event_num column to accurately depict the order of all events, including changes
     df.reset_index(inplace=True,drop=True)
@@ -1093,13 +1133,75 @@ def combine_data(info):
         df['away_coach'] = coaches['away']
         df['home_coach'] = coaches['home']
         df['event_coach'] = np.where(df['event_team_abbr']==df['home_team_abbr'],coaches['home'],np.where(df['event_team_abbr']==df['away_team_abbr'],coaches['away'],""))
-        
+
+    #Assign score, corsi, fenwick, and penalties for each event
+    fenwick_events = ['missed-shot','shot-on-goal','goal']
+    ag = 0
+    ags = []
+    hg = 0
+    hgs = []
+
+    ac = 0
+    acs = []
+    hc = 0
+    hcs = []
+
+    af = 0
+    afs = []
+    hf = 0
+    hfs = []
+
+    ap = 0
+    aps = []
+    hp = 0
+    hps = []
+
+    for event,team in zip(list(df['event_type']),list(df['event_team_venue'])):
+        if event in ['penalty','blocked-shot']+fenwick_events:
+            if event in ['blocked-shot']+fenwick_events:
+                if team == "home":
+                    hc += 1
+                    if event not in ['blocked-shot']: 
+                        hf += 1
+                    if event == 'goal':
+                        hg += 1
+                else:
+                    ac += 1
+                    if event not in ['blocked-shot']: 
+                        af += 1
+                    if event == 'goal':
+                        ag += 1
+            if event == 'penalty':
+                if team == "home":
+                    hp += 1
+                else:
+                    ap += 1
+
+
+        ags.append(ag)
+        hgs.append(hg)
+        acs.append(ac)
+        hcs.append(hc)
+        afs.append(af)
+        hfs.append(hf)
+        aps.append(ap)
+        hps.append(hp)
+
+    df['away_score'] = ags
+    df['home_score'] = hgs
+    df['away_corsi'] = acs
+    df['home_corsi'] = hcs
+    df['away_fenwick'] = afs
+    df['home_fenwick'] = hfs
+    df['away_penalties'] = aps
+    df['home_penalties'] = hps
+       
     #Forward fill as necessary
-    cols = ['period_type','home_team_defending_side','away_score','away_fenwick','home_score','home_fenwick','away_coach','home_coach']
+    cols = ['period_type','home_team_defending_side','away_coach','home_coach']
     for col in cols:
         try: df[col]
         except: df[col] = ""
         df[col] = df[col].ffill()
-
+     
     #Return: complete play-by-play with all important data for each event in a provided game
     return df[[col for col in get_col() if col in df.columns.to_list()]].replace(r'^\s*$', np.nan, regex=True)

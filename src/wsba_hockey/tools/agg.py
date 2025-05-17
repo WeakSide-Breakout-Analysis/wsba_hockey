@@ -8,7 +8,11 @@ from .xg_model import *
 shot_types = ['wrist','deflected','tip-in','slap','backhand','snap','wrap-around','poke','bat','cradle','between-legs']
 fenwick_events = ['missed-shot','shot-on-goal','goal']
 
-def calc_indv(pbp):
+def calc_indv(pbp,game_strength):
+    # Filter by game strength if not "all"
+    if game_strength != "all":
+        pbp = pbp.loc[pbp['strength_state'].isin(game_strength)]
+        
     #Add second event-team column for necessary situations
     pbp['event_team_abbr_2'] = np.where(pbp['event_team_abbr'].notna(),
         np.where(pbp['event_team_abbr']==pbp['home_team_abbr'],pbp['away_team_abbr'],pbp['home_team_abbr']),np.nan)
@@ -36,11 +40,12 @@ def calc_indv(pbp):
 
     #Second event player stats
     ep2 = (
-        pbp.loc[pbp['event_type'].isin(['goal','hit','faceoff','penalty'])].groupby(['event_player_2_id','event_team_abbr_2','season']).agg(
+        pbp.loc[(pbp['event_type'].isin(['goal','blocked-shot','hit','faceoff','penalty']))&~(pbp['description'].str.lower().str.contains('blocked by teammate',na=False))].groupby(['event_player_2_id','event_team_abbr_2','season']).agg(
         A1=('event_type',lambda x: (x=='goal').sum()),
         HA=('event_type',lambda x: (x=='hit').sum()),
         Draw=('event_type',lambda x: (x=='penalty').sum()),
-        FL=('event_type',lambda x: (x=='faceoff').sum())
+        FL=('event_type',lambda x: (x=='faceoff').sum()),
+        Block=('event_type',lambda x:(x=='blocked-shot').sum())
     ).reset_index().rename(columns={'event_player_2_id': 'ID', 'event_team_abbr_2': 'Team', 'season': 'Season'})
     )
 
@@ -53,7 +58,7 @@ def calc_indv(pbp):
     
     #Rush events
     rush = (
-        pbp.loc[(pbp['event_type'].isin(fenwick_events))&(pbp['rush_mod']>0)].groupby(['event_player_1_id','event_team_abbr','season']).agg(
+        pbp.loc[(pbp['event_type'].isin(fenwick_events))&(pbp['rush']>0)].groupby(['event_player_1_id','event_team_abbr','season']).agg(
         Rush=('event_type','count'),
         Rush_G=('event_type',lambda x: (x == 'goal').sum()),
         Rush_xG=('xG','sum')
@@ -96,7 +101,7 @@ def calc_indv(pbp):
 
     return indv
 
-def calc_onice(pbp):
+def calc_onice(pbp,game_strength):
     # Convert player on-ice columns to vectors
     pbp['home_on_ice'] = pbp['home_on_1_id'].astype(str) + ";" + pbp['home_on_2_id'].astype(str) + ";" + pbp['home_on_3_id'].astype(str) + ";" + pbp['home_on_4_id'].astype(str) + ";" + pbp['home_on_5_id'].astype(str) + ";" + pbp['home_on_6_id'].astype(str)
     pbp['away_on_ice'] = pbp['away_on_1_id'].astype(str) + ";" + pbp['away_on_2_id'].astype(str) + ";" + pbp['away_on_3_id'].astype(str) + ";" + pbp['away_on_4_id'].astype(str) + ";" + pbp['away_on_5_id'].astype(str) + ";" + pbp['away_on_6_id'].astype(str)
@@ -105,8 +110,12 @@ def calc_onice(pbp):
     pbp['home_on_ice'] = pbp['home_on_ice'].str.replace(';nan', '', regex=True)
     pbp['away_on_ice'] = pbp['away_on_ice'].str.replace(';nan', '', regex=True)
     
-    def process_team_stats(df, on_ice_col, team_col, opp_col):
-        df = df[['season','game_id', 'event_num', team_col, opp_col, 'event_type', 'event_team_abbr', on_ice_col,'ids_on','shift_type','event_length','zone_code','xG']].copy()
+    def process_team_stats(df, on_ice_col, team_col, opp_col, game_strength):
+        df = df[['season','game_id', f'strength_state_{on_ice_col[:4]}','event_num', team_col, opp_col, 'event_type', 'event_team_abbr', on_ice_col,'ids_on','shift_type','event_length','zone_code','xG']].copy()
+        # Filter by game strength if not "all"
+        if game_strength != "all":
+            df = df.loc[df[f'strength_state_{on_ice_col[:4]}'].isin(game_strength)]
+
         df[on_ice_col] = df[on_ice_col].str.split(';')
         df = df.explode(on_ice_col)
         df = df.rename(columns={on_ice_col: 'ID', 'season': 'Season'})
@@ -122,10 +131,6 @@ def calc_onice(pbp):
         df['NZF'] = np.where((df['zone_code']=='N') & (df['event_team_abbr']==df[team_col]),1,0)
         df['DZF'] = np.where((df['event_type']=='faceoff') & ((df['zone_code']=='D')&((df['event_team_abbr'] == df[team_col])) | (df['zone_code']=='O')&((df['event_team_abbr'] == df[opp_col]))), 1, 0)
 
-        df['Shifts'] = df.apply(lambda x: 1 if str(x.ID).replace('.0','') in str(x.ids_on) and x.event_team_abbr == (x.home_team_abbr if team_col=='home_team_abbr' else x.away_team_abbr) else 0, axis=1)
-        df['AZS'] = df.apply(lambda x: 1 if str(x.ID).replace('.0','') in str(x.ids_on) and x.shift_type == 'line-change' and (x.home_team_abbr if team_col=='home_team_abbr' else x.away_team_abbr) else 0, axis=1)
-        df['OTF'] = df.apply(lambda x: 1 if str(x.ID).replace('.0','') in str(x.ids_on) and x.shift_type == 'on-the-fly' and (x.home_team_abbr if team_col=='home_team_abbr' else x.away_team_abbr) else 0, axis=1)
-
         stats = df.groupby(['ID',team_col,'Season']).agg(
             GP=('game_id','nunique'),
             TOI=('event_length','sum'),
@@ -137,9 +142,6 @@ def calc_onice(pbp):
             xGA=('xGA', 'sum'),
             CF=('CF','sum'),
             CA=('CA','sum'),
-            Shifts=('Shifts','sum'),
-            AZS=('AZS','sum'),
-            OTF=('OTF','sum'),
             OZF=('OZF','sum'),
             NZF=('NZF','sum'),
             DZF=('DZF','sum')
@@ -147,8 +149,8 @@ def calc_onice(pbp):
         
         return stats.rename(columns={team_col:"Team"})
     
-    home_stats = process_team_stats(pbp, 'home_on_ice', 'home_team_abbr', 'away_team_abbr')
-    away_stats = process_team_stats(pbp, 'away_on_ice', 'away_team_abbr', 'home_team_abbr')
+    home_stats = process_team_stats(pbp, 'home_on_ice', 'home_team_abbr', 'away_team_abbr',game_strength)
+    away_stats = process_team_stats(pbp, 'away_on_ice', 'away_team_abbr', 'home_team_abbr',game_strength)
 
     onice_stats = pd.concat([home_stats,away_stats]).groupby(['ID','Team','Season']).agg(
             GP=('GP','sum'),
@@ -161,9 +163,6 @@ def calc_onice(pbp):
             xGA=('xGA', 'sum'),
             CF=('CF','sum'),
             CA=('CA','sum'),
-            Shifts=('Shifts','sum'),
-            AZS=('AZS','sum'),
-            OTF=('OTF','sum'),
             OZF=('OZF','sum'),
             NZF=('NZF','sum'),
             DZF=('DZF','sum')
@@ -178,13 +177,16 @@ def calc_onice(pbp):
     onice_stats['OZF%'] = onice_stats['OZF']/(onice_stats['OZF']+onice_stats['NZF']+onice_stats['DZF'])
     onice_stats['NZF%'] = onice_stats['NZF']/(onice_stats['OZF']+onice_stats['NZF']+onice_stats['DZF'])
     onice_stats['DZF%'] = onice_stats['DZF']/(onice_stats['OZF']+onice_stats['NZF']+onice_stats['DZF'])
-    onice_stats['OTF%'] = onice_stats['OTF']/onice_stats['Shifts']
 
     return onice_stats
 
-def calc_team(pbp):
+def calc_team(pbp,game_strength):
     teams = []
     for team in [('away','home'),('home','away')]:
+        # Filter by game strength if not "all"
+        if game_strength != "all":
+            pbp = pbp.loc[pbp[f'strength_state_{team[0]}'].isin(game_strength)]
+
         pbp['xGF'] = np.where(pbp['event_team_abbr'] == pbp[f'{team[0]}_team_abbr'], pbp['xG'], 0)
         pbp['xGA'] = np.where(pbp['event_team_abbr'] == pbp[f'{team[1]}_team_abbr'], pbp['xG'], 0)
         pbp['GF'] = np.where((pbp['event_type'] == "goal") & (pbp['event_team_abbr'] == pbp[f'{team[0]}_team_abbr']), 1, 0)
@@ -202,12 +204,13 @@ def calc_team(pbp):
         pbp['Draw'] = np.where((pbp['event_type']=='penalty') & (pbp['event_team_abbr'] == pbp[f'{team[1]}_team_abbr']), 1, 0)
         pbp['Give'] = np.where((pbp['event_type']=='giveaway') & (pbp['event_team_abbr'] == pbp[f'{team[0]}_team_abbr']), 1, 0)
         pbp['Take'] = np.where((pbp['event_type']=='takeaway') & (pbp['event_team_abbr'] == pbp[f'{team[0]}_team_abbr']), 1, 0)
-        pbp['RushF'] = np.where((pbp['event_team_abbr'] == pbp[f'{team[0]}_team_abbr'])&(pbp['rush_mod']>0), 1, 0)
-        pbp['RushA'] = np.where((pbp['event_team_abbr'] == pbp[f'{team[1]}_team_abbr'])&(pbp['rush_mod']>0), 1, 0)
-        pbp['RushFxG'] = np.where((pbp['event_team_abbr'] == pbp[f'{team[0]}_team_abbr'])&(pbp['rush_mod']>0), pbp['xG'], 0)
-        pbp['RushAxG'] = np.where((pbp['event_team_abbr'] == pbp[f'{team[1]}_team_abbr'])&(pbp['rush_mod']>0), pbp['xG'], 0)
-        pbp['RushFG'] = np.where((pbp['event_type'] == "goal") & (pbp['event_team_abbr'] == pbp[f'{team[0]}_team_abbr'])&(pbp['rush_mod']>0), 1, 0)
-        pbp['RushAG'] = np.where((pbp['event_type'] == "goal") & (pbp['event_team_abbr'] == pbp[f'{team[1]}_team_abbr'])&(pbp['rush_mod']>0), 1, 0)
+        pbp['Block'] = pbp['CA'] - pbp['FA']
+        pbp['RushF'] = np.where((pbp['event_team_abbr'] == pbp[f'{team[0]}_team_abbr'])&(pbp['rush']>0), 1, 0)
+        pbp['RushA'] = np.where((pbp['event_team_abbr'] == pbp[f'{team[1]}_team_abbr'])&(pbp['rush']>0), 1, 0)
+        pbp['RushFxG'] = np.where((pbp['event_team_abbr'] == pbp[f'{team[0]}_team_abbr'])&(pbp['rush']>0), pbp['xG'], 0)
+        pbp['RushAxG'] = np.where((pbp['event_team_abbr'] == pbp[f'{team[1]}_team_abbr'])&(pbp['rush']>0), pbp['xG'], 0)
+        pbp['RushFG'] = np.where((pbp['event_type'] == "goal") & (pbp['event_team_abbr'] == pbp[f'{team[0]}_team_abbr'])&(pbp['rush']>0), 1, 0)
+        pbp['RushAG'] = np.where((pbp['event_type'] == "goal") & (pbp['event_team_abbr'] == pbp[f'{team[1]}_team_abbr'])&(pbp['rush']>0), 1, 0)
 
         stats = pbp.groupby([f'{team[0]}_team_abbr','season']).agg(
             GP=('game_id','nunique'),
@@ -229,6 +232,7 @@ def calc_team(pbp):
             Draw=('Draw','sum'),
             Give=('Give','sum'),
             Take=('Take','sum'),
+            Block=('Block','sum'),
             RushF=('RushF','sum'),
             RushA=('RushA','sum'),
             RushFxG=('RushFxG','sum'),
@@ -258,6 +262,7 @@ def calc_team(pbp):
             Draw=('Draw','sum'),
             Give=('Give','sum'),
             Take=('Take','sum'),
+            Block=('Block','sum'),
             RushF=('RushF','sum'),
             RushA=('RushA','sum'),
             RushFxG=('RushFxG','sum'),
@@ -275,5 +280,76 @@ def calc_team(pbp):
     onice_stats['PM%'] = onice_stats['Take']/(onice_stats['Give']+onice_stats['Take'])
     onice_stats['HF%'] = onice_stats['HF']/(onice_stats['HF']+onice_stats['HA'])
     onice_stats['PENL%'] = onice_stats['Draw']/(onice_stats['Draw']+onice_stats['Penl'])
+
+    return onice_stats
+
+def calc_goalie(pbp,game_strength):
+    teams=[]
+    for team in [('away','home'),('home','away')]:
+        # Filter by game strength if not "all"
+        if game_strength != "all":
+            pbp = pbp.loc[pbp[f'strength_state_{team[0]}'].isin(game_strength)]
+
+        pbp['xGF'] = np.where(pbp['event_team_abbr'] == pbp[f'{team[0]}_team_abbr'], pbp['xG'], 0)
+        pbp['xGA'] = np.where(pbp['event_team_abbr'] == pbp[f'{team[1]}_team_abbr'], pbp['xG'], 0)
+        pbp['GF'] = np.where((pbp['event_type'] == "goal") & (pbp['event_team_abbr'] == pbp[f'{team[0]}_team_abbr']), 1, 0)
+        pbp['GA'] = np.where((pbp['event_type'] == "goal") & (pbp['event_team_abbr'] == pbp[f'{team[1]}_team_abbr']), 1, 0)
+        pbp['FF'] = np.where((pbp['event_type'].isin(fenwick_events)) & (pbp['event_team_abbr'] == pbp[f'{team[0]}_team_abbr']), 1, 0)
+        pbp['FA'] = np.where((pbp['event_type'].isin(fenwick_events)) & (pbp['event_team_abbr'] == pbp[f'{team[1]}_team_abbr']), 1, 0)
+        pbp['CF'] = np.where((pbp['event_type'].isin(fenwick_events+['blocked-shot'])) & (pbp['event_team_abbr'] == pbp[f'{team[0]}_team_abbr']), 1, 0)
+        pbp['CA'] = np.where((pbp['event_type'].isin(fenwick_events+['blocked-shot'])) & (pbp['event_team_abbr'] == pbp[f'{team[1]}_team_abbr']), 1, 0)
+        pbp['RushF'] = np.where((pbp['event_team_abbr'] == pbp[f'{team[0]}_team_abbr'])&(pbp['rush']>0), 1, 0)
+        pbp['RushA'] = np.where((pbp['event_team_abbr'] == pbp[f'{team[1]}_team_abbr'])&(pbp['rush']>0), 1, 0)
+        pbp['RushFxG'] = np.where((pbp['event_team_abbr'] == pbp[f'{team[0]}_team_abbr'])&(pbp['rush']>0), pbp['xG'], 0)
+        pbp['RushAxG'] = np.where((pbp['event_team_abbr'] == pbp[f'{team[1]}_team_abbr'])&(pbp['rush']>0), pbp['xG'], 0)
+        pbp['RushFG'] = np.where((pbp['event_type'] == "goal") & (pbp['event_team_abbr'] == pbp[f'{team[0]}_team_abbr'])&(pbp['rush']>0), 1, 0)
+        pbp['RushAG'] = np.where((pbp['event_type'] == "goal") & (pbp['event_team_abbr'] == pbp[f'{team[1]}_team_abbr'])&(pbp['rush']>0), 1, 0)
+
+        stats = pbp.groupby([f'{team[0]}_goalie_id',f'{team[0]}_team_abbr','season']).agg(
+            GP=('game_id','nunique'),
+            TOI=('event_length','sum'),
+            FF=('FF', 'sum'),
+            FA=('FA', 'sum'),
+            GF=('GF', 'sum'),
+            GA=('GA', 'sum'),
+            xGF=('xGF', 'sum'),
+            xGA=('xGA', 'sum'),
+            CF=('CF','sum'),
+            CA=('CA','sum'),
+            RushF=('RushF','sum'),
+            RushA=('RushA','sum'),
+            RushFxG=('RushFxG','sum'),
+            RushAxG=('RushAxG','sum'),
+            RushFG=('RushFG','sum'),
+            RushAG=('RushAG','sum'),
+        ).reset_index().rename(columns={f'{team[0]}_goalie_id':"ID",f'{team[0]}_team_abbr':"Team",'season':"Season"})
+        teams.append(stats)
+    
+    onice_stats = pd.concat(teams).groupby(['ID','Team','Season']).agg(
+            GP=('GP','sum'),
+            TOI=('TOI','sum'),
+            FF=('FF', 'sum'),
+            FA=('FA', 'sum'),
+            GF=('GF', 'sum'),
+            GA=('GA', 'sum'),
+            xGF=('xGF', 'sum'),
+            xGA=('xGA', 'sum'),
+            CF=('CF','sum'),
+            CA=('CA','sum'),
+            RushF=('RushF','sum'),
+            RushA=('RushA','sum'),
+            RushFxG=('RushFxG','sum'),
+            RushAxG=('RushAxG','sum'),
+            RushFG=('RushFG','sum'),
+            RushAG=('RushAG','sum'),
+    ).reset_index()
+
+    onice_stats['xGF/FF'] = onice_stats['xGF']/onice_stats['FF']
+    onice_stats['GF/xGF'] = onice_stats['GF']/onice_stats['xGF']
+    onice_stats['FshF%'] = onice_stats['GF']/onice_stats['FF']
+    onice_stats['xGA/FA'] = onice_stats['xGA']/onice_stats['FA']
+    onice_stats['GA/xGA'] = onice_stats['GA']/onice_stats['xGA']
+    onice_stats['FshA%'] = onice_stats['GA']/onice_stats['FA']
+    onice_stats['GSAx'] = onice_stats['xGA']-onice_stats['GA']
 
     return onice_stats

@@ -41,10 +41,7 @@ def wsba_rink(display_range='offense',rotation = 0):
 def prep_plot_data(pbp,events,strengths,marker_dict=event_markers,xg='moneypuck'):
     try: pbp['xG']
     except:
-        if xg == 'wsba':
-            pbp = wsba_xG(pbp)
-        else:
-            pbp = moneypuck_xG(pbp)
+        pbp = wsba_xG(pbp)
         pbp['xG'] = np.where(pbp['xG'].isna(),0,pbp['xG'])
 
     pbp['WSBA'] = pbp['event_player_1_name']+pbp['season'].astype(str)+pbp['event_team_abbr']
