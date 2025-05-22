@@ -178,7 +178,6 @@ def wsba_xG(pbp, hypertune = False, train = False, model_path = "tools/xg_model/
     #Shots must occur in specified events and strength states, occur in open play, and have valid coordinates    
     pbp_prep = pbp.loc[(pbp['event_type'].isin(events))&
                    (pbp['strength_state'].isin(strengths))&
-                   (pbp['period'] < 5)&
                    (pbp['x'].notna())&
                    (pbp['y'].notna())]
 
