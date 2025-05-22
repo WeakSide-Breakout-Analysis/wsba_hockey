@@ -102,19 +102,24 @@ def calc_indv(pbp,game_strength):
     return indv
 
 def calc_onice(pbp,game_strength):
-    # Convert player on-ice columns to vectors
+    #Convert player on-ice columns to vectors
     pbp['home_on_ice'] = pbp['home_on_1_id'].astype(str) + ";" + pbp['home_on_2_id'].astype(str) + ";" + pbp['home_on_3_id'].astype(str) + ";" + pbp['home_on_4_id'].astype(str) + ";" + pbp['home_on_5_id'].astype(str) + ";" + pbp['home_on_6_id'].astype(str)
     pbp['away_on_ice'] = pbp['away_on_1_id'].astype(str) + ";" + pbp['away_on_2_id'].astype(str) + ";" + pbp['away_on_3_id'].astype(str) + ";" + pbp['away_on_4_id'].astype(str) + ";" + pbp['away_on_5_id'].astype(str) + ";" + pbp['away_on_6_id'].astype(str)
     
-    # Remove NA players
+    #Remove NA players
     pbp['home_on_ice'] = pbp['home_on_ice'].str.replace(';nan', '', regex=True)
     pbp['away_on_ice'] = pbp['away_on_ice'].str.replace(';nan', '', regex=True)
-    
+
     def process_team_stats(df, on_ice_col, team_col, opp_col, game_strength):
-        df = df[['season','game_id', f'strength_state_{on_ice_col[:4]}','event_num', team_col, opp_col, 'event_type', 'event_team_abbr', on_ice_col,'ids_on','shift_type','event_length','zone_code','xG']].copy()
-        # Filter by game strength if not "all"
+        df = df[['season','game_id','strength_state','event_num', team_col, opp_col, 'event_type', 'event_team_venue','event_team_abbr', on_ice_col,'ids_on','shift_type','event_length','zone_code','xG']].copy()
+
+        #Flip strength state (when necessary) and filter by game strength if not "all"
         if game_strength != "all":
-            df = df.loc[df[f'strength_state_{on_ice_col[:4]}'].isin(game_strength)]
+            if game_strength not in ['3v3','4v4','5v5']:
+                for strength in game_strength:
+                    df['strength_state'] = np.where(np.logical_and(df['event_team_venue']==opp_col[0:4],df['strength_state']==strength[::-1]),strength,df['strength_state'])
+
+            df = df.loc[df['strength_state'].isin(game_strength)]
 
         df[on_ice_col] = df[on_ice_col].str.split(';')
         df = df.explode(on_ice_col)
@@ -183,9 +188,13 @@ def calc_onice(pbp,game_strength):
 def calc_team(pbp,game_strength):
     teams = []
     for team in [('away','home'),('home','away')]:
-        # Filter by game strength if not "all"
+        #Flip strength state (when necessary) and filter by game strength if not "all"
         if game_strength != "all":
-            pbp = pbp.loc[pbp[f'strength_state_{team[0]}'].isin(game_strength)]
+            if game_strength not in ['3v3','4v4','5v5']:
+                for strength in game_strength:
+                    pbp['strength_state'] = np.where(np.logical_and(pbp['event_team_venue']==team[1],pbp['strength_state']==strength[::-1]),strength,pbp['strength_state'])
+
+            pbp = pbp.loc[pbp['strength_state'].isin(game_strength)]
 
         pbp['xGF'] = np.where(pbp['event_team_abbr'] == pbp[f'{team[0]}_team_abbr'], pbp['xG'], 0)
         pbp['xGA'] = np.where(pbp['event_team_abbr'] == pbp[f'{team[1]}_team_abbr'], pbp['xG'], 0)
@@ -286,9 +295,13 @@ def calc_team(pbp,game_strength):
 def calc_goalie(pbp,game_strength):
     teams=[]
     for team in [('away','home'),('home','away')]:
-        # Filter by game strength if not "all"
+        #Flip strength state (when necessary) and filter by game strength if not "all"
         if game_strength != "all":
-            pbp = pbp.loc[pbp[f'strength_state_{team[0]}'].isin(game_strength)]
+            if game_strength not in ['3v3','4v4','5v5']:
+                for strength in game_strength:
+                    pbp['strength_state'] = np.where(np.logical_and(pbp['event_team_venue']==team[1],pbp['strength_state']==strength[::-1]),strength,pbp['strength_state'])
+
+            pbp = pbp.loc[pbp['strength_state'].isin(game_strength)]
 
         pbp['xGF'] = np.where(pbp['event_team_abbr'] == pbp[f'{team[0]}_team_abbr'], pbp['xG'], 0)
         pbp['xGA'] = np.where(pbp['event_team_abbr'] == pbp[f'{team[1]}_team_abbr'], pbp['xG'], 0)

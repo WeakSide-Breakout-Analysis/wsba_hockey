@@ -48,6 +48,34 @@ def get_col():
         "event_coach","away_coach","home_coach"
     ]
 
+def med_x_coord(group):
+    #Calculate median x coordinate of a corsi shot for a team in a period to determine the direction they are shooting in that period (for coordinate adjustments and geometric calculations)
+    med_x = group.loc[group['event_type'].isin(['blocked-shot','missed-shot','shot-on-goal','goal']),'x'].median(skipna=True)
+    group['med_x'] = med_x
+
+    return group
+
+def adjust_coords(pbp):
+    #Given JSON or ESPN pbp data, return pbp with adjusted coordinates
+
+    #Recalibrate coordinates
+    #Determine the direction teams are shooting in a given period
+    pbp = pbp.groupby(['event_team_venue','period','game_id'],group_keys=False).apply(med_x_coord)
+
+    pbp = pbp.reset_index(drop=True)
+
+    #Adjust coordinates
+    pbp['x_adj'] = np.where((((pbp['event_team_venue']=='home')&(pbp['med_x'] < 0))|((pbp['event_team_venue']=='away')&(pbp['med_x'] > 0))),-pbp['x'],pbp['x'])
+
+    #Adjust y if necessary
+    pbp['y_adj'] = np.where((pbp['x']==pbp['x_adj']),pbp['y'],-pbp['y'])
+
+    #Calculate event distance and angle relative to venue location
+    pbp['event_distance'] = np.where(pbp['event_team_venue']=='home',np.sqrt(((89 - pbp['x_adj'])**2) + (pbp['y_adj']**2)),np.sqrt((((-89) - pbp['x_adj'])**2) + (pbp['y_adj']**2)))
+    pbp['event_angle'] = np.where(pbp['event_team_venue']=='away',np.degrees(np.arctan2(abs(pbp['y_adj']), abs(89 - pbp['x_adj']))),np.degrees(np.arctan2(abs(pbp['y_adj']), abs((-89) - pbp['x_adj']))))
+
+    #Return: pbp with adjiusted coordinates
+    return pbp
 
 ## JSON FUNCTIONS ##
 def get_game_roster(json):
@@ -185,31 +213,6 @@ def parse_json(info):
 
     events['event_team_venue'] = np.where(events['details.eventOwnerTeamId']==info['home_team_id'],"home","away")
 
-    #Coordinate adjustments:
-    #The WSBA NHL Scraper includes three sets of coordinates per event:
-    # x, y - Raw coordinates from JSON pbpp
-    # x_fixed, y_fixed - Coordinates fixed to the right side of the ice (x is always greater than 0)
-    # x_adj, y_adj - Adjusted coordinates configuring away events with negative x vlaues while home events are always positive
-    
-    #Some games (mostly preseason and all star games) do not include coordinates.  
-    try:
-        events['x_fixed'] = abs(events['details.xCoord'])
-        events['y_fixed'] = np.where(events['details.xCoord']<0,-events['details.yCoord'],events['details.yCoord'])
-        events['x_adj'] = np.where(events['event_team_venue']=="home",events['x_fixed'],-events['x_fixed'])
-        events['y_adj'] = np.where(events['event_team_venue']=="home",events['y_fixed'],-events['y_fixed'])
-        events['event_distance'] = np.sqrt(((89 - events['x_fixed'])**2) + (events['y_fixed']**2))
-        events['event_angle'] = np.degrees(np.arctan2(abs(events['y_fixed']), abs(89 - events['x_fixed'])))
-    except TypeError:
-        print(f"No coordinates found for game {info['id'][0]}...")
-    
-        events['x_fixed'] = np.nan
-        events['y_fixed'] = np.nan
-        events['x_adj'] = np.nan
-        events['y_adj'] = np.nan
-        events['event_distance'] = np.nan
-        events['event_angle'] = np.nan
-    
-    
     events['event_team_abbr'] = events['details.eventOwnerTeamId'].replace({
         info['away_team_id']:[info['away_team_abbr']],
         info['home_team_id']:[info['home_team_abbr']]
@@ -239,6 +242,22 @@ def parse_json(info):
         "details.homeSOG":"home_sog"
     })
 
+    #Coordinate adjustments:
+    # x, y - Raw coordinates from JSON pbp
+    # x_adj, y_adj - Adjusted coordinates configuring the away offensive zone to the left and the home offensive zone to the right
+    #Some games (mostly preseason and all star games) do not include coordinates. 
+    
+    try:
+        events = adjust_coords(events)
+
+    except KeyError:
+        print(f"No coordinates found for game {info['game_id'][0]}...")
+    
+        events['x_adj'] = np.nan
+        events['y_adj'] = np.nan
+        events['event_distance'] = np.nan
+        events['event_angle'] = np.nan
+        
     #Period time adjustments (only 'seconds_elapsed' is included in the resulting data)
     events['period_seconds_elapsed'] = events['period_time_elasped'].apply(convert_to_seconds)
     events['seconds_elapsed'] = ((events['period']-1)*1200)+events['period_seconds_elapsed']
@@ -248,172 +267,7 @@ def parse_json(info):
     #Return: dataframe with parsed game
     return events
 
-### ESPN SCRAPING FUNCTIONS ###
-def espn_game_id(date,away,home):
-    #Given a date formatted as YYYY-MM-DD and teams, return game id from ESPN schedule
-    date = date.replace("-","")
 
-    #Retreive data
-    api = f"https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates={date}"
-    schedule = pd.json_normalize(rs.get(api).json()['events'])
-
-    #Create team abbreviation columns
-    schedule['away_team_abbr'] = schedule['shortName'].str[:3].str.strip(" ")
-    schedule['home_team_abbr'] = schedule['shortName'].str[-3:].str.strip(" ")
-    
-    #Modify team abbreviations as necessary
-    schedule = schedule.replace({
-        "LA":"LAK",
-        "NJ":"NJD",
-        "SJ":"SJS",
-        "TB":"TBL",
-    })
-
-    #Retreive game id
-    game_id = schedule.loc[(schedule['away_team_abbr']==away)&
-                           (schedule['home_team_abbr']==home),'id'].tolist()[0]
-
-    #Return: ESPN game id
-    return game_id
-
-def parse_espn(date,away,home):
-    #Given a date formatted as YYYY-MM-DD and teams, return game events
-    game_id = espn_game_id(date,away,home)
-    url = f'https://www.espn.com/nhl/playbyplay/_/gameId/{game_id}'
-    
-    #Code modified from Patrick Bacon
-
-    #Retreive game events as json
-    page = rs.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout = 500)
-    soup = BeautifulSoup(page.content.decode('ISO-8859-1'), 'lxml', multi_valued_attributes = None)
-    json = json_lib.loads(str(soup).split('"playGrps":')[1].split(',"tms"')[0])
-
-    #DataFrame of time-related info for events
-    clock_df = pd.DataFrame()
-
-    for period in range(0, len(json)):
-        clock_df = clock_df._append(pd.DataFrame(json[period]))
-
-    clock_df = clock_df[~pd.isna(clock_df.clock)]
-
-    # Needed to add .split(',"st":3')[0] for playoffs
-
-    #DataFrame of coordinates for events
-    coords_df = pd.DataFrame(json_lib.loads(str(soup).split('plays":')[1].split(',"st":1')[0].split(',"st":2')[0].split(',"st":3')[0]))
-
-    clock_df = clock_df.assign(
-        clock = clock_df.clock.apply(lambda x: x['displayValue'])
-    )
-
-    coords_df = coords_df.assign(
-        coords_x = coords_df[~pd.isna(coords_df.coordinate)].coordinate.apply(lambda x: x['x']).astype(int),
-        coords_y = coords_df[~pd.isna(coords_df.coordinate)].coordinate.apply(lambda y: y['y']).astype(int),
-    )
-
-    #Combine
-    espn_events = coords_df.merge(clock_df.loc[:, ['id', 'clock']])
-
-    espn_events = espn_events.assign(
-        period = espn_events['period'].apply(lambda x: x['number']),
-        minutes = espn_events['clock'].str.split(':').apply(lambda x: x[0]).astype(int),
-        seconds = espn_events['clock'].str.split(':').apply(lambda x: x[1]).astype(int),
-        event_type = espn_events['type'].apply(lambda x: x['txt'])
-    )
-
-    espn_events = espn_events.assign(coords_x = np.where((pd.isna(espn_events.coords_x)) & (pd.isna(espn_events.coords_y)) &
-                (espn_events.event_type=='Face Off'), 0, espn_events.coords_x
-    ),
-                      coords_y = np.where((pd.isna(espn_events.coords_x)) & (pd.isna(espn_events.coords_y)) &
-                (espn_events.event_type=='Face Off'), 0, espn_events.coords_y))
-
-    espn_events = espn_events[(~pd.isna(espn_events.coords_x)) & (~pd.isna(espn_events.coords_y))]
-
-    espn_events = espn_events.assign(
-        coords_x = espn_events.coords_x.astype(int),
-        coords_y = espn_events.coords_y.astype(int)
-    )
-    
-    #Rename events
-    #The turnover event includes just one player in the event information, meaning takeaways will have no coordinates for play-by-plays created by ESPN scraping
-    espn_events['event_type'] = espn_events['event_type'].replace({
-        "Face Off":'faceoff',
-        "Hit":'hit',
-        "Shot":'shot-on-goal',
-        "Missed":'missed-shot',
-        "Blocked":'blocked-shot',
-        "Goal":'goal',
-        "Turnover":'giveaway',
-        "Delayed Penalty":'delayed-penalty',
-        "Penalty":'penalty',
-    })
-
-    #Period time adjustments (only 'seconds_elapsed' is included in the resulting data)
-    espn_events['period_time_simple'] = espn_events['clock'].str.replace(":","",regex=True)
-    espn_events['period_seconds_elapsed'] = np.where(espn_events['period_time_simple'].str.len()==3,
-                                            ((espn_events['period_time_simple'].str[0].astype(int)*60)+espn_events['period_time_simple'].str[-2:].astype(int)),
-                                            ((espn_events['period_time_simple'].str[0:2].astype(int)*60)+espn_events['period_time_simple'].str[-2:].astype(int)))
-    espn_events['seconds_elapsed'] = ((espn_events['period']-1)*1200)+espn_events['period_seconds_elapsed']
-
-    espn_events = espn_events.rename(columns = {'text':'description'})
-
-    #Add event team
-    espn_events['event_team_abbr'] = espn_events['homeAway'].replace({
-        "away":away,
-        "home":home
-    })
-
-    #Some games (mostly preseason and all star games) do not include coordinates.  
-    try:
-        espn_events['x_fixed'] = abs(espn_events['coords_x'])
-        espn_events['y_fixed'] = np.where(espn_events['coords_x']<0,-espn_events['coords_y'],espn_events['coords_y'])
-        espn_events['x_adj'] = np.where(espn_events['homeAway']=="home",espn_events['x_fixed'],-espn_events['x_fixed'])
-        espn_events['y_adj'] = np.where(espn_events['homeAway']=="home",espn_events['y_fixed'],-espn_events['y_fixed'])
-        espn_events['event_distance'] = np.sqrt(((89 - espn_events['x_fixed'])**2) + (espn_events['y_fixed']**2))
-        espn_events['event_angle'] = np.degrees(np.arctan2(abs(espn_events['y_fixed']), abs(89 - espn_events['x_fixed'])))
-    except TypeError:
-        print(f"No coordinates found for ESPN game...")
-    
-        espn_events['x_fixed'] = np.nan
-        espn_events['y_fixed'] = np.nan
-        espn_events['x_adj'] = np.nan
-        espn_events['y_adj'] = np.nan
-        espn_events['event_distance'] = np.nan
-        espn_events['event_angle'] = np.nan
-
-    #Assign score and fenwick for each event
-    fenwick_events = ['missed-shot','shot-on-goal','goal']
-    ag = 0
-    ags = []
-    hg = 0
-    hgs = []
-
-    af = 0
-    afs = []
-    hf = 0
-    hfs = []
-    for event,team in zip(list(espn_events['event_type']),list(espn_events['homeAway'])):
-        if event in fenwick_events:
-            if team == "home":
-                hf += 1
-                if event == 'goal':
-                    hg += 1
-            else:
-                af += 1
-                if event == 'goal':
-                    ag += 1
-       
-        ags.append(ag)
-        hgs.append(hg)
-        afs.append(af)
-        hfs.append(hf)
-
-    espn_events['away_score'] = ags
-    espn_events['home_score'] = hgs
-    espn_events['away_fenwick'] = afs
-    espn_events['home_fenwick'] = hfs
-    #Return: play-by-play events in supplied game from ESPN
-    return espn_events
-    
 ## HTML PBP FUNCTIONS ##
 def strip_html_pbp(td,rosters):
     #Given html row, parse data from HTML pbp
@@ -498,7 +352,6 @@ def parse_html(info):
     
     #Parsing
     event_log = []
-    target = 0
     for event in events:
         events_dict = {}
         if event[0] == "#" or event[4] in ['GOFF', 'EGT', 'PGSTR', 'PGEND', 'ANTHEM', 'SPC', 'PBOX', 'EISTR', 'EIEND','EGPID'] or event[3]=='-16:0-':
@@ -686,19 +539,9 @@ def assign_target(data):
     #New sort
     data = data.sort_values(['period','seconds_elapsed','event_type','event_team_abbr','event_player_1_id','event_player_2_id'])
 
-    target = []
-    i = 0
     #Target number distingushes events that occur in the same second to assist in merging the JSON and HTML
     #Sometimes the target number may not reflect the same order as the event number in either document (especially in earlier seasons where the events are out of order in the HTML or JSON)
-    for event in data['event_type']:
-        if event in ['penalty','blocked-shot','missed-shot','shot-on-goal','goal']:
-            i += 1
-            target.append(i)
-        else:
-            target.append(0)
-
-    #Add event target number
-    data['target_num'] = target
+    data['target_num'] = np.where(data['event_type'].isin(['penalty','blocked-shot','missed-shot','shot-on-goal','goal']),data['event_type'].isin(['penalty','blocked-shot','missed-shot','shot-on-goal','goal']).cumsum(),0)
 
     #Revert sort and return dataframe
     return data.reset_index()
@@ -711,11 +554,12 @@ def combine_pbp(info,sources):
     #Route data combining - json if season is after 2009-2010:
     if str(info['season']) in ['20052006','20062007','20072008','20082009','20092010']:
         #ESPN x HTML
-        espn_pbp = parse_espn(str(info['game_date']),info['away_team_abbr'],info['home_team_abbr']).rename(columns={'coords_x':'x',"coords_y":'y'}).sort_values(['period','seconds_elapsed']).reset_index()
-        merge_col = ['period','seconds_elapsed','event_type','event_team_abbr']
+        #espn_pbp = parse_espn(str(info['game_date']),info['away_team_abbr'],info['home_team_abbr']).rename(columns={'coords_x':'x',"coords_y":'y'}).sort_values(['period','seconds_elapsed']).reset_index()
+        #merge_col = ['period','seconds_elapsed','event_type','event_team_abbr']
 
         #Merge pbp
-        df = pd.merge(html_pbp,espn_pbp,how='left',on=merge_col)
+        #df = pd.merge(html_pbp,espn_pbp,how='left',on=merge_col)
+        print('In-repair, please try again later...')
 
     else:
         #JSON x HTML
@@ -1135,66 +979,11 @@ def combine_data(info,sources):
         df['event_coach'] = np.where(df['event_team_abbr']==df['home_team_abbr'],coaches['home'],np.where(df['event_team_abbr']==df['away_team_abbr'],coaches['away'],""))
 
     #Assign score, corsi, fenwick, and penalties for each event
-    fenwick_events = ['missed-shot','shot-on-goal','goal']
-    ag = 0
-    ags = []
-    hg = 0
-    hgs = []
-
-    ac = 0
-    acs = []
-    hc = 0
-    hcs = []
-
-    af = 0
-    afs = []
-    hf = 0
-    hfs = []
-
-    ap = 0
-    aps = []
-    hp = 0
-    hps = []
-
-    for event,team in zip(list(df['event_type']),list(df['event_team_venue'])):
-        if event in ['penalty','blocked-shot']+fenwick_events:
-            if event in ['blocked-shot']+fenwick_events:
-                if team == "home":
-                    hc += 1
-                    if event not in ['blocked-shot']: 
-                        hf += 1
-                    if event == 'goal':
-                        hg += 1
-                else:
-                    ac += 1
-                    if event not in ['blocked-shot']: 
-                        af += 1
-                    if event == 'goal':
-                        ag += 1
-            if event == 'penalty':
-                if team == "home":
-                    hp += 1
-                else:
-                    ap += 1
-
-
-        ags.append(ag)
-        hgs.append(hg)
-        acs.append(ac)
-        hcs.append(hc)
-        afs.append(af)
-        hfs.append(hf)
-        aps.append(ap)
-        hps.append(hp)
-
-    df['away_score'] = ags
-    df['home_score'] = hgs
-    df['away_corsi'] = acs
-    df['home_corsi'] = hcs
-    df['away_fenwick'] = afs
-    df['home_fenwick'] = hfs
-    df['away_penalties'] = aps
-    df['home_penalties'] = hps
+    for venue in ['away','home']:
+        df[f'{venue}_score'] = ((df['event_team_venue']==venue)&(df['event_type']=='goal')).cumsum()
+        df[f'{venue}_corsi'] = ((df['event_team_venue']==venue)&(df['event_type'].isin(['blocked-shot','missed-shot','shot-on-goal','goal']))).cumsum()
+        df[f'{venue}_fenwick'] = ((df['event_team_venue']==venue)&(df['event_type'].isin(['missed-shot','shot-on-goal','goal']))).cumsum()
+        df[f'{venue}_penalties'] = ((df['event_team_venue']==venue)&(df['event_type']=='penalty')).cumsum()
        
     #Forward fill as necessary
     cols = ['period_type','home_team_defending_side','away_coach','home_coach']

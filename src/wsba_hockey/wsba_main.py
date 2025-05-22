@@ -803,7 +803,10 @@ def nhl_shooting_impacts(agg,type):
 
         #Goal Composites...
         complete['LiEG'] = complete['EGF'] - complete['EGi']
+        complete['LiExG'] = complete['ExGF'] - complete['ExGi']
         complete['LiGIn'] = complete['LiEG']*complete['AC%']
+        complete['LixGIn'] = complete['LiExG']*complete['AC%']
+        complete['ALiGIn'] = complete['LiGIn']-complete['LixGIn']
         complete['CompGI'] = complete['EGi'] + complete['LiGIn'] 
         complete['LiRelGI'] = complete['CompGI'] - (complete['EGF']-complete['CompGI'])
         complete['NetGI'] = complete['EGF'] - complete['EGA']
@@ -811,7 +814,10 @@ def nhl_shooting_impacts(agg,type):
 
         #...and their percentiles
         complete['LiEG-P'] = complete['LiEG'].rank(pct=True)
+        complete['LiExG-P'] = complete['LiExG'].rank(pct=True)
         complete['LiGIn-P'] = complete['LiGIn'].rank(pct=True)
+        complete['LixGIn-P'] = complete['LixGIn'].rank(pct=True)
+        complete['ALiGIn-P'] = complete['ALiGIn'].rank(pct=True)
         complete['CompGI-P'] = complete['CompGI'].rank(pct=True)
         complete['LiRelGI-P'] = complete['LiRelGI'].rank(pct=True)
         complete['NetGI-P'] = complete['NetGI'].rank(pct=True)
@@ -819,7 +825,10 @@ def nhl_shooting_impacts(agg,type):
 
         #..and then their totals
         complete['LiEG-T'] = (complete['LiEG']/60)*complete['TOI']
+        complete['LiExG-T'] = (complete['LiExG']/60)*complete['TOI']
         complete['LiGIn-T'] = (complete['LiGIn']/60)*complete['TOI']
+        complete['LixGIn-T'] = (complete['LixGIn']/60)*complete['TOI']
+        complete['ALiGIn-T'] = (complete['ALiGIn']/60)*complete['TOI']
         complete['CompGI-T'] = (complete['CompGI']/60)*complete['TOI']
         complete['LiRelGI-T'] = (complete['LiRelGI']/60)*complete['TOI']
         complete['NetGI-T'] = (complete['NetGI']/60)*complete['TOI']
@@ -849,10 +858,6 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
         pbp['xG']
     except KeyError: 
         pbp = wsba_xG(pbp)
-
-    #Add venue-relative strength state columns (for on-ice stat calculation)
-    pbp['strength_state_away'] = pbp['strength_state_venue']
-    pbp['strength_state_home'] = pbp['strength_state_venue'][::-1]
 
     #Filter by season types, remove shootouts, remove shots with no coordinates, and remove shots on empty nets
     pbp_noshot = pbp.loc[(pbp['season_type'].isin(season_types)) & (pbp['period'] < 5) & ~(pbp['event_type'].isin(fenwick_events))]
@@ -1166,7 +1171,7 @@ def repo_load_pbp(seasons = []):
 
     #Add parquet to total
     print(f'Loading play-by-play from the following seasons: {seasons}...')
-    dfs = [pd.read_parquet(f"https://github.com/owensingh38/wsba_hockey/raw/refs/heads/main/src/wsba_hockey/pbp/parquet/nhl_pbp_{season}.parquet") for season in seasons]
+    dfs = [pd.read_parquet(f"https://f005.backblazeb2.com/file/weakside-breakout/pbp/nhl_pbp_{season}.parquet") for season in seasons]
 
     return pd.concat(dfs)
 

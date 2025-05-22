@@ -38,7 +38,7 @@ def wsba_rink(display_range='offense',rotation = 0):
             despine=True
         )
 
-def prep_plot_data(pbp,events,strengths,marker_dict=event_markers,xg='moneypuck'):
+def prep_plot_data(pbp,events,strengths,marker_dict=event_markers):
     try: pbp['xG']
     except:
         pbp = wsba_xG(pbp)
@@ -46,8 +46,8 @@ def prep_plot_data(pbp,events,strengths,marker_dict=event_markers,xg='moneypuck'
 
     pbp['WSBA'] = pbp['event_player_1_name']+pbp['season'].astype(str)+pbp['event_team_abbr']
     
-    pbp['x_plot'] = pbp['y_fixed']*-1
-    pbp['y_plot'] = pbp['x_fixed']
+    pbp['x_plot'] = np.where(pbp['x']<0,-pbp['y_adj'],pbp['y_adj'])
+    pbp['y_plot'] = abs(pbp['x_adj'])
 
     pbp['home_on_ice'] = pbp['home_on_1'].astype(str) + ";" + pbp['home_on_2'].astype(str) + ";" + pbp['home_on_3'].astype(str) + ";" + pbp['home_on_4'].astype(str) + ";" + pbp['home_on_5'].astype(str) + ";" + pbp['home_on_6'].astype(str)
     pbp['away_on_ice'] = pbp['away_on_1'].astype(str) + ";" + pbp['away_on_2'].astype(str) + ";" + pbp['away_on_3'].astype(str) + ";" + pbp['away_on_4'].astype(str) + ";" + pbp['away_on_5'].astype(str) + ";" + pbp['away_on_6'].astype(str)
@@ -58,9 +58,7 @@ def prep_plot_data(pbp,events,strengths,marker_dict=event_markers,xg='moneypuck'
     pbp['size'] = np.where(pbp['xG']<=0,40,pbp['xG']*400)
     pbp['marker'] = pbp['event_type'].replace(marker_dict)
 
-    pbp = pbp.loc[(pbp['event_type'].isin(events))&
-                  (pbp['event_distance']<=89)&
-                  (pbp['x_fixed']<=89)]
+    pbp = pbp.loc[(pbp['event_type'].isin(events))]
     
     if strengths != 'all':
         pbp = pbp.loc[(pbp['strength_state'].isin(strengths))]
@@ -78,9 +76,9 @@ def league_shots(pbp,events,strengths):
 
     return xgoals_smooth
 
-def plot_skater_shots(pbp, player, season, team, strengths, title = None, marker_dict=event_markers, onice='for', legend=False,xg='moneypuck'):
+def plot_skater_shots(pbp, player, season, team, strengths, title = None, marker_dict=event_markers, onice='for', legend=False):
     shots = ['missed-shot','shot-on-goal','goal']
-    pbp = prep_plot_data(pbp,shots,strengths,marker_dict,xg)
+    pbp = prep_plot_data(pbp,shots,strengths,marker_dict)
     pbp = pbp.loc[(pbp['season'].astype(str)==season)&((pbp['away_team_abbr']==team)|(pbp['home_team_abbr']==team))]
 
     team_data = pd.read_csv('teaminfo/nhl_teaminfo.csv')
@@ -108,14 +106,14 @@ def plot_skater_shots(pbp, player, season, team, strengths, title = None, marker
     
     return fig
     
-def plot_game_events(pbp,game_id,events,strengths,marker_dict=event_markers,team_colors={'away':'secondary','home':'primary'},legend=False,xg='moneypuck'):
-    pbp = prep_plot_data(pbp,events,strengths,marker_dict,xg)
-    pbp = pbp.loc[pbp['game_id'].astype(str)==game_id]
-
+def plot_game_events(pbp,game_id,events,strengths,marker_dict=event_markers,team_colors={'away':'secondary','home':'primary'},legend=False):
+    pbp = prep_plot_data(pbp,events,strengths,marker_dict)
+    pbp = pbp.loc[pbp['game_id'].astype(str)==str(game_id)]
+    
     away_abbr = list(pbp['away_team_abbr'])[0]
     home_abbr = list(pbp['home_team_abbr'])[0]
     date = list(pbp['game_date'])[0]
-    season = f'{game_id[0:4]}{int(game_id[0:4])+1}'
+    season = list(pbp['season'])[0]
 
     team_data = pd.read_csv('teaminfo/nhl_teaminfo.csv')
     team_info ={

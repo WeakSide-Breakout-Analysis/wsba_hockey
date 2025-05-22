@@ -4,6 +4,10 @@ import xgboost as xgb
 import scipy.sparse as sp
 import joblib
 import wsba_main as wsba
+import tools.scraping as scraping
+from sklearn.calibration import calibration_curve
+from sklearn.metrics import roc_curve, auc
+import matplotlib.pyplot as plt
 
 ### XG_MODEL FUNCTIONS ###
 # Provided in this file are functions vital to the goal prediction model in the WSBA Hockey Python package. #
@@ -15,19 +19,15 @@ continuous = ['event_distance',
             'event_angle',
             'seconds_elapsed',
             'period',
-            'x_fixed',
-            'y_fixed',
-            'x_fixed_last',
-            'y_fixed_last',
+            'x_adj',
+            'y_adj',
             'distance_from_last',
             'angle_from_last',
             'seconds_since_last',
             'speed_from_last',
             'speed_of_angle_from_last',
             'score_state',
-            'event_skaters',
-            'strength_diff',
-            'fenwick_state'
+            'strength_diff'
             ]
 boolean = ['is_home',
         'wrist',
@@ -57,8 +57,6 @@ boolean = ['is_home',
         'regular',
         'empty_net',
         'offwing',
-        'blocker',
-        'glove',
         'rush',
         'rebound'
         ]
@@ -98,30 +96,32 @@ def add_hand(pbp):
 
     #Add hands
     pbp['event_player_1_hand'] = pbp['event_player_1_id'].astype(str).str.replace('.0','').replace(roster_dict)
-    pbp['event_goalie_hand'] = pbp['event_goalie_id'].astype(str).str.replace('.0','').replace(roster_dict)
-
     pbp['event_player_1_hand'] = pbp['event_player_1_hand'].replace('nan',np.nan)
-    pbp['event_goalie_hand'] = pbp['event_goalie_hand'].replace('nan',np.nan)
 
     return pbp
 
-def prep_xG_data(pbp):
+def prep_xG_data(pbp,add=True):
     #Prep data for xG training and calculation
 
-    #Add player handedness for offwing shot calculation
-    data = add_hand(pbp)
-    
+    if add:
+        #Add player handedness for offwing shot calculation
+        data = add_hand(pbp)
+    else:
+        data = pbp
+        
     #Informal groupby
     data = data.sort_values(by=['season','game_id','period','seconds_elapsed','event_num'])
 
+    #Recalibrate times series data with current data
+    data['seconds_since_last'] = data['seconds_elapsed'] - data['seconds_elapsed'].shift(1) 
     #Prevent leaking between games by setting value to zero when no time has occured in game
     data["seconds_since_last"] = np.where(data['seconds_elapsed']==0,0,data['seconds_since_last'])
     
     #Create last event columns
     data["event_team_last"] = data['event_team_abbr'].shift(1)
     data["event_type_last"] = data['event_type'].shift(1)
-    data["x_fixed_last"] = data['x_fixed'].shift(1)
-    data["y_fixed_last"] = data['y_fixed'].shift(1)
+    data["x_adj_last"] = data['x_adj'].shift(1)
+    data["y_adj_last"] = data['y_adj'].shift(1)
     data["zone_code_last"] = data['zone_code'].shift(1)
 
     data.sort_values(['season','game_id','period','seconds_elapsed','event_num'],inplace=True)
@@ -132,18 +132,16 @@ def prep_xG_data(pbp):
     data['score_state'] = np.where(data['score_state']<-4,-4,data['score_state'])
 
     data['strength_diff'] = np.where(data['away_team_abbr']==data['event_team_abbr'],data['away_skaters']-data['home_skaters'],data['home_skaters']-data['away_skaters'])
-    data['event_skaters'] = data['event_skaters'].astype(int)
     data['strength_state_venue'] = data['away_skaters'].astype(str)+'v'+data['home_skaters'].astype(str)
-    data['fenwick_state'] = np.where(data['away_team_abbr']==data['event_team_abbr'],data['away_fenwick']-data['home_fenwick'],data['home_fenwick']-data['away_fenwick'])
-    data['distance_from_last'] = np.sqrt((data['x_fixed'] - data['x_fixed_last'])**2 + (data['y_fixed'] - data['y_fixed_last'])**2)
-    data['angle_from_last'] = np.degrees(np.arctan2(abs(data['y_fixed'] - data['y_fixed_last']), abs(89 - (data['x_fixed']-data['x_fixed_last']))))
+    data['distance_from_last'] = np.sqrt((data['x_adj'] - data['x_adj_last'])**2 + (data['y_adj'] - data['y_adj_last'])**2)
+    data['angle_from_last'] = np.degrees(np.arctan2(abs(data['y_adj'] - data['y_adj_last']), abs(89 - (data['x_adj']-data['x_adj_last']))))
 
     #Event speeds
     data['speed_from_last'] = np.where(data['seconds_since_last']==0,0,data['distance_from_last']/data['seconds_since_last'])
-    data['speed_of_angle_from_last'] = np.where(data['seconds_since_last']==0,0,data['distance_from_last']/data['seconds_since_last'])
+    data['speed_of_angle_from_last'] = np.where(data['seconds_since_last']==0,0,data['angle_from_last']/data['seconds_since_last'])
 
     #Rush and rebounds are labelled
-    data['rush'] = np.where((data['event_type'].isin(fenwick_events))&(data['zone_code_last'].isin(['N','D']))&(data['x_fixed']>25)&(data['seconds_since_last']<=5),1,0)
+    data['rush'] = np.where((data['event_type'].isin(fenwick_events))&(data['zone_code_last'].isin(['N','D']))&(data['x_adj']>25)&(data['seconds_since_last']<=5),1,0)
     data['rebound'] = np.where((data['event_type'].isin(fenwick_events))&(data['event_type_last'].isin(fenwick_events))&(data['seconds_since_last']<=2),1,0)
 
     #Create boolean variables
@@ -162,17 +160,19 @@ def prep_xG_data(pbp):
     #Misc variables
     data['empty_net'] = np.where((data['event_type'].isin(fenwick_events))&(data['event_goalie_id'].isna()),1,0)
     data['regular'] = (data['season_type']==2).astype(int)
-    data['offwing'] = np.where(((data['y_fixed']<0)&(data['event_player_1_hand']=='L'))|((data['y_fixed']>=0)&(data['event_player_1_hand']=='R')),1,0)
-    data['blocker'] = np.where(((data['y_fixed']<0)&(data['event_goalie_hand']=='R'))|((data['y_fixed']>=0)&(data['event_goalie_hand']=='L')),1,0)
-    data['glove'] = np.where(((data['y_fixed']<0)&(data['event_goalie_hand']=='L'))|((data['y_fixed']>=0)&(data['event_goalie_hand']=='R')),1,0)
-
+    data['offwing'] = np.where(((data['y_adj']<0)&(data['event_player_1_hand']=='L'))|((data['y_adj']>=0)&(data['event_player_1_hand']=='R')),1,0)
+    
     #Return: pbp data prepared to train and calculate the xG model
     return data
 
 def wsba_xG(pbp, hypertune = False, train = False, model_path = "tools/xg_model/wsba_xg.joblib", train_runs = 20, cv_runs = 20):
     #Train and calculate the WSBA Expected Goals model
 
+    #Add index for future merging
     pbp['event_index'] = pbp.index
+
+    #Recalibrate coordinates
+    pbp = scraping.adjust_coords(pbp)
 
     #Filter unwanted data:
     #Shots must occur in specified events and strength states, occur in open play, and have valid coordinates    
@@ -180,8 +180,7 @@ def wsba_xG(pbp, hypertune = False, train = False, model_path = "tools/xg_model/
                    (pbp['strength_state'].isin(strengths))&
                    (pbp['period'] < 5)&
                    (pbp['x'].notna())&
-                   (pbp['y'].notna())&
-                   ~(pbp['description'].str.lower().str.contains('penalty shot',regex=True,na=False))]
+                   (pbp['y'].notna())]
 
     #Prep Data
     data = prep_xG_data(pbp_prep)
@@ -328,6 +327,10 @@ def wsba_xG(pbp, hypertune = False, train = False, model_path = "tools/xg_model/
             verbose_eval=2,
         )
         
+        #Save model and metric plots
+        feature_importance(model)
+        roc_auc_curve(pbp,model)
+        reliability(pbp,model)
         joblib.dump(model,model_path)
         
     else:
@@ -347,11 +350,86 @@ def wsba_xG(pbp, hypertune = False, train = False, model_path = "tools/xg_model/
 
         return pbp_xg
 
-def evaluate_model(model,importance_type='gain'):
+def feature_importance(model):
+    print('Feature importance for WSBA xG Model...')
     model = joblib.load(model)
 
-    #model.feature_names = features
-    importance = pd.DataFrame([model.get_score(importance_type=importance_type)]).transpose().reset_index()
-    importance = importance.rename(columns={importance.columns[0]:'feature',importance.columns[1]:'importance'})
+    xgb.plot_importance(model)
+    plt.savefig('tools/xg_model/metrics/feature_importance.png',bbox_inches='tight')
 
-    return importance.sort_values(['importance'],ascending=False).reset_index(drop=True)
+def roc_auc_curve(pbp,model):
+    print('ROC-AUC Curve for WSBA xG Model...')
+
+    #Recalibrate coordinates
+    pbp = scraping.adjust_coords(pbp)
+
+    #Filter unwanted data:
+    #Shots must occur in specified events and strength states, occur in open play, and have valid coordinates    
+    pbp_prep = pbp.loc[(pbp['event_type'].isin(events))&
+                   (pbp['strength_state'].isin(strengths))&
+                   (pbp['period'] < 5)&
+                   (pbp['x'].notna())&
+                   (pbp['y'].notna())]
+
+    pbp = prep_xG_data(pbp_prep) 
+    model = joblib.load(model)
+
+    data = pbp.loc[pbp['event_type'].isin(fenwick_events)]
+    
+    data_sparse = sp.csr_matrix(data[[target]+continuous+boolean])
+
+    is_goal_vect = data_sparse[:, 0].A
+    predictors = data_sparse[:, 1:]
+    
+    xgb_matrix = xgb.DMatrix(data=predictors,label=is_goal_vect,feature_names=(continuous+boolean))
+
+    pred = model.predict(xgb_matrix)
+    fpr, tpr, _ = roc_curve(is_goal_vect, pred)
+    roc_auc = auc(fpr,tpr)
+    
+    plt.figure()
+    plt.plot(fpr,tpr,label=f"ROC (AUC = {roc_auc:.4f})")
+    plt.plot([0, 1], [0, 1], linestyle="--")
+    plt.title("WSBA xG ROC Curve")
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+    plt.legend(loc="lower right")
+    plt.savefig('tools/xg_model/metrics/roc_auc_curve.png')
+
+def reliability(pbp,model):
+    print('Reliability for WSBA xG Model...')
+
+    #Recalibrate coordinates
+    pbp = scraping.adjust_coords(pbp)
+
+    #Filter unwanted data:
+    #Shots must occur in specified events and strength states, occur in open play, and have valid coordinates    
+    pbp_prep = pbp.loc[(pbp['event_type'].isin(events))&
+                   (pbp['strength_state'].isin(strengths))&
+                   (pbp['period'] < 5)&
+                   (pbp['x'].notna())&
+                   (pbp['y'].notna())]
+
+    pbp = prep_xG_data(pbp_prep) 
+    model = joblib.load(model)
+
+    data = pbp.loc[pbp['event_type'].isin(fenwick_events)]
+    
+    data_sparse = sp.csr_matrix(data[[target]+continuous+boolean])
+
+    is_goal_vect = data_sparse[:, 0].A
+    predictors = data_sparse[:, 1:]
+    
+    xgb_matrix = xgb.DMatrix(data=predictors,label=is_goal_vect,feature_names=(continuous+boolean))
+
+    pred = model.predict(xgb_matrix)
+    fop, mpv = calibration_curve(is_goal_vect, pred, strategy='uniform')
+
+    plt.figure()
+    plt.plot(mpv, fop, "s-", label="Model")
+    plt.plot([0, 1], [0, 1], linestyle="--", label="Perfect calibration")
+    plt.title("WSBA xG Reliability Diagram")
+    plt.xlabel("Predicted Probability (mean)")
+    plt.ylabel("Fraction of positives")
+    plt.legend(loc="best")
+    plt.savefig('tools/xg_model/metrics/reliability.png')
