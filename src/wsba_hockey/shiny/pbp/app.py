@@ -66,22 +66,34 @@ def get_events():
 def get_strengths():
     #Update selectable strength_states
 
-    ui.update_selectize('strength',choices=['5v5','4v4','3v3','5v4','5v3','4v5','3v5','6v5','5v6','6v4','4v6','6v3','3v6'])
+    ui.update_selectize('strength',choices=['All','5v5','4v4','3v3','5v4','5v3','4v5','3v5','6v5','5v6','6v4','4v6','6v3','3v6'])
+
+@reactive.event(input.strength)
+def play_by_play():
+    #Retreive play by play for selected parameters
+    df = plays()
+
+    #If All is selected then ignore other selections
+    str_select = 'all' if 'All' in input.strength() else input.strength()
+
+    try:
+        df = wsba_plt.prep(df,events=input.event(),strengths=str_select)
+        game_title = df['game_title'].to_list()[0]
+
+        return [df,game_title]
+    except:
+        return [pd.DataFrame(),'']
 
 @render_widget
 def plot_game():
-    df = plays()
+    data = play_by_play()
+
+    df = data[0]
+    game_title = data[1]
 
     if df.empty:
         return wsba_plt.wsba_rink()
-    
     else:
-        try:
-            df = wsba_plt.prep(df,events=input.event(),strengths=input.strength())
-            game_title = df['game_title'].to_list()[0]
-        except:
-            return wsba_plt.wsba_rink()
-
         colors = wsba_plt.colors(df)
 
         rink = wsba_plt.wsba_rink()
@@ -90,7 +102,7 @@ def plot_game():
                         size='size',color='Team',
                         color_discrete_map=colors,
                         hover_name='Description',
-                        hover_data=['Period','Time (in seconds)',
+                        hover_data=['Event Num.','Period','Time (in seconds)',
                                     'Away Score','Home Score','x','y',
                                     'Event Distance from Attacking Net',
                                     'Event Angle to Attacking Net',
@@ -102,7 +114,7 @@ def plot_game():
         return rink.update_layout(
                 title=dict(text=game_title,
                     x=0.5,
-                    y=0.95,
+                    y=0.94,
                     xanchor='center',
                     yanchor='top',
                 ),
@@ -110,8 +122,32 @@ def plot_game():
                 legend=dict(
                     orientation='h',
                     x=0.5,
-                    y=0.95,
+                    y=0.06,
                     xanchor='center',
-                    yanchor='top',
+                    yanchor='bottom',
                 )
                 )
+    
+@render.data_frame
+def pbp_table():
+    #Display pbp table below the game plot
+    df = play_by_play()[0]
+    if not df.empty:
+        df = df[['event_num','period','period_type',
+        'seconds_elapsed',"strength_state",
+        "event_type_code","event_type","event_team_abbr",
+        "event_player_1_name","event_player_2_name","event_player_3_name",
+        "shot_type","zone_code","x","y",
+        "event_skaters","away_skaters","home_skaters",
+        "event_distance","event_angle","seconds_since_last",
+        "away_score","home_score", "away_fenwick", "home_fenwick",
+        "away_on_1","away_on_2","away_on_3","away_on_4","away_on_5","away_on_6","away_goalie",
+        "home_on_1","home_on_2","home_on_3","home_on_4","home_on_5","home_on_6","home_goalie",
+        "away_coach","home_coach"]]
+    
+    return render.DataTable(df,
+                           width='fit-content',
+                           selection_mode='rows',
+                           styles=[
+                               {'class':'text-center'},
+                           ])

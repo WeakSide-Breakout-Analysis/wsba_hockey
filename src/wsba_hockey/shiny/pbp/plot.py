@@ -33,7 +33,11 @@ def colors(df):
     return team_info
 
 def prep(df,events,strengths):
-    df = df.loc[(df['event_type'].isin(events))&(df['strength_state'].isin(strengths))]
+    df = df.loc[(df['event_type'].isin(events))]
+
+    if strengths != 'all':
+        df = df.loc[((df['strength_state'].isin(strengths)))]
+
     df['xG'] = df['xG'].fillna(0)
     df['size'] = np.where(df['xG']<=0,40,df['xG']*400)
     
@@ -41,6 +45,7 @@ def prep(df,events,strengths):
     
     df['Description'] = df['description']
     df['Team'] = df['event_team_abbr']
+    df['Event Num.'] = df['event_num']
     df['Period'] = df['period']
     df['Time (in seconds)'] = df['seconds_elapsed']
     df['Away Score'] = df['away_score']
