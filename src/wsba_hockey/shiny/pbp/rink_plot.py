@@ -87,10 +87,10 @@ def rink(setting = "full", vertical = False):
         fig.add_traces(faceoff_circle(22, 69))
         fig.add_traces(faceoff_circle(-22, -69))
         fig.add_traces(faceoff_circle(22, -69))
-        fig.add_traces(faceoff_circle(-22, -18, False))
-        fig.add_traces(faceoff_circle(22, -18, False))
-        fig.add_traces(faceoff_circle(-22, 18, False))
-        fig.add_traces(faceoff_circle(22, 18, False))
+        fig.add_traces(faceoff_circle(-22, -20, False))
+        fig.add_traces(faceoff_circle(22, -20, False))
+        fig.add_traces(faceoff_circle(-22, 20, False))
+        fig.add_traces(faceoff_circle(22, 20, False))
         
         # Sidelines
         theta_lines = np.linspace(0, np.pi/2, 20)
@@ -178,10 +178,10 @@ def rink(setting = "full", vertical = False):
         fig.add_traces(faceoff_circle(-69, 22))
         fig.add_traces(faceoff_circle(69, -22))
         fig.add_traces(faceoff_circle(69, 22))
-        fig.add_traces(faceoff_circle(-18, -22, False))
-        fig.add_traces(faceoff_circle(-18, 22, False))
-        fig.add_traces(faceoff_circle(18, -22, False))
-        fig.add_traces(faceoff_circle(18, 22, False))
+        fig.add_traces(faceoff_circle(-20, -22, False))
+        fig.add_traces(faceoff_circle(-20, 22, False))
+        fig.add_traces(faceoff_circle(20, -22, False))
+        fig.add_traces(faceoff_circle(20, 22, False))
 
         # Sidelines
         theta_lines = np.linspace(0, np.pi / 2, 20)

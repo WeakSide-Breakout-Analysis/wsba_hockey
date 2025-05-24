@@ -16,6 +16,10 @@ with ui.sidebar():
     ui.input_selectize('game_select',
                       'Select a game:',
                       [])
+    ui.input_selectize('event',
+                       'Select Events:',
+                       [],
+                       multiple=True)
 
 @reactive.calc
 def df():
@@ -45,16 +49,27 @@ def plays():
     pbp = df()
     return pbp.loc[pbp['game_id'].astype(str)==str(input.game_select())]
 
+@reactive.effect
+@reactive.event(input.game_select)
+def get_events():
+    #Update selectable events
+
+    ui.update_selectize('event',choices=var.events)
+
 @render_widget
 def plot_game():
     df = plays()
 
-    if df.empty :
+    if df.empty:
         return wsba_plt.wsba_rink()
     
     else:
-        df = wsba_plt.prep(df,events=var.fenwick_events)
-        game_title = df['game_title'].to_list()[0]
+        try:
+            df = wsba_plt.prep(df,events=input.event())
+            game_title = df['game_title'].to_list()[0]
+        except:
+            return wsba_plt.wsba_rink()
+
         colors = wsba_plt.colors(df)
 
         rink = wsba_plt.wsba_rink()
@@ -63,7 +78,8 @@ def plot_game():
                         size='size',color='Team',
                         color_discrete_map=colors,
                         hover_name='Description',
-                        hover_data=['x','y',
+                        hover_data=['Period','Time (in seconds)',
+                                    'Away Score','Home Score','x','y',
                                     'Event Distance from Attacking Net',
                                     'Event Angle to Attacking Net',
                                     'xG'])

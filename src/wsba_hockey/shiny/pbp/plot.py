@@ -38,9 +38,13 @@ def prep(df,events):
     df['size'] = np.where(df['xG']<=0,40,df['xG']*400)
     
     df['marker'] = df['event_type'].replace(event_markers)
-
+    
     df['Description'] = df['description']
     df['Team'] = df['event_team_abbr']
+    df['Period'] = df['period']
+    df['Time (in seconds)'] = df['seconds_elapsed']
+    df['Away Score'] = df['away_score']
+    df['Home Score'] = df['home_score']
     df['x'] = df['x_adj']
     df['y'] = df['y_adj']
     df['Event Distance from Attacking Net'] = df['event_distance']
