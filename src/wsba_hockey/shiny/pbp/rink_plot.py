@@ -3,6 +3,7 @@ import numpy as np
 import plotly.graph_objects as go
 import io
 import base64
+import requests as rs
 from PIL import Image
 
 def rink(setting = "full", vertical = False):
@@ -221,7 +222,7 @@ def rink(setting = "full", vertical = False):
         )
 
     # Add logo
-    logo = Image.open('https://f005.backblazeb2.com/file/weakside-breakout/utils/wsba.png')
+    logo = Image.open(rs.get('https://f005.backblazeb2.com/file/weakside-breakout/utils/wsba.png',stream=True).raw)
 
     fig.add_layout_image(
         dict(
