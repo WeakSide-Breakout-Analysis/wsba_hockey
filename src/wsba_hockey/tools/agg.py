@@ -8,7 +8,7 @@ from .xg_model import *
 shot_types = ['wrist','deflected','tip-in','slap','backhand','snap','wrap-around','poke','bat','cradle','between-legs']
 fenwick_events = ['missed-shot','shot-on-goal','goal']
 
-def calc_indv(pbp,game_strength):
+def calc_indv(pbp,game_strength,second_group):
     # Filter by game strength if not "all"
     if game_strength != "all":
         pbp = pbp.loc[pbp['strength_state'].isin(game_strength)]
@@ -20,9 +20,15 @@ def calc_indv(pbp,game_strength):
     #Change second event team to goal-scoring team for goal events
     pbp['event_team_abbr_2'] = np.where(pbp['event_type']=='goal',pbp['event_team_abbr'],pbp['event_team_abbr_2'])
 
+    #Determine how to group
+    raw_group_1 = ['event_player_1_id','event_team_abbr']+second_group
+    raw_group_2 = ['event_player_2_id','event_team_abbr_2']+second_group
+    raw_group_3 = ['event_player_3_id','event_team_abbr']+second_group
+    clean_group = ['ID','Team','Season']+(['Game'] if 'game_id' in second_group else [])
+
     #First event player stats
     ep1 = (
-        pbp.loc[pbp['event_type'].isin(["goal", "shot-on-goal", "missed-shot","blocked-shot",'hit','giveaway','takeaway','faceoff','penalty'])].groupby(['event_player_1_id','event_team_abbr','season']).agg(
+        pbp.loc[pbp['event_type'].isin(["goal", "shot-on-goal", "missed-shot","blocked-shot",'hit','giveaway','takeaway','faceoff','penalty'])].groupby(raw_group_1).agg(
         Gi=('event_type', lambda x: (x == "goal").sum()),
         Fi=('event_type', lambda x: (x.isin(fenwick_events)).sum()),
         Ci=('event_type', lambda x: (x.isin(fenwick_events+['blocked-shot'])).sum()),
@@ -35,48 +41,48 @@ def calc_indv(pbp,game_strength):
         Penl5=('penalty_duration',lambda x: (x==5).sum()),
         PIM=('penalty_duration','sum'),
         FW=('event_type',lambda x: (x=='faceoff').sum())
-    ).reset_index().rename(columns={'event_player_1_id': 'ID', 'event_team_abbr': 'Team', 'season': 'Season'})
+    ).reset_index().rename(columns={'event_player_1_id': 'ID', 'event_team_abbr': 'Team', 'season': 'Season', 'game_id':'Game'})
     )
 
     #Second event player stats
     ep2 = (
-        pbp.loc[(pbp['event_type'].isin(['goal','blocked-shot','hit','faceoff','penalty']))&~(pbp['description'].str.lower().str.contains('blocked by teammate',na=False))].groupby(['event_player_2_id','event_team_abbr_2','season']).agg(
+        pbp.loc[(pbp['event_type'].isin(['goal','blocked-shot','hit','faceoff','penalty']))&~(pbp['description'].str.lower().str.contains('blocked by teammate',na=False))].groupby(raw_group_2).agg(
         A1=('event_type',lambda x: (x=='goal').sum()),
         HA=('event_type',lambda x: (x=='hit').sum()),
         Draw=('event_type',lambda x: (x=='penalty').sum()),
         FL=('event_type',lambda x: (x=='faceoff').sum()),
         Block=('event_type',lambda x:(x=='blocked-shot').sum())
-    ).reset_index().rename(columns={'event_player_2_id': 'ID', 'event_team_abbr_2': 'Team', 'season': 'Season'})
+    ).reset_index().rename(columns={'event_player_2_id': 'ID', 'event_team_abbr_2': 'Team', 'season': 'Season', 'game_id':'Game'})
     )
 
     #Third event player stats
     ep3 = (
-        pbp.loc[pbp['event_type'].isin(["goal"])].groupby(['event_player_3_id','event_team_abbr','season']).agg(
+        pbp.loc[pbp['event_type'].isin(["goal"])].groupby(raw_group_3).agg(
         A2=('event_type', 'count')
-    ).reset_index().rename(columns={'event_player_3_id': 'ID', 'event_team_abbr': 'Team', 'season': 'Season'})
+    ).reset_index().rename(columns={'event_player_3_id': 'ID', 'event_team_abbr': 'Team', 'season': 'Season', 'game_id':'Game'})
     )
     
     #Rush events
     rush = (
-        pbp.loc[(pbp['event_type'].isin(fenwick_events))&(pbp['rush']>0)].groupby(['event_player_1_id','event_team_abbr','season']).agg(
+        pbp.loc[(pbp['event_type'].isin(fenwick_events))&(pbp['rush']>0)].groupby(raw_group_1).agg(
         Rush=('event_type','count'),
         Rush_G=('event_type',lambda x: (x == 'goal').sum()),
         Rush_xG=('xG','sum')
-    ).reset_index().rename(columns={'event_player_1_id': 'ID', 'event_team_abbr': 'Team', 'season': 'Season', 'Rush_G': 'Rush G', 'Rush_xG': 'Rush xG'})
+    ).reset_index().rename(columns={'event_player_1_id': 'ID', 'event_team_abbr': 'Team', 'season': 'Season', 'game_id':'Game', 'Rush_G': 'Rush G', 'Rush_xG': 'Rush xG'})
     )
 
-    indv = pd.merge(ep1,ep2,how='outer',on=['ID','Season','Team'])
-    indv = pd.merge(indv,ep3,how='outer',on=['ID','Season','Team'])
-    indv = pd.merge(indv,rush,how='outer',on=['ID','Season','Team'])
+    indv = pd.merge(ep1,ep2,how='outer',on=clean_group)
+    indv = pd.merge(indv,ep3,how='outer',on=clean_group)
+    indv = pd.merge(indv,rush,how='outer',on=clean_group)
 
     #Shot Types
     for type in shot_types:
         shot = (
-            pbp.loc[(pbp['event_type'].isin(["goal", "shot-on-goal", "missed-shot"])&(pbp['shot_type']==type))].groupby(['event_player_1_id', 'event_team_abbr', 'season']).agg(
+            pbp.loc[(pbp['event_type'].isin(["goal", "shot-on-goal", "missed-shot"])&(pbp['shot_type']==type))].groupby(raw_group_1).agg(
             Gi=('event_type', lambda x: (x == "goal").sum()),
             Fi=('event_type', lambda x: (x != "blocked-shot").sum()),
             xGi=('xG', 'sum'),
-        ).reset_index().rename(columns={'event_player_1_id': 'ID', 'event_team_abbr': 'Team', 'season': 'Season'})
+        ).reset_index().rename(columns={'event_player_1_id': 'ID', 'event_team_abbr': 'Team', 'season': 'Season', 'game_id':'Game'})
         )
 
         shot = shot.rename(columns={
@@ -84,7 +90,7 @@ def calc_indv(pbp,game_strength):
             'Fi':f'{type.capitalize()}Fi',
             'xGi':f'{type.capitalize()}xGi',
         })
-        indv = pd.merge(indv,shot,how='outer',on=['ID','Team','Season'])
+        indv = pd.merge(indv,shot,how='outer',on=clean_group)
 
     indv[['Gi','A1','A2','Penl','Draw','FW','FL']] = indv[['Gi','A1','A2','Penl','Draw','FW','FL']].fillna(0)
 
@@ -101,7 +107,7 @@ def calc_indv(pbp,game_strength):
 
     return indv
 
-def calc_onice(pbp,game_strength):
+def calc_onice(pbp,game_strength,second_group):
     #Convert player on-ice columns to vectors
     pbp['home_on_ice'] = pbp['home_on_1_id'].astype(str) + ";" + pbp['home_on_2_id'].astype(str) + ";" + pbp['home_on_3_id'].astype(str) + ";" + pbp['home_on_4_id'].astype(str) + ";" + pbp['home_on_5_id'].astype(str) + ";" + pbp['home_on_6_id'].astype(str)
     pbp['away_on_ice'] = pbp['away_on_1_id'].astype(str) + ";" + pbp['away_on_2_id'].astype(str) + ";" + pbp['away_on_3_id'].astype(str) + ";" + pbp['away_on_4_id'].astype(str) + ";" + pbp['away_on_5_id'].astype(str) + ";" + pbp['away_on_6_id'].astype(str)
@@ -136,7 +142,7 @@ def calc_onice(pbp,game_strength):
         df['NZF'] = np.where((df['zone_code']=='N') & (df['event_team_abbr']==df[team_col]),1,0)
         df['DZF'] = np.where((df['event_type']=='faceoff') & ((df['zone_code']=='D')&((df['event_team_abbr'] == df[team_col])) | (df['zone_code']=='O')&((df['event_team_abbr'] == df[opp_col]))), 1, 0)
 
-        stats = df.groupby(['ID',team_col,'Season']).agg(
+        stats = df.groupby(['ID',team_col,'Season']+(['game_id'] if 'game_id' in second_group else [])).agg(
             GP=('game_id','nunique'),
             TOI=('event_length','sum'),
             FF=('FF', 'sum'),
@@ -152,12 +158,12 @@ def calc_onice(pbp,game_strength):
             DZF=('DZF','sum')
         ).reset_index()
         
-        return stats.rename(columns={team_col:"Team"})
+        return stats.rename(columns={team_col:"Team", 'game_id':'Game'})
     
     home_stats = process_team_stats(pbp, 'home_on_ice', 'home_team_abbr', 'away_team_abbr',game_strength)
     away_stats = process_team_stats(pbp, 'away_on_ice', 'away_team_abbr', 'home_team_abbr',game_strength)
 
-    onice_stats = pd.concat([home_stats,away_stats]).groupby(['ID','Team','Season']).agg(
+    onice_stats = pd.concat([home_stats,away_stats]).groupby(['ID','Team','Season']+(['Game'] if 'game_id' in second_group else [])).agg(
             GP=('GP','sum'),
             TOI=('TOI','sum'),
             FF=('FF', 'sum'),
@@ -185,7 +191,7 @@ def calc_onice(pbp,game_strength):
 
     return onice_stats
 
-def calc_team(pbp,game_strength):
+def calc_team(pbp,game_strength,second_group):
     teams = []
     for team in [('away','home'),('home','away')]:
         #Flip strength state (when necessary) and filter by game strength if not "all"
@@ -221,7 +227,7 @@ def calc_team(pbp,game_strength):
         pbp['RushFG'] = np.where((pbp['event_type'] == "goal") & (pbp['event_team_abbr'] == pbp[f'{team[0]}_team_abbr'])&(pbp['rush']>0), 1, 0)
         pbp['RushAG'] = np.where((pbp['event_type'] == "goal") & (pbp['event_team_abbr'] == pbp[f'{team[1]}_team_abbr'])&(pbp['rush']>0), 1, 0)
 
-        stats = pbp.groupby([f'{team[0]}_team_abbr','season']).agg(
+        stats = pbp.groupby([f'{team[0]}_team_abbr']+second_group).agg(
             GP=('game_id','nunique'),
             TOI=('event_length','sum'),
             FF=('FF', 'sum'),
@@ -248,10 +254,10 @@ def calc_team(pbp,game_strength):
             RushAxG=('RushAxG','sum'),
             RushFG=('RushFG','sum'),
             RushAG=('RushAG','sum'),
-        ).reset_index().rename(columns={f'{team[0]}_team_abbr':"Team",'season':"Season"})
+        ).reset_index().rename(columns={f'{team[0]}_team_abbr':"Team",'season':"Season",'game_id':'Game'})
         teams.append(stats)
     
-    onice_stats = pd.concat(teams).groupby(['Team','Season']).agg(
+    onice_stats = pd.concat(teams).groupby(['Team','Season']+(['Game'] if 'game_id' in second_group else [])).agg(
             GP=('GP','sum'),
             TOI=('TOI','sum'),
             FF=('FF', 'sum'),
@@ -292,7 +298,7 @@ def calc_team(pbp,game_strength):
 
     return onice_stats
 
-def calc_goalie(pbp,game_strength):
+def calc_goalie(pbp,game_strength,second_group):
     teams=[]
     for team in [('away','home'),('home','away')]:
         #Flip strength state (when necessary) and filter by game strength if not "all"
@@ -318,7 +324,7 @@ def calc_goalie(pbp,game_strength):
         pbp['RushFG'] = np.where((pbp['event_type'] == "goal") & (pbp['event_team_abbr'] == pbp[f'{team[0]}_team_abbr'])&(pbp['rush']>0), 1, 0)
         pbp['RushAG'] = np.where((pbp['event_type'] == "goal") & (pbp['event_team_abbr'] == pbp[f'{team[1]}_team_abbr'])&(pbp['rush']>0), 1, 0)
 
-        stats = pbp.groupby([f'{team[0]}_goalie_id',f'{team[0]}_team_abbr','season']).agg(
+        stats = pbp.groupby([f'{team[0]}_goalie_id',f'{team[0]}_team_abbr']+second_group).agg(
             GP=('game_id','nunique'),
             TOI=('event_length','sum'),
             FF=('FF', 'sum'),
@@ -335,10 +341,10 @@ def calc_goalie(pbp,game_strength):
             RushAxG=('RushAxG','sum'),
             RushFG=('RushFG','sum'),
             RushAG=('RushAG','sum'),
-        ).reset_index().rename(columns={f'{team[0]}_goalie_id':"ID",f'{team[0]}_team_abbr':"Team",'season':"Season"})
+        ).reset_index().rename(columns={f'{team[0]}_goalie_id':"ID",f'{team[0]}_team_abbr':"Team",'season':"Season",'game_id':'Game'})
         teams.append(stats)
     
-    onice_stats = pd.concat(teams).groupby(['ID','Team','Season']).agg(
+    onice_stats = pd.concat(teams).groupby(['ID','Team','Season']+(['Game'] if 'game_id' in second_group else [])).agg(
             GP=('GP','sum'),
             TOI=('TOI','sum'),
             FF=('FF', 'sum'),

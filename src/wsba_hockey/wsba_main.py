@@ -103,6 +103,8 @@ standings_end = {
     '20242025':'04-17'
 }
 
+events = ['faceoff','hit','giveaway','takeaway','blocked-shot','missed-shot','shot-on-goal','goal','penalty']
+
 ## SCRAPE FUNCTIONS ##
 def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','period-end','challenge','stoppage','shootout-complete','game-end'],verbose = False, sources = False, errors = False):
     #Given a set of game_ids (NHL API), return complete play-by-play information as requested
@@ -839,15 +841,15 @@ def nhl_shooting_impacts(agg,type):
         #Return: skater stats with shooting impacts
         return df
 
-def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters/nhl_rosters.csv",shot_impact=False):
+def nhl_calculate_stats(pbp,type,season_types,game_strength,split_game=False,roster_path="rosters/nhl_rosters.csv",shot_impact=False):
     #Given play-by-play, seasonal information, game_strength, rosters, and xG model, return aggregated stats
     # param 'pbp' - play-by-play dataframe
     # param 'type' - type of stats to calculate ('skater', 'goalie', or 'team')
     # param 'season' - season or timeframe of events in play-by-play
     # param 'season_type' - list of season types (preseason, regular season, or playoffs) to include in aggregation
     # param 'game_strength' - list of game_strengths to include in aggregation
+    # param 'split_game' - boolean which if true groups aggregation by game
     # param 'roster_path' - path to roster file
-    # param 'xg' - xG model to apply to pbp for aggregation
     # param 'shot_impact' - boolean determining if the shot impact model will be applied to the dataset
 
     print(f"Calculating statistics for all games in the provided play-by-play data at {game_strength} for {type}s...\nSeasons included: {pbp['season'].drop_duplicates().to_list()}...")
@@ -860,8 +862,8 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
         pbp = wsba_xG(pbp)
 
     #Filter by season types, remove shootouts, remove shots with no coordinates, and remove shots on empty nets
-    pbp_noshot = pbp.loc[(pbp['season_type'].isin(season_types)) & (pbp['period'] < 5) & ~(pbp['event_type'].isin(fenwick_events))]
-    pbp_shot = pbp.loc[(pbp['season_type'].isin(season_types)) & (pbp['period'] < 5) & (pbp['event_type'].isin(fenwick_events)) & (pbp['empty_net']<1) & (pbp['x'].notna()) & (pbp['y'].notna())]
+    pbp_noshot = pbp.loc[(pbp['season_type'].isin(season_types)) & ~(pbp['event_type'].isin(fenwick_events))]
+    pbp_shot = pbp.loc[(pbp['season_type'].isin(season_types)) & (pbp['event_type'].isin(fenwick_events)) & (pbp['empty_net']<1) & (pbp['x'].notna()) & (pbp['y'].notna())]
 
     pbp = pd.concat([pbp_shot,pbp_noshot])
 
@@ -871,9 +873,15 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
             try: pbp[col] = pbp[col].astype(float)
             except KeyError: continue
 
+    #Split by game if specified
+    if split_game:
+        second_group = ['season','game_id']
+    else:
+        second_group = ['season']
+
     #Split calculation
     if type == 'goalie':
-        complete = calc_goalie(pbp,game_strength)
+        complete = calc_goalie(pbp,game_strength,second_group)
 
         #Set TOI to minute
         complete['TOI'] = complete['TOI']/60
@@ -925,8 +933,8 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
         length = end-start
         print(f'...finished in {(length if length <60 else length/60):.2f} {'seconds' if length <60 else 'minutes'}.')
 
-        complete = complete[[
-            'Goalie','ID',
+        head = ['Goalie','ID','Game'] if 'Game' in complete.columns else ['Goalie','ID']
+        complete = complete[head+[
             "Season","Team",'WSBA',
             'Headshot','Position','Handedness',
             'Height (in)','Weight (lbs)',
@@ -950,7 +958,7 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
         return complete
         
     elif type == 'team':
-        complete = calc_team(pbp,game_strength)
+        complete = calc_team(pbp,game_strength,second_group)
 
         #WSBA
         complete['WSBA'] = complete['Team']+complete['Season'].astype(str)
@@ -967,8 +975,8 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
         complete['FF%'] = complete['FF']/(complete['FF']+complete['FA'])
         complete['CF%'] = complete['CF']/(complete['CF']+complete['CA'])
 
-        complete = complete[[
-            'Team',
+        head = ['Team','ID','Game'] if 'Game' in complete.columns else ['Team','ID']
+        complete = complete[head+[
             'Season','WSBA',
             'GP','TOI',
             "GF","FF","xGF","xGF/FF","GF/xGF","FshF%",
@@ -991,15 +999,15 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
 
         return complete
     else:
-        indv_stats = calc_indv(pbp,game_strength)
-        onice_stats = calc_onice(pbp,game_strength)
+        indv_stats = calc_indv(pbp,game_strength,second_group)
+        onice_stats = calc_onice(pbp,game_strength,second_group)
 
         #IDs sometimes set as objects
         indv_stats['ID'] = indv_stats['ID'].astype(float)
         onice_stats['ID'] = onice_stats['ID'].astype(float)
 
         #Merge and add columns for extra stats
-        complete = pd.merge(indv_stats,onice_stats,how="outer",on=['ID','Team','Season'])
+        complete = pd.merge(indv_stats,onice_stats,how="outer",on=['ID','Team','Season']+(['Game'] if 'game_id' in second_group else []))
         complete['GC%'] = complete['Gi']/complete['GF']
         complete['AC%'] = (complete['A1']+complete['A2'])/complete['GF']
         complete['GI%'] = (complete['Gi']+complete['A1']+complete['A2'])/complete['GF']
@@ -1059,8 +1067,8 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,roster_path="rosters
             for stat in per_sixty[:3]:
                 type_metrics.append(f'{type.capitalize()}{stat}')
 
-        complete = complete[[
-            'Player','ID',
+        head = ['Player','ID','Game'] if 'Game' in complete.columns else ['Player','ID']
+        complete = complete[head+[
             "Season","Team",'WSBA',
             'Headshot','Position','Handedness',
             'Height (in)','Weight (lbs)',
@@ -1171,7 +1179,7 @@ def repo_load_pbp(seasons = []):
 
     #Add parquet to total
     print(f'Loading play-by-play from the following seasons: {seasons}...')
-    dfs = [pd.read_parquet(f"https://f005.backblazeb2.com/file/weakside-breakout/pbp/nhl_pbp_{season}.parquet") for season in seasons]
+    dfs = [pd.read_parquet(f"https://f005.backblazeb2.com/file/weakside-breakout/pbp/{season}.parquet") for season in seasons]
 
     return pd.concat(dfs)
 
