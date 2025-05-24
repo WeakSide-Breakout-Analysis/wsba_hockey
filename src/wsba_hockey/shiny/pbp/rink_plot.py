@@ -221,7 +221,7 @@ def rink(setting = "full", vertical = False):
         )
 
     # Add logo
-    logo = Image.open('tools/utils/wsba.png')
+    logo = Image.open('https://f005.backblazeb2.com/file/weakside-breakout/utils/wsba.png')
 
     fig.add_layout_image(
         dict(

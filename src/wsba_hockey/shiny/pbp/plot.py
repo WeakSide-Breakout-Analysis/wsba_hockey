@@ -23,7 +23,7 @@ def colors(df):
     away_abbr = list(df['away_team_abbr'])[0]
     home_abbr = list(df['home_team_abbr'])[0]
     season = list(df['season'])[0]
-    team_data = pd.read_csv('teaminfo/nhl_teaminfo.csv')
+    team_data = pd.read_csv('https://f005.backblazeb2.com/file/weakside-breakout/info/nhl_teaminfo.csv')
 
     team_info ={
         away_abbr: list(team_data.loc[team_data['WSBA']==f'{away_abbr}{season}','Primary Color'])[0],

@@ -25,7 +25,7 @@ def df():
     season = f'{front_year}{front_year+1}'
 
     #Load appropriate dataframe
-    return pd.read_parquet(f'pbp/parquet/nhl_pbp_{season}.parquet')
+    return pd.read_parquet(f'https://f005.backblazeb2.com/file/weakside-breakout/pbp/{season}.parquet')
 
 @reactive.effect
 @reactive.event(input.game_date)
