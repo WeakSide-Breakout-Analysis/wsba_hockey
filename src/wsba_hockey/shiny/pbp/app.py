@@ -12,12 +12,17 @@ from shinywidgets import render_widget
 
 #Sidebar config
 with ui.sidebar():
+    ui.input_dark_mode(id='default',mode='dark')
     ui.input_date('game_date','Date')
     ui.input_selectize('game_select',
                       'Select a game:',
                       [])
     ui.input_selectize('event',
                        'Select Events:',
+                       [],
+                       multiple=True)
+    ui.input_selectize('strength',
+                       'Select Strengths:',
                        [],
                        multiple=True)
 
@@ -56,6 +61,13 @@ def get_events():
 
     ui.update_selectize('event',choices=var.events)
 
+@reactive.effect
+@reactive.event(input.event)
+def get_strengths():
+    #Update selectable strength_states
+
+    ui.update_selectize('strength',choices=['5v5','4v4','3v3','5v4','5v3','4v5','3v5','6v5','5v6','6v4','4v6','6v3','3v6'])
+
 @render_widget
 def plot_game():
     df = plays()
@@ -65,7 +77,7 @@ def plot_game():
     
     else:
         try:
-            df = wsba_plt.prep(df,events=input.event())
+            df = wsba_plt.prep(df,events=input.event(),strengths=input.strength())
             game_title = df['game_title'].to_list()[0]
         except:
             return wsba_plt.wsba_rink()

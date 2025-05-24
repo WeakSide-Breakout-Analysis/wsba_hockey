@@ -32,8 +32,8 @@ def colors(df):
 
     return team_info
 
-def prep(df,events):
-    df = df.loc[df['event_type'].isin(events)]
+def prep(df,events,strengths):
+    df = df.loc[(df['event_type'].isin(events))&(df['strength_state'].isin(strengths))]
     df['xG'] = df['xG'].fillna(0)
     df['size'] = np.where(df['xG']<=0,40,df['xG']*400)
     

@@ -236,5 +236,10 @@ def rink(setting = "full", vertical = False):
             sizing="stretch",
             opacity=1)
         )
-      
+    
+    #Set background to transparent
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)", 
+        plot_bgcolor="rgba(255,255,255,255)"
+    )
     return fig
