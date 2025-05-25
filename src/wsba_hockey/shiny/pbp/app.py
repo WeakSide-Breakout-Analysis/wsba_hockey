@@ -18,6 +18,13 @@ def server(input, output, session):
         search = session.input[".clientdata_url_search"]()
         query = parse_qs(urlparse(search).query)
         
+        #If no input data is provided automatically provide a select game and plot all 5v5 fenwick shots
+        if 'event_type' not in query.keys() or 'strength_state' not in query.keys():
+            if 'game_id' not in query.keys():
+                query = {'game_id':['2024021000'],'event_type':var.fenwick_events,'strength_state':['5v5']}
+            else:
+                query.update({'event_type':var.fenwick_events,'strength_state':['5v5']})
+
         #Determine which season to load based on the input game_id
         season = f'{query['game_id'][0][0:4]}{int(query['game_id'][0][0:4])+1}'
         #Load appropriate dataframe
