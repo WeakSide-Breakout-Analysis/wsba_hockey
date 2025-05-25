@@ -26,7 +26,8 @@ def server(input, output, session):
                 query.update({'event_type':var.fenwick_events,'strength_state':['5v5']})
 
         #Determine which season to load based on the input game_id
-        season = f'{query['game_id'][0][0:4]}{int(query['game_id'][0][0:4])+1}'
+        front_year = int(query['game_id'][0][0:4])
+        season = f'{front_year}{front_year+1}'
         #Load appropriate dataframe
         df = pd.read_parquet(f'https://f005.backblazeb2.com/file/weakside-breakout/pbp/{season}.parquet')
     
