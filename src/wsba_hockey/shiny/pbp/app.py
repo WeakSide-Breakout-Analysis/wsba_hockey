@@ -1,153 +1,67 @@
 import pandas as pd
-import numpy as np
 import plotly.express as px
-import plotly.graph_objects as go
-import plot as wsba_plt
-import matplotlib.pyplot as plt
 import var
-from datetime import datetime
-from shiny import reactive
-from shiny.express import input, render, ui
-from shinywidgets import render_widget 
+import plot as wsba_plt
+from urllib.parse import *
+from shiny import *
+from shinywidgets import output_widget, render_widget 
 
-#Sidebar config
-with ui.sidebar():
-    ui.input_dark_mode(id='default',mode='dark')
-    ui.input_date('game_date','Date')
-    ui.input_selectize('game_select',
-                      'Select a game:',
-                      [])
-    ui.input_selectize('event',
-                       'Select Events:',
-                       [],
-                       multiple=True)
-    ui.input_selectize('strength',
-                       'Select Strengths:',
-                       [],
-                       multiple=True)
+app_ui = ui.page_fluid(
+    output_widget("plot_game"),
+)
 
-@reactive.calc
-def df():
-    #Determine which season to load based on the input date
-    #Adjust the front-year and append the back-year to create the season to load
-    front_year = (input.game_date().year-1) if input.game_date().month < 8 else input.game_date().year
-    season = f'{front_year}{front_year+1}'
-
-    #Load appropriate dataframe
-    return pd.read_parquet(f'https://f005.backblazeb2.com/file/weakside-breakout/pbp/{season}.parquet')
-
-@reactive.effect
-@reactive.event(input.game_date)
-def _():
-    #Find games based on date
-
-    #Configure selectable games
-    load = df()
-    games = load.loc[load['game_date'].astype(str)==str(input.game_date()),['game_title','game_id']].drop_duplicates().set_index('game_id').to_dict()['game_title']
-    
-    #Update the selectize with games from selected date
-    ui.update_selectize('game_select',choices=games)
-
-@reactive.event(input.game_select)
-def plays():
-    #Return plays from selected game
-    pbp = df()
-    return pbp.loc[pbp['game_id'].astype(str)==str(input.game_select())]
-
-@reactive.effect
-@reactive.event(input.game_select)
-def get_events():
-    #Update selectable events
-
-    ui.update_selectize('event',choices=var.events)
-
-@reactive.effect
-@reactive.event(input.event)
-def get_strengths():
-    #Update selectable strength_states
-
-    ui.update_selectize('strength',choices=['All','5v5','4v4','3v3','5v4','5v3','4v5','3v5','6v5','5v6','6v4','4v6','6v3','3v6'])
-
-@reactive.event(input.strength)
-def play_by_play():
-    #Retreive play by play for selected parameters
-    df = plays()
-
-    #If All is selected then ignore other selections
-    str_select = 'all' if 'All' in input.strength() else input.strength()
-
-    try:
-        df = wsba_plt.prep(df,events=input.event(),strengths=str_select)
-        game_title = df['game_title'].to_list()[0]
-
-        return [df,game_title]
-    except:
-        return [pd.DataFrame(),'']
-
-@render_widget
-def plot_game():
-    data = play_by_play()
-
-    df = data[0]
-    game_title = data[1]
-
-    if df.empty:
-        return wsba_plt.wsba_rink()
-    else:
-        colors = wsba_plt.colors(df)
-
-        rink = wsba_plt.wsba_rink()
-
-        plot = px.scatter(df,x='x',y='y',
-                        size='size',color='Team',
-                        color_discrete_map=colors,
-                        hover_name='Description',
-                        hover_data=['Event Num.','Period','Time (in seconds)',
-                                    'Away Score','Home Score','x','y',
-                                    'Event Distance from Attacking Net',
-                                    'Event Angle to Attacking Net',
-                                    'xG'])
+def server(input, output, session):
+    @output()
+    @render_widget
+    def plot_game():
+        #Retreive query parameters
+        search = session.input[".clientdata_url_search"]()
+        query = parse_qs(urlparse(search).query)
         
-        for trace in plot.data:
-            rink.add_trace(trace)
-            
-        return rink.update_layout(
+        #Determine which season to load based on the input game_id
+        season = f'{query['game_id'][0][0:4]}{int(query['game_id'][0][0:4])+1}'
+        #Load appropriate dataframe
+        df = pd.read_parquet(f'https://f005.backblazeb2.com/file/weakside-breakout/pbp/{season}.parquet')
+    
+        #Prepare dataframe for plotting based on URL parameters
+        df = df.loc[df['game_id'].astype(str).isin(query['game_id'])]
+        df = wsba_plt.prep(df,events=query['event_type'],strengths=query['strength_state'])
+
+        #Return empty rink if no data exists else continue
+        if df.empty:
+            return wsba_plt.wsba_rink()
+        else:
+            game_title = df['game_title'].to_list()[0]
+            colors = wsba_plt.colors(df)
+            rink = wsba_plt.wsba_rink()
+
+            plot = px.scatter(df,
+                              x='x', y='y',
+                              size='size',
+                              color='Team',
+                              color_discrete_map=colors,
+                              hover_name='Description',
+                              hover_data=['Event Num.', 'Period', 'Time (in seconds)',
+                                          'Away Score', 'Home Score', 'x', 'y',
+                                          'Event Distance from Attacking Net',
+                                          'Event Angle to Attacking Net',
+                                          'xG'])
+
+            for trace in plot.data:
+                rink.add_trace(trace)
+
+            return rink.update_layout(
                 title=dict(text=game_title,
-                    x=0.5,
-                    y=0.94,
-                    xanchor='center',
-                    yanchor='top',
-                ),
-                
+                           x=0.5, y=0.94,
+                           xanchor='center',
+                           yanchor='top'),
                 legend=dict(
                     orientation='h',
-                    x=0.5,
-                    y=0.06,
+                    x=0.49,
+                    y=0.065,
                     xanchor='center',
                     yanchor='bottom',
                 )
-                )
-    
-@render.data_frame
-def pbp_table():
-    #Display pbp table below the game plot
-    df = play_by_play()[0]
-    if not df.empty:
-        df = df[['event_num','period','period_type',
-        'seconds_elapsed',"strength_state",
-        "event_type_code","event_type","event_team_abbr",
-        "event_player_1_name","event_player_2_name","event_player_3_name",
-        "shot_type","zone_code","x","y",
-        "event_skaters","away_skaters","home_skaters",
-        "event_distance","event_angle","seconds_since_last",
-        "away_score","home_score", "away_fenwick", "home_fenwick",
-        "away_on_1","away_on_2","away_on_3","away_on_4","away_on_5","away_on_6","away_goalie",
-        "home_on_1","home_on_2","home_on_3","home_on_4","home_on_5","home_on_6","home_goalie",
-        "away_coach","home_coach"]]
-    
-    return render.DataTable(df,
-                           width='fit-content',
-                           selection_mode='rows',
-                           styles=[
-                               {'class':'text-center'},
-                           ])
+            )
+
+app = App(app_ui, server)
