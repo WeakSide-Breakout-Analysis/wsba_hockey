@@ -7,6 +7,7 @@ from shiny import *
 from shinywidgets import output_widget, render_widget 
 
 app_ui = ui.page_fluid(
+    ui.input_dark_mode(mode='dark'),
     output_widget("plot_game"),
 )
 
@@ -66,7 +67,7 @@ def server(input, output, session):
                 legend=dict(
                     orientation='h',
                     x=0.49,
-                    y=0.065,
+                    y=-0.04,
                     xanchor='center',
                     yanchor='bottom',
                 )
