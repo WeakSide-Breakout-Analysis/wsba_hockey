@@ -266,24 +266,29 @@ def nhl_scrape_schedule(season,start = "09-01", end = "08-01"):
         #Handles dates which are over a year apart
         day = 365 + day
     for i in range(day):
-        #For each day, call NHL api and retreive id, season, season_type (1,2,3), and gamecenter link
+        #For each day, call NHL api and retreive info on all games of selected game
         inc = start+timedelta(days=i)
         print("Scraping games on " + str(inc)[:10]+"...")
         
         get = rs.get(api+str(inc)[:10]).json()
-        gameWeek = list(pd.json_normalize(get['gameWeek'])['games'])[0]
+        gameWeek = pd.json_normalize(list(pd.json_normalize(get['gameWeek'])['games'])[0])
+        
+        #Return nothing if there's nothing
+        if gameWeek.empty:
+            game.append(gameWeek)
+        else:
+            gameWeek['date'] = get['gameWeek'][0]['date']
 
-        for i in range(0,len(gameWeek)):
-            game.append(pd.DataFrame({
-                "id": [gameWeek[i]['id']],
-                "date":[get['gameWeek'][0]['date']],
-                "season": [gameWeek[i]['season']],
-                "season_type":[gameWeek[i]['gameType']],
-                "away_team_abbr":[gameWeek[i]['awayTeam']['abbrev']],
-                "home_team_abbr":[gameWeek[i]['homeTeam']['abbrev']],
-                "gamecenter_link":[gameWeek[i]['gameCenterLink']]
-                }))
-    
+            gameWeek['season_type'] = gameWeek['gameType']
+            gameWeek['away_team_abbr'] = gameWeek['awayTeam.abbrev']
+            gameWeek['home_team_abbr'] = gameWeek['homeTeam.abbrev']
+            gameWeek['game_title'] = gameWeek['away_team_abbr'] + " @ " + gameWeek['home_team_abbr'] + " - " + gameWeek['date']
+            
+            front_col = ['id','season','date','season_type','game_title','away_team_abbr','home_team_abbr']
+            gameWeek = gameWeek[front_col+[col for col in gameWeek.columns.to_list() if col not in front_col]]
+
+        game.append(gameWeek)
+        
     #Concatenate all games
     df = pd.concat(game)
     
