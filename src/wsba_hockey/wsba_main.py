@@ -980,7 +980,7 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,split_game=False,ros
         complete['FF%'] = complete['FF']/(complete['FF']+complete['FA'])
         complete['CF%'] = complete['CF']/(complete['CF']+complete['CA'])
 
-        head = ['Team','ID','Game'] if 'Game' in complete.columns else ['Team','ID']
+        head = ['Team','Game'] if 'Game' in complete.columns else ['Team']
         complete = complete[head+[
             'Season','WSBA',
             'GP','TOI',
