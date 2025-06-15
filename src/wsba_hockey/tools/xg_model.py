@@ -78,21 +78,30 @@ strengths = ['3v3',
             '6v4',
             '6v5']
 
-def add_hand(pbp):
-    #Add handedness for shooters and goaltenders
+def fix_players(pbp):
+    #Add/fix player info for shooters and goaltenders
+    print('Adding player info to pbp...')
 
     #Load roster and all players
-    roster = pd.read_csv('rosters/nhl_rosters.csv').drop_duplicates(['id'])[['id','shootsCatches']]
+    roster = pd.read_csv('rosters/nhl_rosters.csv').drop_duplicates(['id'])[['fullName','id','shootsCatches']]
 
     #Some players are missing from the roster file (generally in newer seasons); add these manually
     miss = list(pbp.loc[~(pbp['event_player_1_id'].isin(list(roster['id'])))&(pbp['event_player_1_id'].notna()),'event_player_1_id'].drop_duplicates())
     if miss:
-        add = wsba.nhl_scrape_player_data(miss).rename(columns={'playerId':'id'})[['id','shootsCatches']]
+        add = wsba.nhl_scrape_player_data(miss).rename(columns={'playerId':'id'})[['fullName','id','shootsCatches']]
         roster = pd.concat([roster,add]).reset_index(drop=True)
 
     #Conversion dict
     roster['id'] = roster['id'].astype(str)
     roster_dict = roster.set_index('id').to_dict()['shootsCatches']
+    names_dict = roster.set_index('id').to_dict()['fullName']
+
+    #Add player names
+    for i in range(3):
+        pbp[f'add_player_{i+1}_name'] = np.where(pbp[f'event_player_{i+1}_name'].isna(),pbp[f'event_player_{i+1}_id'].astype(str).replace(names_dict),np.nan)
+        pbp[f'event_player_{i+1}_name'] = pbp[f'event_player_{i+1}_name'].combine_first(pbp[f'add_player_{i+1}_name'])
+
+    pbp['event_goalie_name'] = pbp['event_goalie_id'].astype(str).replace(names_dict)
 
     #Add hands
     pbp['event_player_1_hand'] = pbp['event_player_1_id'].astype(str).str.replace('.0','').replace(roster_dict)
@@ -100,15 +109,9 @@ def add_hand(pbp):
 
     return pbp
 
-def prep_xG_data(pbp,add=True):
+def prep_xG_data(data):
     #Prep data for xG training and calculation
 
-    if add:
-        #Add player handedness for offwing shot calculation
-        data = add_hand(pbp)
-    else:
-        data = pbp
-        
     #Informal groupby
     data = data.sort_values(by=['season','game_id','period','seconds_elapsed','event_num'])
 
@@ -173,6 +176,9 @@ def wsba_xG(pbp, hypertune = False, train = False, model_path = "tools/xg_model/
 
     #Recalibrate coordinates
     pbp = scraping.adjust_coords(pbp)
+
+    #Fix strengths
+    pbp['strength_state'] = np.where((pbp['season_type']==3)&(pbp['period']>4),(np.where(pbp['event_team_abbr']==pbp['away_team_abbr'],pbp['away_skaters'].astype(str)+"v"+pbp['home_skaters'].astype(str),pbp['home_skaters'].astype(str)+"v"+pbp['away_skaters'].astype(str))),pbp['strength_state'])
 
     #Filter unwanted data:
     #Shots must occur in specified events and strength states, occur in open play, and have valid coordinates    
@@ -326,10 +332,7 @@ def wsba_xG(pbp, hypertune = False, train = False, model_path = "tools/xg_model/
             verbose_eval=2,
         )
         
-        #Save model and metric plots
-        feature_importance(model)
-        roc_auc_curve(pbp,model)
-        reliability(pbp,model)
+        #Save model
         joblib.dump(model,model_path)
         
     else:

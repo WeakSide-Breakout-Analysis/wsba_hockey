@@ -283,8 +283,9 @@ def nhl_scrape_schedule(season,start = "09-01", end = "08-01"):
             gameWeek['away_team_abbr'] = gameWeek['awayTeam.abbrev']
             gameWeek['home_team_abbr'] = gameWeek['homeTeam.abbrev']
             gameWeek['game_title'] = gameWeek['away_team_abbr'] + " @ " + gameWeek['home_team_abbr'] + " - " + gameWeek['date']
-            
-            front_col = ['id','season','date','season_type','game_title','away_team_abbr','home_team_abbr']
+            gameWeek['estStartTime'] = pd.to_datetime(gameWeek['startTimeUTC']).dt.tz_convert('US/Eastern').dt.strftime("%I:%M %p")
+
+            front_col = ['id','season','date','season_type','game_title','away_team_abbr','home_team_abbr','estStartTime']
             gameWeek = gameWeek[front_col+[col for col in gameWeek.columns.to_list() if col not in front_col]]
 
         game.append(gameWeek)
@@ -495,6 +496,20 @@ def nhl_scrape_draft_rankings(arg = 'now', category = ''):
 
     #Return: prospect rankings
     return data
+
+def nhl_apply_xG(pbp):
+    #Given play-by-play data, return this data with xG-related columns
+
+    #param 'pbp' - play-by-play data
+
+    print(f'Applying WSBA xG to model with seasons: {pbp['season'].drop_duplicates().to_list()}')
+    #Fix player data
+    #pbp = fix_players(pbp)
+
+    #Apply xG model
+    pbp = wsba_xG(pbp)
+    
+    return pbp
 
 def nhl_shooting_impacts(agg,type):
     #Given stats table generated from the nhl_calculate_stats function, return table with shot impacts
@@ -868,7 +883,14 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,split_game=False,ros
 
     #Filter by season types, remove shootouts, remove shots with no coordinates, and remove shots on empty nets
     pbp_noshot = pbp.loc[(pbp['season_type'].isin(season_types)) & ~(pbp['event_type'].isin(fenwick_events))]
-    pbp_shot = pbp.loc[(pbp['season_type'].isin(season_types)) & (pbp['event_type'].isin(fenwick_events)) & (pbp['empty_net']<1) & (pbp['x'].notna()) & (pbp['y'].notna())]
+
+    #Include everything when strengths is set to 'all'
+    if game_strength == 'all':
+        mask = ((pbp['event_type'].isin(fenwick_events)) & (pbp['empty_net']<1))
+    else:
+        mask = ((pbp['event_type'].isin(fenwick_events)) & (pbp['empty_net']<1) & (pbp['x'].notna()) & (pbp['y'].notna()))
+    
+    pbp_shot = pbp.loc[(pbp['season_type'].isin(season_types)) & mask]
 
     pbp = pd.concat([pbp_shot,pbp_noshot])
 

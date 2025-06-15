@@ -615,7 +615,7 @@ def combine_pbp(info,sources):
     df['event_team_venue'] = np.where(df['event_team_abbr'].isna(),"",np.where(df['home_team_abbr']==df['event_team_abbr'],"home","away"))
     
     #Correct strength state for penalty shots and shootouts - most games dont have shifts in shootout and are disculuded otherwise
-    df['strength_state'] = np.where(np.logical_and(df['period'].astype(str)=='5',df['event_type'].isin(['missed-shot','shot-on-goal','goal'])),"1v0",df['strength_state'])
+    df['strength_state'] = np.where((df['period'].astype(str)=='5')&(df['event_type'].isin(['missed-shot','shot-on-goal','goal']))&(df['season_type']==2),"1v0",df['strength_state'])
     df['strength_state'] = np.where(df['description'].str.contains('Penalty Shot',case=False),"1v0",df['strength_state'])
 
     col = [col for col in get_col() if col in df.columns.to_list()]
