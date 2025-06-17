@@ -356,7 +356,17 @@ def feature_importance(model):
     print('Feature importance for WSBA xG Model...')
     model = joblib.load(model)
 
-    xgb.plot_importance(model)
+    fig, ax = plt.subplots(figsize=(10, 7))
+    xgb.plot_importance(model,
+        importance_type='weight',
+        max_num_features=30,
+        height=0.5,
+        grid=False,
+        show_values=False,
+        xlabel='Weight',
+        title='WSBA xG Feature Importance',
+        ax=ax
+        )
     plt.savefig('tools/xg_model/metrics/feature_importance.png',bbox_inches='tight')
 
 def roc_auc_curve(pbp,model):
