@@ -1,14 +1,16 @@
 import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
 import numpy as np
 import pandas as pd
-from scipy.interpolate import griddata
-from scipy.ndimage import gaussian_filter
-import urllib.request
-import PIL
-from wsba_hockey.tools.xg_model import *
 from hockey_rink import NHLRink
 from hockey_rink import CircularImage
+from scipy.interpolate import griddata
+from scipy.ndimage import gaussian_filter
+from wsba_hockey.tools.xg_model import *
+
+### PLOTTING FUNCTIONS ###
+# Provided in this file are basic plotting functions for the WSBA Hockey Python package. #
+
+## GLOBAL VARIABLES ##
 
 event_markers = {
     'faceoff':'X',
@@ -20,6 +22,9 @@ event_markers = {
     'giveaway':'1',
     'takeaway':'2',
 }
+
+dir = os.path.dirname(os.path.realpath(__file__))
+info_path = os.path.join(dir,'teaminfo\\nhl_teaminfo.csv')
 
 def wsba_rink(display_range='offense',rotation = 0):
     img = 'tools/utils/wsba.png'
@@ -81,7 +86,7 @@ def plot_skater_shots(pbp, player, season, team, strengths, title = None, marker
     pbp = prep_plot_data(pbp,shots,strengths,marker_dict)
     pbp = pbp.loc[(pbp['season'].astype(str)==season)&((pbp['away_team_abbr']==team)|(pbp['home_team_abbr']==team))]
 
-    team_data = pd.read_csv('teaminfo/nhl_teaminfo.csv')
+    team_data = pd.read_csv(info_path)
     team_color = list(team_data.loc[team_data['WSBA']==f'{team}{season}','Primary Color'])[0]
     team_color_2nd = list(team_data.loc[team_data['WSBA']==f'{team}{season}','Secondary Color'])[0]
 
@@ -115,7 +120,7 @@ def plot_game_events(pbp,game_id,events,strengths,marker_dict=event_markers,team
     date = list(pbp['game_date'])[0]
     season = list(pbp['season'])[0]
 
-    team_data = pd.read_csv('teaminfo/nhl_teaminfo.csv')
+    team_data = pd.read_csv(info_path)
     team_info ={
         'away_color':'#000000' if list(team_data.loc[team_data['WSBA']==f'{away_abbr}{season}','Secondary Color'])[0]=='#FFFFFF' else list(team_data.loc[team_data['WSBA']==f'{away_abbr}{season}',f'{team_colors['away'].capitalize()} Color'])[0],
         'home_color': list(team_data.loc[team_data['WSBA']==f'{home_abbr}{season}',f'{team_colors['home'].capitalize()} Color'])[0],

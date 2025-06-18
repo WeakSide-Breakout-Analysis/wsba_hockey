@@ -1,12 +1,12 @@
 import re
-from bs4 import BeautifulSoup
-import requests as rs
-import json as json_lib
-from wsba_hockey.tools.utils.shared import *
-import numpy as np
-import pandas as pd
 import warnings
 import os
+import numpy as np
+import pandas as pd
+import requests as rs
+import json as json_lib
+from bs4 import BeautifulSoup
+from wsba_hockey.tools.utils.shared import *
 warnings.filterwarnings('ignore')
 
 ### SCRAPING FUNCTIONS ###

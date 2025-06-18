@@ -1,14 +1,14 @@
+import joblib
+import os
 import pandas as pd
 import numpy as np
 import xgboost as xgb
 import scipy.sparse as sp
-import joblib
-import os
 import wsba_hockey.wsba_main as wsba
 import tools.scraping as scraping
+import matplotlib.pyplot as plt
 from sklearn.calibration import calibration_curve
 from sklearn.metrics import roc_curve, auc
-import matplotlib.pyplot as plt
 
 ### XG_MODEL FUNCTIONS ###
 # Provided in this file are functions vital to the goal prediction model in the WSBA Hockey Python package. #
@@ -80,14 +80,17 @@ strengths = ['3v3',
             '6v5']
 
 dir = os.path.dirname(os.path.realpath(__file__))
-roster = pd.read_csv(os.path.join(dir,'rosters\\nhl_rosters.csv'))
+roster_path = os.path.join(dir,'rosters\\nhl_rosters.csv')
+xg_model_path = os.path.join(dir,'xg_model\\wsba_xg.joblib')
+test_path = os.path.join(dir,'xg_model\\testing\\xg_model_training_runs.csv')
+cv_path = os.path.join(dir,'xg_model\\testing\\xg_model_cv_runs.csv')
 
 def fix_players(pbp):
     #Add/fix player info for shooters and goaltenders
     print('Adding player info to pbp...')
 
     #Load roster and all players
-    roster = roster.drop_duplicates(['id'])[['fullName','id','shootsCatches']]
+    roster = pd.read_csv(roster_path).drop_duplicates(['id'])[['fullName','id','shootsCatches']]
 
     #Some players are missing from the roster file (generally in newer seasons); add these manually
     miss = list(pbp.loc[~(pbp['event_player_1_id'].isin(list(roster['id'])))&(pbp['event_player_1_id'].notna()),'event_player_1_id'].drop_duplicates())
@@ -115,6 +118,7 @@ def fix_players(pbp):
 
 def prep_xG_data(data):
     #Prep data for xG training and calculation
+    data = fix_players(data)
 
     #Informal groupby
     data = data.sort_values(by=['season','game_id','period','seconds_elapsed','event_num'])
@@ -172,7 +176,7 @@ def prep_xG_data(data):
     #Return: pbp data prepared to train and calculate the xG model
     return data
 
-def wsba_xG(pbp, hypertune = False, train = False, model_path = "tools/xg_model/wsba_xg.joblib", train_runs = 20, cv_runs = 20):
+def wsba_xG(pbp, hypertune = False, train = False, model_path = xg_model_path, train_runs = 20, cv_runs = 20):
     #Train and calculate the WSBA Expected Goals model
 
     #Add index for future merging
@@ -262,7 +266,7 @@ def wsba_xG(pbp, hypertune = False, train = False, model_path = "tools/xg_model/
             # Arrange to get best run
             best_all = best_all.sort_values(by="auc", ascending=False)
 
-            best_all.to_csv("tools/xg_model/testing/xg_model_training_runs.csv",index=False)
+            best_all.to_csv(test_path,index=False)
 
             # Final parameters
             param_7_EV = {
@@ -307,11 +311,11 @@ def wsba_xG(pbp, hypertune = False, train = False, model_path = "tools/xg_model/
 
             # Clean results and sort to find the number of rounds to use and seed
             cv_final = cv_test.sort_values(by="AUC", ascending=False)
-            cv_final.to_csv("tools/xg_model/testing/xg_model_cv_runs.csv",index=False)
+            cv_final.to_csv(cv_path,index=False)
         else:
             # Load previous parameters
-            best_all = pd.read_csv('tools/xg_model/testing/xg_model_training_runs.csv')
-            cv_final = pd.read_csv("tools/xg_model/testing/xg_model_cv_runs.csv")
+            best_all = pd.read_csv(test_path)
+            cv_final = pd.read_csv(cv_path)
 
             print('Loaded hyperparameters...')
             # Final parameters

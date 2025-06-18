@@ -1,13 +1,13 @@
+import random
+import os
 import requests as rs
 import pandas as pd
 import time
-import random
-import os
 from datetime import datetime, timedelta, date
-from wsba_hockey.tools.scraping import *
-from wsba_hockey.tools.xg_model import *
-from wsba_hockey.tools.agg import *
-from wsba_hockey.tools.plotting import *
+from .tools.scraping import *
+from .tools.xg_model import *
+from .tools.agg import *
+from .tools.plotting import *
 
 ### WSBA HOCKEY ###
 ## Provided below are all integral functions in the WSBA Hockey Python package. ##
@@ -63,7 +63,7 @@ per_sixty = ['Fi','xGi','Gi','A1','A2','P1','P','OZF','NZF','DZF','FF','FA','xGF
 
 #Some games in the API are specifically known to cause errors in scraping.
 #This list is updated as frequently as necessary
-known_probs ={
+known_probs = {
     '2007020011':'Missing shifts data for game between Chicago and Minnesota.',
     '2007021178':'Game between the Bruins and Sabres is missing data after the second period, for some reason.',
     '2008020259':'HTML data is completely missing for this game.',
@@ -105,6 +105,11 @@ standings_end = {
 }
 
 events = ['faceoff','hit','giveaway','takeaway','blocked-shot','missed-shot','shot-on-goal','goal','penalty']
+
+dir = os.path.dirname(os.path.realpath(__file__))
+schedule_path = os.path.join(dir,'tools\\schedule\\schedule.csv')
+info_path = os.path.join(dir,'tools\\teaminfo\\nhl_teaminfo.csv')
+default_roster = os.path.join(dir,'tools\\rosters\\nhl_rosters.csv')
 
 ## SCRAPE FUNCTIONS ##
 def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','period-end','challenge','stoppage','shootout-complete','game-end'],verbose = False, sources = False, errors = False):
@@ -297,7 +302,7 @@ def nhl_scrape_schedule(season,start = "09-01", end = "08-01"):
     #Return: specificed schedule data
     return df
 
-def nhl_scrape_season(season,split_shifts = False, season_types = [2,3], remove = ['period-start','period-end','game-end','challenge','stoppage'], start = "09-01", end = "08-01", local=False, local_path = "schedule/schedule.csv", verbose = False, sources = False, errors = False):
+def nhl_scrape_season(season,split_shifts = False, season_types = [2,3], remove = ['period-start','period-end','game-end','challenge','stoppage'], start = "09-01", end = "08-01", local=False, local_path = schedule_path, verbose = False, sources = False, errors = False):
     #Given season, scrape all play-by-play occuring within the season
     # param 'season' - NHL season to scrape
     # param 'split_shifts' - boolean which splits pbp and shift events if true
@@ -403,7 +408,7 @@ def nhl_scrape_roster(season):
     #Given a nhl season, return rosters for all participating teams
     # param 'season' - NHL season to scrape
     print("Scrpaing rosters for the "+ season + "season...")
-    teaminfo = pd.read_csv("teaminfo/nhl_teaminfo.csv")
+    teaminfo = pd.read_csv(info_path)
 
     rosts = []
     for team in list(teaminfo['Team']):
@@ -504,8 +509,6 @@ def nhl_apply_xG(pbp):
     #param 'pbp' - play-by-play data
 
     print(f'Applying WSBA xG to model with seasons: {pbp['season'].drop_duplicates().to_list()}')
-    #Fix player data
-    pbp = fix_players(pbp)
 
     #Apply xG model
     pbp = wsba_xG(pbp)
@@ -862,7 +865,7 @@ def nhl_shooting_impacts(agg,type):
         #Return: skater stats with shooting impacts
         return df
 
-def nhl_calculate_stats(pbp,type,season_types,game_strength,split_game=False,roster_path="rosters/nhl_rosters.csv",shot_impact=False):
+def nhl_calculate_stats(pbp,type,season_types,game_strength,split_game=False,roster_path=default_roster,shot_impact=False):
     #Given play-by-play, seasonal information, game_strength, rosters, and xG model, return aggregated stats
     # param 'pbp' - play-by-play dataframe
     # param 'type' - type of stats to calculate ('skater', 'goalie', or 'team')
@@ -1180,7 +1183,7 @@ def repo_load_rosters(seasons = []):
     #Returns roster data from repository
     # param 'seasons' - list of seasons to include
 
-    data = pd.read_csv("rosters/nhl_rosters.csv")
+    data = pd.read_csv(default_roster)
     if len(seasons)>0:
         data = data.loc[data['season'].isin(seasons)]
 
@@ -1190,7 +1193,7 @@ def repo_load_schedule(seasons = []):
     #Returns schedule data from repository
     # param 'seasons' - list of seasons to include
 
-    data = pd.read_csv("schedule/schedule.csv")
+    data = pd.read_csv(schedule_path)
     if len(seasons)>0:
         data = data.loc[data['season'].isin(seasons)]
 
@@ -1199,7 +1202,7 @@ def repo_load_schedule(seasons = []):
 def repo_load_teaminfo():
     #Returns team data from repository
 
-    return pd.read_csv("teaminfo/nhl_teaminfo.csv")
+    return pd.read_csv(info_path)
 
 def repo_load_pbp(seasons = []):
     #Returns play-by-play data from repository
