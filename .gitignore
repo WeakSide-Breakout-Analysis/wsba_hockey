@@ -1,3 +1,4 @@
+__pycache__/
 src/wsba_hockey/pbp/
 src/wsba_hockey/stats/
 src/wsba_hockey/tools/xg_model/moneypuck/shots/

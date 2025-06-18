@@ -3,7 +3,8 @@ import numpy as np
 import xgboost as xgb
 import scipy.sparse as sp
 import joblib
-import wsba_main as wsba
+import os
+import wsba_hockey.wsba_main as wsba
 import tools.scraping as scraping
 from sklearn.calibration import calibration_curve
 from sklearn.metrics import roc_curve, auc
@@ -78,12 +79,15 @@ strengths = ['3v3',
             '6v4',
             '6v5']
 
+dir = os.path.dirname(os.path.realpath(__file__))
+roster = pd.read_csv(os.path.join(dir,'rosters\\nhl_rosters.csv'))
+
 def fix_players(pbp):
     #Add/fix player info for shooters and goaltenders
     print('Adding player info to pbp...')
 
     #Load roster and all players
-    roster = pd.read_csv('rosters/nhl_rosters.csv').drop_duplicates(['id'])[['fullName','id','shootsCatches']]
+    roster = roster.drop_duplicates(['id'])[['fullName','id','shootsCatches']]
 
     #Some players are missing from the roster file (generally in newer seasons); add these manually
     miss = list(pbp.loc[~(pbp['event_player_1_id'].isin(list(roster['id'])))&(pbp['event_player_1_id'].notna()),'event_player_1_id'].drop_duplicates())

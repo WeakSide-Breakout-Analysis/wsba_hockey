@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from .xg_model import *
+from wsba_hockey.tools.xg_model import *
 
 ## AGGREGATE FUNCTIONS ##
 

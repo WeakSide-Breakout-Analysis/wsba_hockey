@@ -2,11 +2,12 @@ import requests as rs
 import pandas as pd
 import time
 import random
+import os
 from datetime import datetime, timedelta, date
-from tools.scraping import *
-from tools.xg_model import *
-from tools.agg import *
-from tools.plotting import *
+from wsba_hockey.tools.scraping import *
+from wsba_hockey.tools.xg_model import *
+from wsba_hockey.tools.agg import *
+from wsba_hockey.tools.plotting import *
 
 ### WSBA HOCKEY ###
 ## Provided below are all integral functions in the WSBA Hockey Python package. ##
@@ -504,7 +505,7 @@ def nhl_apply_xG(pbp):
 
     print(f'Applying WSBA xG to model with seasons: {pbp['season'].drop_duplicates().to_list()}')
     #Fix player data
-    #pbp = fix_players(pbp)
+    pbp = fix_players(pbp)
 
     #Apply xG model
     pbp = wsba_xG(pbp)
