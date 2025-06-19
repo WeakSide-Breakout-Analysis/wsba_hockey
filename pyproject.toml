@@ -1,6 +1,6 @@
 [project]
 name = "wsba_hockey"
-version = "1.0.4"
+version = "1.1.0"
 authors = [
   { name="Owen Singh", email="owenbksingh@gmail.com" },
 ]
@@ -16,3 +16,9 @@ keywords = ["wsba","hockey","scraping","NHL","analytics"]
 
 [project.urls]
 Homepage = "https://github.com/owensingh38/wsba_hockey/"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+"wsba_hockey.tools" = ["*"]

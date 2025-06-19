@@ -1,5 +1,4 @@
 {
-    "python.envFile": "${workspaceFolder}/.env",
     "editor.acceptSuggestionOnEnter": true,
     "editor.quickSuggestions": {
         "other": false,

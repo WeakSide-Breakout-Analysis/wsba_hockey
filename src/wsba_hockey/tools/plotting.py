@@ -25,12 +25,12 @@ event_markers = {
 
 dir = os.path.dirname(os.path.realpath(__file__))
 info_path = os.path.join(dir,'teaminfo\\nhl_teaminfo.csv')
+img_path = os.path.join(dir,'utils\\wsba.png')
 
 def wsba_rink(display_range='offense',rotation = 0):
-    img = 'tools/utils/wsba.png'
     rink = NHLRink(center_logo={
         "feature_class": CircularImage,
-        "image_path": img,
+        "image_path": img_path,
         "length": 25, "width": 25,
         "x": 0, "y": 0,
         "radius": 14,    

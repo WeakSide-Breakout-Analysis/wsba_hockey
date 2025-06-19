@@ -5,7 +5,7 @@ import numpy as np
 import xgboost as xgb
 import scipy.sparse as sp
 import wsba_hockey.wsba_main as wsba
-import tools.scraping as scraping
+import wsba_hockey.tools.scraping as scraping
 import matplotlib.pyplot as plt
 from sklearn.calibration import calibration_curve
 from sklearn.metrics import roc_curve, auc
