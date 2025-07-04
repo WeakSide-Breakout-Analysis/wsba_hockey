@@ -6,7 +6,7 @@ import pandas as pd
 import requests as rs
 import json as json_lib
 from bs4 import BeautifulSoup
-from wsba_hockey.tools.utils.shared import *
+from tools.utils.shared import *
 warnings.filterwarnings('ignore')
 
 ### SCRAPING FUNCTIONS ###
@@ -28,7 +28,7 @@ def get_col():
     return [
         'season','season_type','game_id','game_date',"start_time","venue","venue_location",
         'away_team_abbr','home_team_abbr','event_num','period','period_type',
-        'seconds_elapsed',"strength_state","strength_state_venue","home_team_defending_side",
+        'seconds_elapsed','period_time','game_time',"strength_state","strength_state_venue","home_team_defending_side",
         "event_type_code","event_type","description","event_reason",
         "penalty_type","penalty_duration","penalty_attribution",
         "event_team_abbr","event_team_venue",
@@ -984,7 +984,11 @@ def combine_data(info,sources):
         df[f'{venue}_corsi'] = ((df['event_team_venue']==venue)&(df['event_type'].isin(['blocked-shot','missed-shot','shot-on-goal','goal']))).cumsum()
         df[f'{venue}_fenwick'] = ((df['event_team_venue']==venue)&(df['event_type'].isin(['missed-shot','shot-on-goal','goal']))).cumsum()
         df[f'{venue}_penalties'] = ((df['event_team_venue']==venue)&(df['event_type']=='penalty')).cumsum()
-       
+    
+    #Add time adjustments
+    df['period_time'] = np.trunc((df['seconds_elapsed']-((df['period']-1)*1200))/60).astype(str).str.replace('.0','')+":"+(df['seconds_elapsed'] % 60).astype(str).str.pad(2,'left','0')
+    df['game_time'] = np.trunc(df['seconds_elapsed']/60).astype(str).str.replace('.0','')+":"+(df['seconds_elapsed'] % 60).astype(str).str.pad(2,'left','0')
+
     #Forward fill as necessary
     cols = ['period_type','home_team_defending_side','away_coach','home_coach']
     for col in cols:

@@ -4,8 +4,8 @@ import pandas as pd
 import numpy as np
 import xgboost as xgb
 import scipy.sparse as sp
-import wsba_hockey.wsba_main as wsba
-import wsba_hockey.tools.scraping as scraping
+import wsba_main as wsba
+import tools.scraping as scraping
 import matplotlib.pyplot as plt
 from sklearn.calibration import calibration_curve
 from sklearn.metrics import roc_curve, auc
@@ -118,7 +118,7 @@ def fix_players(pbp):
 
 def prep_xG_data(data):
     #Prep data for xG training and calculation
-    data = fix_players(data)
+    #data = fix_players(data)
 
     #Informal groupby
     data = data.sort_values(by=['season','game_id','period','seconds_elapsed','event_num'])

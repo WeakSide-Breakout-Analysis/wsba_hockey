@@ -475,16 +475,19 @@ def nhl_scrape_player_data(player_ids):
         api = f'https://api-web.nhle.com/v1/player/{player_id}/landing'
 
         data = pd.json_normalize(rs.get(api).json())
-
         #Add name column
         data['fullName'] = (data['firstName.default'] + " " + data['lastName.default']).str.upper()
 
         #Append
         infos.append(data)
 
-    df = pd.concat(infos)
-    #Return: player data
-    return df
+    if infos:
+        df = pd.concat(infos)
+        
+        #Return: player data
+        return df
+    else:
+        return pd.DataFrame()
 
 def nhl_scrape_draft_rankings(arg = 'now', category = ''):
     #Given url argument for timeframe and prospect category, return draft rankings
@@ -885,18 +888,8 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,split_game=False,ros
     except KeyError: 
         pbp = wsba_xG(pbp)
 
-    #Filter by season types, remove shootouts, remove shots with no coordinates, and remove shots on empty nets
-    pbp_noshot = pbp.loc[(pbp['season_type'].isin(season_types)) & ~(pbp['event_type'].isin(fenwick_events))]
-
-    #Include everything when strengths is set to 'all'
-    if game_strength == 'all':
-        mask = ((pbp['event_type'].isin(fenwick_events)) & (pbp['empty_net']<1))
-    else:
-        mask = ((pbp['event_type'].isin(fenwick_events)) & (pbp['empty_net']<1) & (pbp['x'].notna()) & (pbp['y'].notna()))
-    
-    pbp_shot = pbp.loc[(pbp['season_type'].isin(season_types)) & mask]
-
-    pbp = pd.concat([pbp_shot,pbp_noshot])
+    #Apply season_type filter
+    pbp = pbp.loc[(pbp['season_type'].isin(season_types))]
 
     #Convert all columns with player ids to float in order to avoid merging errors
     for col in get_col():
@@ -1210,7 +1203,7 @@ def repo_load_pbp(seasons = []):
 
     #Add parquet to total
     print(f'Loading play-by-play from the following seasons: {seasons}...')
-    dfs = [pd.read_parquet(f"https://f005.backblazeb2.com/file/weakside-breakout/pbp/{season}.parquet") for season in seasons]
+    dfs = [pd.read_parquet(f"https://weakside-breakout.s3.us-east-2.amazonaws.com/pbp/{season}.parquet") for season in seasons]
 
     return pd.concat(dfs)
 
