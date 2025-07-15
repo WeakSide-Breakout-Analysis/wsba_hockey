@@ -4,16 +4,16 @@ import requests as rs
 import pandas as pd
 import time
 from datetime import datetime, timedelta, date
-from .tools.scraping import *
-from .tools.xg_model import *
-from .tools.agg import *
-from .tools.plotting import *
+from wsba_hockey.tools.scraping import *
+from wsba_hockey.tools.xg_model import *
+from wsba_hockey.tools.agg import *
+from wsba_hockey.tools.plotting import *
 
 ### WSBA HOCKEY ###
 ## Provided below are all integral functions in the WSBA Hockey Python package. ##
 
 ## GLOBAL VARIABLES ##
-seasons = [
+SEASONS = [
     '20072008',
     '20082009',
     '20092010',
@@ -34,7 +34,7 @@ seasons = [
     '20242025'
 ]
 
-convert_seasons = {'2007': '20072008', 
+CONVERT_SEASONS = {'2007': '20072008', 
                    '2008': '20082009', 
                    '2009': '20092010', 
                    '2010': '20102011', 
@@ -53,17 +53,17 @@ convert_seasons = {'2007': '20072008',
                    '2023': '20232024', 
                    '2024': '20242025'}
 
-convert_team_abbr = {'L.A':'LAK',
+CONVERT_TEAM_ABBR = {'L.A':'LAK',
                      'N.J':'NJD',
                      'S.J':'SJS',
                      'T.B':'TBL',
                      'PHX':'ARI'}
 
-per_sixty = ['Fi','xGi','Gi','A1','A2','P1','P','OZF','NZF','DZF','FF','FA','xGF','xGA','GF','GA','CF','CA','HF','HA','Give','Take','Penl','Penl2','Penl5','Draw','Block']
+PER_SIXTY = ['Fi','xGi','Gi','A1','A2','P1','P','Si','OZF','NZF','DZF','FF','FA','xGF','xGA','GF','GA','SF','SA','CF','CA','HF','HA','Give','Take','Penl','Penl2','Penl5','Draw','Block','GSAx']
 
 #Some games in the API are specifically known to cause errors in scraping.
 #This list is updated as frequently as necessary
-known_probs = {
+KNOWN_PROBS = {
     '2007020011':'Missing shifts data for game between Chicago and Minnesota.',
     '2007021178':'Game between the Bruins and Sabres is missing data after the second period, for some reason.',
     '2008020259':'HTML data is completely missing for this game.',
@@ -79,11 +79,11 @@ known_probs = {
     '2019020876':'Due to the frightening collapse of Blues defensemen Jay Bouwmeester, a game on February 2nd, 2020 between the Ducks and Blues was postponed.  \nWhen the game resumed, Ducks defensemen Hampus Lindholm, who assisted on a goal in the inital game, did not play in the resumed match.'
 }
 
-shot_types = ['wrist','deflected','tip-in','slap','backhand','snap','wrap-around','poke','bat','cradle','between-legs']
+SHOT_TYPES = ['wrist','deflected','tip-in','slap','backhand','snap','wrap-around','poke','bat','cradle','between-legs']
 
-new = 2024
+NEW = 2024
 
-standings_end = {
+STANDINGS_END = {
     '20072008':'04-06',
     '20082009':'04-12',
     '20092010':'04-11',
@@ -104,12 +104,12 @@ standings_end = {
     '20242025':'04-17'
 }
 
-events = ['faceoff','hit','giveaway','takeaway','blocked-shot','missed-shot','shot-on-goal','goal','penalty']
+EVENTS = ['faceoff','hit','giveaway','takeaway','blocked-shot','missed-shot','shot-on-goal','goal','penalty']
 
-dir = os.path.dirname(os.path.realpath(__file__))
-schedule_path = os.path.join(dir,'tools\\schedule\\schedule.csv')
-info_path = os.path.join(dir,'tools\\teaminfo\\nhl_teaminfo.csv')
-default_roster = os.path.join(dir,'tools\\rosters\\nhl_rosters.csv')
+DIR = os.path.dirname(os.path.realpath(__file__))
+SCHEDULE_PATH = os.path.join(DIR,'tools\\schedule\\schedule.csv')
+INFO_PATH = os.path.join(DIR,'tools\\teaminfo\\nhl_teaminfo.csv')
+DEFAULT_ROSTER = os.path.join(DIR,'tools\\rosters\\nhl_rosters.csv')
 
 ## SCRAPE FUNCTIONS ##
 def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','period-end','challenge','stoppage','shootout-complete','game-end'],verbose = False, sources = False, errors = False):
@@ -189,8 +189,8 @@ def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','per
         except:
             #Games such as the all-star game and pre-season games will incur this error
             #Other games have known problems
-            if game_id in known_probs.keys():
-                print(f"\nGame {game_id} has a known problem: {known_probs[game_id]}")
+            if game_id in KNOWN_PROBS.keys():
+                print(f"\nGame {game_id} has a known problem: {KNOWN_PROBS[game_id]}")
             else:
                 print(f"\nUnable to scrape game {game_id}.  Ensure the ID is properly inputted and formatted.")
             
@@ -302,7 +302,7 @@ def nhl_scrape_schedule(season,start = "09-01", end = "08-01"):
     #Return: specificed schedule data
     return df
 
-def nhl_scrape_season(season,split_shifts = False, season_types = [2,3], remove = ['period-start','period-end','game-end','challenge','stoppage'], start = "09-01", end = "08-01", local=False, local_path = schedule_path, verbose = False, sources = False, errors = False):
+def nhl_scrape_season(season,split_shifts = False, season_types = [2,3], remove = ['period-start','period-end','game-end','challenge','stoppage'], start = "09-01", end = "08-01", local=False, local_path = SCHEDULE_PATH, verbose = False, sources = False, errors = False):
     #Given season, scrape all play-by-play occuring within the season
     # param 'season' - NHL season to scrape
     # param 'split_shifts' - boolean which splits pbp and shift events if true
@@ -382,7 +382,7 @@ def nhl_scrape_standings(arg = "now", season_type = 2):
     #arg param is ignored when set to "now" if season_type param is 3
     if season_type == 3:
         if arg == "now":
-            arg = new
+            arg = NEW
 
         print(f"Scraping playoff bracket for date: {arg}")
         api = f"https://api-web.nhle.com/v1/playoff-bracket/{arg}"
@@ -394,12 +394,12 @@ def nhl_scrape_standings(arg = "now", season_type = 2):
     else:
         if arg == "now":
             print("Scraping standings as of now...")
-        elif arg in seasons:
+        elif arg in SEASONS:
             print(f'Scraping standings for season: {arg}')
         else:
             print(f"Scraping standings for date: {arg}")
 
-        api = f"https://api-web.nhle.com/v1/standings/{arg[4:8]}-{standings_end[arg]}"
+        api = f"https://api-web.nhle.com/v1/standings/{arg[4:8]}-{STANDINGS_END[arg]}"
         data = rs.get(api).json()['standings']
 
         return pd.json_normalize(data)
@@ -687,7 +687,7 @@ def nhl_shooting_impacts(agg,type):
                 pos[f'{group[0]}-FNI-T'] = (pos[f'{group[0]}-FNI']/60)*pos['TOI']
        
        #Rank per 60 stats
-        for stat in per_sixty[10:len(per_sixty)]:
+        for stat in PER_SIXTY[11:len(PER_SIXTY)]:
             pos[f'{stat}/60-P'] = pos[f'{stat}/60'].rank(pct=True)
 
         #Flip percentiles for against stats
@@ -788,7 +788,7 @@ def nhl_shooting_impacts(agg,type):
             pos['RushesFi'] = pos['RushFi/60'].rank(pct=True)
 
             #Rank per 60 stats
-            for stat in per_sixty:
+            for stat in PER_SIXTY:
                 pos[f'{stat}/60-P'] = pos[f'{stat}/60'].rank(pct=True)
 
             #Flip percentiles for against stats
@@ -868,7 +868,7 @@ def nhl_shooting_impacts(agg,type):
         #Return: skater stats with shooting impacts
         return df
 
-def nhl_calculate_stats(pbp,type,season_types,game_strength,split_game=False,roster_path=default_roster,shot_impact=False):
+def nhl_calculate_stats(pbp,type,season_types,game_strength,split_game=False,roster_path=DEFAULT_ROSTER,shot_impact=False):
     #Given play-by-play, seasonal information, game_strength, rosters, and xG model, return aggregated stats
     # param 'pbp' - play-by-play dataframe
     # param 'type' - type of stats to calculate ('skater', 'goalie', or 'team')
@@ -911,10 +911,11 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,split_game=False,ros
         complete['TOI'] = complete['TOI']/60
 
         #Add per 60 stats
-        for stat in ['FF','FA','xGF','xGA','GF','GA','CF','CA','GSAx']:
+        for stat in ['FF','FA','xGF','xGA','GF','GA','SF','SA','CF','CA','GSAx']:
             complete[f'{stat}/60'] = (complete[stat]/complete['TOI'])*60
             
         complete['GF%'] = complete['GF']/(complete['GF']+complete['GA'])
+        complete['SF%'] = complete['SF']/(complete['SF']+complete['SA'])
         complete['xGF%'] = complete['xGF']/(complete['xGF']+complete['xGA'])
         complete['FF%'] = complete['FF']/(complete['FF']+complete['FA'])
         complete['CF%'] = complete['CF']/(complete['CF']+complete['CA'])
@@ -953,10 +954,6 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,split_game=False,ros
         #Find player headshot
         complete['Headshot'] = 'https://assets.nhle.com/mugs/nhl/'+complete['Season'].astype(str)+'/'+complete['Team']+'/'+complete['ID'].astype(int).astype(str)+'.png'
 
-        end = time.perf_counter()
-        length = end-start
-        print(f'...finished in {(length if length <60 else length/60):.2f} {'seconds' if length <60 else 'minutes'}.')
-
         head = ['Goalie','ID','Game'] if 'Game' in complete.columns else ['Goalie','ID']
         complete = complete[head+[
             "Season","Team",'WSBA',
@@ -964,12 +961,12 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,split_game=False,ros
             'Height (in)','Weight (lbs)',
             'Birthday','Age','Nationality',
             'GP','TOI',
-            "GF","FF","xGF","xGF/FF","GF/xGF","FshF%",
-            "GA","FA","xGA","xGA/FA","GA/xGA","FshA%",
+            "GF","SF","FF","xGF","xGF/FF","GF/xGF","ShF%","FshF%",
+            "GA","SA","FA","xGA","xGA/FA","GA/xGA","ShA%","FshA%",
             'CF','CA',
             'GSAx',
             'RushF','RushA','RushFxG','RushAxG','RushFG','RushAG'
-        ]+[f'{stat}/60' for stat in ['FF','FA','xGF','xGA','GF','GA','CF','CA','GSAx']]]
+        ]+[f'{stat}/60' for stat in ['FF','FA','xGF','xGA','GF','GA','SF','SA','CF','CA','GSAx']]]
 
         #Apply shot impacts if necessary
         if shot_impact:
@@ -991,10 +988,11 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,split_game=False,ros
         complete['TOI'] = complete['TOI']/60
 
         #Add per 60 stats
-        for stat in per_sixty[10:len(per_sixty)]:
+        for stat in PER_SIXTY[11:len(PER_SIXTY)]:
             complete[f'{stat}/60'] = (complete[stat]/complete['TOI'])*60
             
         complete['GF%'] = complete['GF']/(complete['GF']+complete['GA'])
+        complete['SF%'] = complete['SF']/(complete['SF']+complete['SA'])
         complete['xGF%'] = complete['xGF']/(complete['xGF']+complete['xGA'])
         complete['FF%'] = complete['FF']/(complete['FF']+complete['FA'])
         complete['CF%'] = complete['CF']/(complete['CF']+complete['CA'])
@@ -1003,16 +1001,17 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,split_game=False,ros
         complete = complete[head+[
             'Season','WSBA',
             'GP','TOI',
-            "GF","FF","xGF","xGF/FF","GF/xGF","FshF%",
-            "GA","FA","xGA","xGA/FA","GA/xGA","FshA%",
+            "GF","SF","FF","xGF","xGF/FF","GF/xGF","ShF%","FshF%",
+            "GA","SA","FA","xGA","xGA/FA","GA/xGA","ShA%","FshA%",
             'CF','CA',
-            'GF%','FF%','xGF%','CF%',
+            'GF%','SF%','FF%','xGF%','CF%',
             'HF','HA','HF%',
             'Penl','Penl2','Penl5','PIM','Draw','PENL%',
             'Give','Take','PM%',
             'Block',
-            'RushF','RushA','RushFxG','RushAxG','RushFG','RushAG'
-        ]+[f'{stat}/60' for stat in per_sixty[10:len(per_sixty)]]]
+            'RushF','RushA','RushFxG','RushAxG','RushFG','RushAG',
+            'GSAx'
+        ]+[f'{stat}/60' for stat in PER_SIXTY[11:len(PER_SIXTY)]]]
         #Apply shot impacts if necessary
         if shot_impact:
             complete = nhl_shooting_impacts(complete,'team')
@@ -1038,6 +1037,7 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,split_game=False,ros
         complete['FC%'] = complete['Fi']/complete['FF']
         complete['xGC%'] = complete['xGi']/complete['xGF']
         complete['GF%'] = complete['GF']/(complete['GF']+complete['GA'])
+        complete['SF%'] = complete['SF']/(complete['SF']+complete['SA'])
         complete['xGF%'] = complete['xGF']/(complete['xGF']+complete['xGA'])
         complete['FF%'] = complete['FF']/(complete['FF']+complete['FA'])
         complete['CF%'] = complete['CF']/(complete['CF']+complete['CA'])
@@ -1082,13 +1082,13 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,split_game=False,ros
         complete['WSBA'] = complete['Player']+complete['Season'].astype(str)+complete['Team']
 
         #Add per 60 stats
-        for stat in per_sixty:
+        for stat in PER_SIXTY:
             complete[f'{stat}/60'] = (complete[stat]/complete['TOI'])*60
 
         #Shot Type Metrics
         type_metrics = []
         for type in shot_types:
-            for stat in per_sixty[:3]:
+            for stat in PER_SIXTY[:3]:
                 type_metrics.append(f'{type.capitalize()}{stat}')
 
         head = ['Player','ID','Game'] if 'Game' in complete.columns else ['Player','ID']
@@ -1098,11 +1098,11 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,split_game=False,ros
             'Height (in)','Weight (lbs)',
             'Birthday','Age','Nationality',
             'GP','TOI',
-            "Gi","A1","A2",'P1','P',
+            "Gi","A1","A2",'P1','P','Si','Shi%',
             'Give','Take','PM%','HF','HA','HF%',
             "Fi","xGi",'xGi/Fi',"Gi/xGi","Fshi%",
-            "GF","FF","xGF","xGF/FF","GF/xGF","FshF%",
-            "GA","FA","xGA","xGA/FA","GA/xGA","FshA%",
+            "GF","SF","FF","xGF","xGF/FF","GF/xGF","ShF%","FshF%",
+            "GA","SA","FA","xGA","xGA/FA","GA/xGA","ShA%","FshA%",
             'Ci','CF','CA','CF%',
             'FF%','xGF%','GF%',
             'Rush',"Rush xG",'Rush G',"GC%","AC%","GI%","FC%","xGC%",
@@ -1112,7 +1112,8 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,split_game=False,ros
             'Block',
             'OZF','NZF','DZF',
             'OZF%','NZF%','DZF%',
-        ]+[f'{stat}/60' for stat in per_sixty]+type_metrics].fillna(0).sort_values(['Player','Season','Team','ID'])
+            'GSAx'
+        ]+[f'{stat}/60' for stat in PER_SIXTY]+type_metrics].fillna(0).sort_values(['Player','Season','Team','ID'])
         
         #Apply shot impacts if necessary (Note: this will remove skaters with fewer than 150 minutes of TOI due to the shot impact TOI rule)
         if shot_impact:
@@ -1176,7 +1177,7 @@ def repo_load_rosters(seasons = []):
     #Returns roster data from repository
     # param 'seasons' - list of seasons to include
 
-    data = pd.read_csv(default_roster)
+    data = pd.read_csv(DEFAULT_ROSTER)
     if len(seasons)>0:
         data = data.loc[data['season'].isin(seasons)]
 
@@ -1186,7 +1187,7 @@ def repo_load_schedule(seasons = []):
     #Returns schedule data from repository
     # param 'seasons' - list of seasons to include
 
-    data = pd.read_csv(schedule_path)
+    data = pd.read_csv(SCHEDULE_PATH)
     if len(seasons)>0:
         data = data.loc[data['season'].isin(seasons)]
 
@@ -1195,7 +1196,7 @@ def repo_load_schedule(seasons = []):
 def repo_load_teaminfo():
     #Returns team data from repository
 
-    return pd.read_csv(info_path)
+    return pd.read_csv(INFO_PATH)
 
 def repo_load_pbp(seasons = []):
     #Returns play-by-play data from repository
@@ -1203,11 +1204,11 @@ def repo_load_pbp(seasons = []):
 
     #Add parquet to total
     print(f'Loading play-by-play from the following seasons: {seasons}...')
-    dfs = [pd.read_parquet(f"https://weakside-breakout.s3.us-east-2.amazonaws.com/pbp/{season}.parquet") for season in seasons]
+    dfs = [pd.read_parquet(f"https://weakside-breakout.s3.us-east-2.amazonaws.com/pbp/parquet/nhl_pbp_{season}.parquet") for season in seasons]
 
     return pd.concat(dfs)
 
 def repo_load_seasons():
     #List of available seasons to scrape
 
-    return seasons
+    return SEASONS

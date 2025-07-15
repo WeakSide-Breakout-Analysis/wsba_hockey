@@ -49,12 +49,18 @@ wsba.nhl_scrape_prospects('BOS')
 
 
 ## DATA ANALYTICS
-### Expected Goals (WeakSide Breakout and MoneyPuck models)
+### Expected Goals
+```python
+pbp = wsba.nhl_scrape_game(['2024020918'],split_shifts=False,remove=['game-end'])
+pbp = wsba.nhl_apply_xG(pbp)
+```
+
 ### Goal Impacts and Shot Analysis
+
 ### Stat Aggregation
 ```python
 pbp = wsba.nhl_scrape_season('20232024',remove=[], local = True)
-wsba.nhl_calculate_stats(pbp,'skater',[2],['5v5','4v4','3v3'],xg='wsba',shot_impact = True)
+wsba.nhl_calculate_stats(pbp,'skater',[2],['5v5','4v4','3v3'],shot_impact = True)
 ```
 ### Shot Plotting (Plots, Heatmaps, etc.)
 ```python
@@ -89,7 +95,5 @@ Harry Shomer - Creator of the hockey_scraper package, which contains select util
 Dan Morse - Creator of the hockeyR package; another important inspiration and model for developing an NHL scraper.
 
 Patrick Bacon - Creator of TopDownHockey package
-
-MoneyPuck - Source of available xG data in the package
 
 Anyone in the NHL Public Analytics community who has stuck around and supported WeakSide Breakout Analysis hockey.

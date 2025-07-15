@@ -30,6 +30,7 @@ def calc_indv(pbp,game_strength,second_group):
     ep1 = (
         pbp.loc[pbp['event_type'].isin(["goal", "shot-on-goal", "missed-shot","blocked-shot",'hit','giveaway','takeaway','faceoff','penalty'])].groupby(raw_group_1).agg(
         Gi=('event_type', lambda x: (x == "goal").sum()),
+        Si=('event_type', lambda x: (x.isin(['shot-on-goal','goal'])).sum()),
         Fi=('event_type', lambda x: (x.isin(fenwick_events)).sum()),
         Ci=('event_type', lambda x: (x.isin(fenwick_events+['blocked-shot'])).sum()),
         xGi=('xG', 'sum'),
@@ -80,6 +81,7 @@ def calc_indv(pbp,game_strength,second_group):
         shot = (
             pbp.loc[(pbp['event_type'].isin(["goal", "shot-on-goal", "missed-shot"])&(pbp['shot_type']==type))].groupby(raw_group_1).agg(
             Gi=('event_type', lambda x: (x == "goal").sum()),
+            Si=('event_type', lambda x: (x.isin(['shot-on-goal','goal'])).sum()),
             Fi=('event_type', lambda x: (x != "blocked-shot").sum()),
             xGi=('xG', 'sum'),
         ).reset_index().rename(columns={'event_player_1_id': 'ID', 'event_team_abbr': 'Team', 'season': 'Season', 'game_id':'Game'})
@@ -87,6 +89,7 @@ def calc_indv(pbp,game_strength,second_group):
 
         shot = shot.rename(columns={
             'Gi':f'{type.capitalize()}Gi',
+            'Si':f'{type.capitalize()}Si',
             'Fi':f'{type.capitalize()}Fi',
             'xGi':f'{type.capitalize()}xGi',
         })
@@ -96,6 +99,7 @@ def calc_indv(pbp,game_strength,second_group):
 
     indv['P1'] = indv['Gi']+indv['A1']
     indv['P'] = indv['P1']+indv['A2']
+    indv['Shi%'] = indv['Gi']/indv['Si']
     indv['xGi/Fi'] = indv['xGi']/indv['Fi']
     indv['Gi/xGi'] = indv['Gi']/indv['xGi']
     indv['Fshi%'] = indv['Gi']/indv['Fi']
@@ -134,6 +138,8 @@ def calc_onice(pbp,game_strength,second_group):
         df['xGA'] = np.where(df['event_team_abbr'] == df[opp_col], df['xG'], 0)
         df['GF'] = np.where((df['event_type'] == "goal") & (df['event_team_abbr'] == df[team_col]), 1, 0)
         df['GA'] = np.where((df['event_type'] == "goal") & (df['event_team_abbr'] == df[opp_col]), 1, 0)
+        df['SF'] = np.where((df['event_type'].isin(['shot-on-goal','goal'])) & (df['event_team_abbr'] == df[team_col]), 1, 0)
+        df['SA'] = np.where((df['event_type'].isin(['shot-on-goal','goal'])) & (df['event_team_abbr'] == df[opp_col]), 1, 0)
         df['FF'] = np.where((df['event_type'].isin(fenwick_events)) & (df['event_team_abbr'] == df[team_col]), 1, 0)
         df['FA'] = np.where((df['event_type'].isin(fenwick_events)) & (df['event_team_abbr'] == df[opp_col]), 1, 0)
         df['CF'] = np.where((df['event_type'].isin(fenwick_events+['blocked-shot'])) & (df['event_team_abbr'] == df[team_col]), 1, 0)
@@ -149,6 +155,8 @@ def calc_onice(pbp,game_strength,second_group):
             FA=('FA', 'sum'),
             GF=('GF', 'sum'),
             GA=('GA', 'sum'),
+            SF=('SF', 'sum'),
+            SA=('SA', 'sum'),
             xGF=('xGF', 'sum'),
             xGA=('xGA', 'sum'),
             CF=('CF','sum'),
@@ -170,6 +178,8 @@ def calc_onice(pbp,game_strength,second_group):
             FA=('FA', 'sum'),
             GF=('GF', 'sum'),
             GA=('GA', 'sum'),
+            SF=('SF', 'sum'),
+            SA=('SA', 'sum'),
             xGF=('xGF', 'sum'),
             xGA=('xGA', 'sum'),
             CF=('CF','sum'),
@@ -179,15 +189,18 @@ def calc_onice(pbp,game_strength,second_group):
             DZF=('DZF','sum')
     ).reset_index()
 
+    onice_stats['ShF%'] = onice_stats['GF']/onice_stats['SF']
     onice_stats['xGF/FF'] = onice_stats['xGF']/onice_stats['FF']
     onice_stats['GF/xGF'] = onice_stats['GF']/onice_stats['xGF']
     onice_stats['FshF%'] = onice_stats['GF']/onice_stats['FF']
+    onice_stats['ShA%'] = onice_stats['GA']/onice_stats['SA']
     onice_stats['xGA/FA'] = onice_stats['xGA']/onice_stats['FA']
     onice_stats['GA/xGA'] = onice_stats['GA']/onice_stats['xGA']
     onice_stats['FshA%'] = onice_stats['GA']/onice_stats['FA']
     onice_stats['OZF%'] = onice_stats['OZF']/(onice_stats['OZF']+onice_stats['NZF']+onice_stats['DZF'])
     onice_stats['NZF%'] = onice_stats['NZF']/(onice_stats['OZF']+onice_stats['NZF']+onice_stats['DZF'])
     onice_stats['DZF%'] = onice_stats['DZF']/(onice_stats['OZF']+onice_stats['NZF']+onice_stats['DZF'])
+    onice_stats['GSAx'] = onice_stats['xGA']-onice_stats['GA']
 
     return onice_stats
 
@@ -206,6 +219,8 @@ def calc_team(pbp,game_strength,second_group):
         pbp['xGA'] = np.where(pbp['event_team_abbr'] == pbp[f'{team[1]}_team_abbr'], pbp['xG'], 0)
         pbp['GF'] = np.where((pbp['event_type'] == "goal") & (pbp['event_team_abbr'] == pbp[f'{team[0]}_team_abbr']), 1, 0)
         pbp['GA'] = np.where((pbp['event_type'] == "goal") & (pbp['event_team_abbr'] == pbp[f'{team[1]}_team_abbr']), 1, 0)
+        pbp['SF'] = np.where((pbp['event_type'].isin(['shot-on-goal','goal'])) & (pbp['event_team_abbr'] == pbp[f'{team[0]}_team_abbr']), 1, 0)
+        pbp['SA'] = np.where((pbp['event_type'].isin(['shot-on-goal','goal'])) & (pbp['event_team_abbr'] == pbp[f'{team[1]}_team_abbr']), 1, 0)
         pbp['FF'] = np.where((pbp['event_type'].isin(fenwick_events)) & (pbp['event_team_abbr'] == pbp[f'{team[0]}_team_abbr']), 1, 0)
         pbp['FA'] = np.where((pbp['event_type'].isin(fenwick_events)) & (pbp['event_team_abbr'] == pbp[f'{team[1]}_team_abbr']), 1, 0)
         pbp['CF'] = np.where((pbp['event_type'].isin(fenwick_events+['blocked-shot'])) & (pbp['event_team_abbr'] == pbp[f'{team[0]}_team_abbr']), 1, 0)
@@ -234,6 +249,8 @@ def calc_team(pbp,game_strength,second_group):
             FA=('FA', 'sum'),
             GF=('GF', 'sum'),
             GA=('GA', 'sum'),
+            SF=('SF','sum'),
+            SA=('SA','sum'),
             xGF=('xGF', 'sum'),
             xGA=('xGA', 'sum'),
             CF=('CF','sum'),
@@ -264,6 +281,8 @@ def calc_team(pbp,game_strength,second_group):
             FA=('FA', 'sum'),
             GF=('GF', 'sum'),
             GA=('GA', 'sum'),
+            SF=('SF','sum'),
+            SA=('SA','sum'),
             xGF=('xGF', 'sum'),
             xGA=('xGA', 'sum'),
             CF=('CF','sum'),
@@ -286,15 +305,18 @@ def calc_team(pbp,game_strength,second_group):
             RushAG=('RushAG','sum'),
     ).reset_index()
 
+    onice_stats['ShF%'] = onice_stats['GF']/onice_stats['SF']
     onice_stats['xGF/FF'] = onice_stats['xGF']/onice_stats['FF']
     onice_stats['GF/xGF'] = onice_stats['GF']/onice_stats['xGF']
     onice_stats['FshF%'] = onice_stats['GF']/onice_stats['FF']
+    onice_stats['ShA%'] = onice_stats['GA']/onice_stats['SA']
     onice_stats['xGA/FA'] = onice_stats['xGA']/onice_stats['FA']
     onice_stats['GA/xGA'] = onice_stats['GA']/onice_stats['xGA']
     onice_stats['FshA%'] = onice_stats['GA']/onice_stats['FA']
     onice_stats['PM%'] = onice_stats['Take']/(onice_stats['Give']+onice_stats['Take'])
     onice_stats['HF%'] = onice_stats['HF']/(onice_stats['HF']+onice_stats['HA'])
     onice_stats['PENL%'] = onice_stats['Draw']/(onice_stats['Draw']+onice_stats['Penl'])
+    onice_stats['GSAx'] = onice_stats['xGA']/onice_stats['GA']
 
     return onice_stats
 
@@ -313,6 +335,8 @@ def calc_goalie(pbp,game_strength,second_group):
         pbp['xGA'] = np.where(pbp['event_team_abbr'] == pbp[f'{team[1]}_team_abbr'], pbp['xG'], 0)
         pbp['GF'] = np.where((pbp['event_type'] == "goal") & (pbp['event_team_abbr'] == pbp[f'{team[0]}_team_abbr']), 1, 0)
         pbp['GA'] = np.where((pbp['event_type'] == "goal") & (pbp['event_team_abbr'] == pbp[f'{team[1]}_team_abbr']), 1, 0)
+        pbp['SF'] = np.where((pbp['event_type'].isin(['shot-on-goal','goal'])) & (pbp['event_team_abbr'] == pbp[f'{team[0]}_team_abbr']), 1, 0)
+        pbp['SA'] = np.where((pbp['event_type'].isin(['shot-on-goal','goal'])) & (pbp['event_team_abbr'] == pbp[f'{team[1]}_team_abbr']), 1, 0)
         pbp['FF'] = np.where((pbp['event_type'].isin(fenwick_events)) & (pbp['event_team_abbr'] == pbp[f'{team[0]}_team_abbr']), 1, 0)
         pbp['FA'] = np.where((pbp['event_type'].isin(fenwick_events)) & (pbp['event_team_abbr'] == pbp[f'{team[1]}_team_abbr']), 1, 0)
         pbp['CF'] = np.where((pbp['event_type'].isin(fenwick_events+['blocked-shot'])) & (pbp['event_team_abbr'] == pbp[f'{team[0]}_team_abbr']), 1, 0)
@@ -331,6 +355,8 @@ def calc_goalie(pbp,game_strength,second_group):
             FA=('FA', 'sum'),
             GF=('GF', 'sum'),
             GA=('GA', 'sum'),
+            SF=('SF', 'sum'),
+            SA=('SA', 'sum'),
             xGF=('xGF', 'sum'),
             xGA=('xGA', 'sum'),
             CF=('CF','sum'),
@@ -351,6 +377,8 @@ def calc_goalie(pbp,game_strength,second_group):
             FA=('FA', 'sum'),
             GF=('GF', 'sum'),
             GA=('GA', 'sum'),
+            SF=('SF', 'sum'),
+            SA=('SA', 'sum'),
             xGF=('xGF', 'sum'),
             xGA=('xGA', 'sum'),
             CF=('CF','sum'),
@@ -363,9 +391,11 @@ def calc_goalie(pbp,game_strength,second_group):
             RushAG=('RushAG','sum'),
     ).reset_index()
 
+    onice_stats['ShF%'] = onice_stats['GF']/onice_stats['SF']
     onice_stats['xGF/FF'] = onice_stats['xGF']/onice_stats['FF']
     onice_stats['GF/xGF'] = onice_stats['GF']/onice_stats['xGF']
     onice_stats['FshF%'] = onice_stats['GF']/onice_stats['FF']
+    onice_stats['ShA%'] = onice_stats['GA']/onice_stats['SA']
     onice_stats['xGA/FA'] = onice_stats['xGA']/onice_stats['FA']
     onice_stats['GA/xGA'] = onice_stats['GA']/onice_stats['xGA']
     onice_stats['FshA%'] = onice_stats['GA']/onice_stats['FA']

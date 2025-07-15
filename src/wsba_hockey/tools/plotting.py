@@ -6,7 +6,7 @@ from hockey_rink import NHLRink
 from hockey_rink import CircularImage
 from scipy.interpolate import griddata
 from scipy.ndimage import gaussian_filter
-from tools.xg_model import *
+from wsba_hockey.tools.xg_model import *
 
 ### PLOTTING FUNCTIONS ###
 # Provided in this file are basic plotting functions for the WSBA Hockey Python package. #

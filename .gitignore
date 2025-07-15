@@ -15,3 +15,4 @@ src/wsba_hockey/backblaze_pbp/
 src/wsba_hockey/data_pipelines.py
 src/wsba_hockey/flask/
 src/wsba_hockey/aws_pbp/
+src/wsba_hockey/api/

@@ -10,18 +10,6 @@ src/wsba_hockey.egg-info/SOURCES.txt
 src/wsba_hockey.egg-info/dependency_links.txt
 src/wsba_hockey.egg-info/top_level.txt
 src/wsba_hockey/api/api/index.py
-src/wsba_hockey/api/api/main.py
-src/wsba_hockey/api/api/wsba_main.py
-src/wsba_hockey/api/api/tools/__init__.py
-src/wsba_hockey/api/api/tools/agg.py
-src/wsba_hockey/api/api/tools/plotting.py
-src/wsba_hockey/api/api/tools/scraping.py
-src/wsba_hockey/api/api/tools/xg_model.py
-src/wsba_hockey/api/api/tools/archive/old_scraping.py
-src/wsba_hockey/api/api/tools/utils/__init__.py
-src/wsba_hockey/api/api/tools/utils/config.py
-src/wsba_hockey/api/api/tools/utils/save_pages.py
-src/wsba_hockey/api/api/tools/utils/shared.py
 src/wsba_hockey/evidence/weakside-breakout/node_modules/duckdb/vendor.py
 src/wsba_hockey/evidence/weakside-breakout/node_modules/flatted/python/flatted.py
 src/wsba_hockey/evidence/weakside-breakout/node_modules/flatted/python/test.py
@@ -124,6 +112,8 @@ src/wsba_hockey/evidence/weakside-breakout/node_modules/sqlite3/node_modules/nod
 src/wsba_hockey/evidence/weakside-breakout/node_modules/sqlite3/node_modules/node-gyp/gyp/tools/pretty_sln.py
 src/wsba_hockey/evidence/weakside-breakout/node_modules/sqlite3/node_modules/node-gyp/gyp/tools/pretty_vcproj.py
 src/wsba_hockey/evidence/weakside-breakout/node_modules/sqlite3/node_modules/node-gyp/test/fixtures/test-charmap.py
+src/wsba_hockey/evidence/weakside-breakout/wsba_nhl_apps/wsba_nhl_apps/duos/app.py
+src/wsba_hockey/evidence/weakside-breakout/wsba_nhl_apps/wsba_nhl_apps/duos/calc.py
 src/wsba_hockey/evidence/weakside-breakout/wsba_nhl_apps/wsba_nhl_apps/game_stats/app.py
 src/wsba_hockey/evidence/weakside-breakout/wsba_nhl_apps/wsba_nhl_apps/game_stats/name_fix.py
 src/wsba_hockey/evidence/weakside-breakout/wsba_nhl_apps/wsba_nhl_apps/goalie/app.py
@@ -132,6 +122,9 @@ src/wsba_hockey/evidence/weakside-breakout/wsba_nhl_apps/wsba_nhl_apps/goalie/ri
 src/wsba_hockey/evidence/weakside-breakout/wsba_nhl_apps/wsba_nhl_apps/heatmaps/app.py
 src/wsba_hockey/evidence/weakside-breakout/wsba_nhl_apps/wsba_nhl_apps/heatmaps/plot.py
 src/wsba_hockey/evidence/weakside-breakout/wsba_nhl_apps/wsba_nhl_apps/heatmaps/rink_plot.py
+src/wsba_hockey/evidence/weakside-breakout/wsba_nhl_apps/wsba_nhl_apps/line-combos/app.py
+src/wsba_hockey/evidence/weakside-breakout/wsba_nhl_apps/wsba_nhl_apps/line-combos/plot.py
+src/wsba_hockey/evidence/weakside-breakout/wsba_nhl_apps/wsba_nhl_apps/line-combos/rink_plot.py
 src/wsba_hockey/evidence/weakside-breakout/wsba_nhl_apps/wsba_nhl_apps/matchups/app.py
 src/wsba_hockey/evidence/weakside-breakout/wsba_nhl_apps/wsba_nhl_apps/matchups/plot.py
 src/wsba_hockey/evidence/weakside-breakout/wsba_nhl_apps/wsba_nhl_apps/matchups/rink_plot.py
@@ -155,3 +148,4 @@ src/wsba_hockey/tools/utils/__init__.py
 src/wsba_hockey/tools/utils/config.py
 src/wsba_hockey/tools/utils/save_pages.py
 src/wsba_hockey/tools/utils/shared.py
+tests/tests.py
