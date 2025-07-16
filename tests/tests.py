@@ -17,3 +17,4 @@ plots = wsba.nhl_plot_games(pbp,['shot-on-goal','missed-shot','goal'],['5v5'])
 
 for game_id,plot in plots.items():
     plot[0].savefig(f'tests/samples/plots/{game_id}.png')
+    

@@ -2,7 +2,9 @@ import random
 import os
 import requests as rs
 import pandas as pd
+import asyncio
 import time
+from typing import Literal, Union
 from datetime import datetime, timedelta, date
 from wsba_hockey.tools.scraping import *
 from wsba_hockey.tools.xg_model import *
@@ -112,29 +114,41 @@ INFO_PATH = os.path.join(DIR,'tools\\teaminfo\\nhl_teaminfo.csv')
 DEFAULT_ROSTER = os.path.join(DIR,'tools\\rosters\\nhl_rosters.csv')
 
 ## SCRAPE FUNCTIONS ##
-def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','period-end','challenge','stoppage','shootout-complete','game-end'],verbose = False, sources = False, errors = False):
-    #Given a set of game_ids (NHL API), return complete play-by-play information as requested
-    # param 'game_ids' - NHL game ids (or list formatted as ['random', num_of_games, start_year, end_year])
-    # param 'split_shifts' - boolean which splits pbp and shift events if true
-    # param 'remove' - list of events to remove from final dataframe
-    # param 'xg' - xG model to apply to pbp for aggregation
-    # param 'verbose' - boolean which adds additional event info if true
-    # param 'sources - boolean scraping the html and json sources to a master directory if true 
-    # param 'errors' - boolean returning game ids which did not scrape if true
+def nhl_scrape_game(game_ids:list[int], split_shifts:bool = False, remove:list[str] = [], verbose:bool = False, sources:bool = False, errors:bool = False):
+    """
+    Given a set of game_ids (NHL API), return complete play-by-play information as requested.
 
+    Args:
+        game_ids (List[int] or ['random', int, int, int]):
+            List of NHL game IDs to scrape or use ['random', n, start_year, end_year] to fetch n random games.
+        split_shifts (bool, optional):
+            If True, returns a dict with separate 'pbp' and 'shifts' DataFrames. Default is False.
+        remove (List[str], optional):
+            List of event types to remove from the result. Default is an empty list.
+        verbose (bool, optional):
+            If True, generates extra event features (such as those required to calculate xG). Default is False.
+        sources (bool, optional):
+            If True, saves raw HTML, JSON, SHIFTS, and single-game full play-by-play to a separate folder in the working directory. Default is False.
+        errors (bool, optional):
+            If True, includes a list of game IDs that failed to scrape in the return. Default is False.
+
+    Returns:
+        pd.DataFrame:
+            If split_shifts is False, returns a single DataFrame of play-by-play data.
+        dict[str, pd.DataFrame]:
+            If split_shifts is True, returns a dictionary with keys:
+            - 'pbp': play-by-play events
+            - 'shifts': shift change events
+            - 'errors' (optional): list of game IDs that failed if errors=True
+    """
+    
     pbps = []
     if game_ids[0] == 'random':
         #Randomize selection of game_ids
         #Some ids returned may be invalid (for example, 2020021300)
         num = game_ids[1]
-        try: 
-            start = game_ids[2]
-        except:
-            start = 2007
-        try:
-            end = game_ids[3]
-        except:
-            end = (date.today().year)-1
+        start = game_ids[2] if len(game_ids) > 1 else 2007
+        end = game_ids[3] if len(game_ids) > 2 else (date.today().year)-1
 
         game_ids = []
         i = 0
@@ -161,13 +175,13 @@ def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','per
     error_ids = []
     prog = 0
     for game_id in game_ids:
-        print("Scraping data from game " + str(game_id) + "...",end="")
+        print(f'Scraping data from game {game_id}...',end='')
         start = time.perf_counter()
 
         try:
             #Retrieve data
             info = get_game_info(game_id)
-            data = combine_data(info, sources)
+            data = asyncio.run(combine_data(info, sources))
                 
             #Append data to list
             pbps.append(data)
@@ -186,19 +200,19 @@ def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','per
                 data.to_csv(f'{dirs}{info['game_id']}.csv',index=False)
 
             print(f" finished in {secs:.2f} seconds. {prog}/{len(game_ids)} ({(prog/len(game_ids))*100:.2f}%)")
-        except:
+        except Exception as e:
             #Games such as the all-star game and pre-season games will incur this error
             #Other games have known problems
             if game_id in KNOWN_PROBS.keys():
                 print(f"\nGame {game_id} has a known problem: {KNOWN_PROBS[game_id]}")
             else:
-                print(f"\nUnable to scrape game {game_id}.  Ensure the ID is properly inputted and formatted.")
+                print(f"\nUnable to scrape game {game_id}.  Exception: {e}")
             
             #Track error
             error_ids.append(game_id)
  
     #Add all pbps together
-    if len(pbps) == 0:
+    if not pbps:
         print("\rNo data returned.")
         return pd.DataFrame()
     df = pd.concat(pbps)
@@ -210,7 +224,7 @@ def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','per
         ""
 
     #Print final message
-    if len(error_ids) > 0:
+    if error_ids:
         print(f'\rScrape of provided games finished.\nThe following games failed to scrape: {error_ids}')
     else:
         print('\rScrape of provided games finished.')
@@ -218,7 +232,7 @@ def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','per
     #Split pbp and shift events if necessary
     #Return: complete play-by-play with data removed or split as necessary
     
-    if split_shifts == True:
+    if split_shifts:
         remove.append('change')
         
         #Return: dict with pbp and shifts seperated
@@ -242,22 +256,40 @@ def nhl_scrape_game(game_ids,split_shifts = False, remove = ['period-start','per
         else:
             return pbp
 
-def nhl_scrape_schedule(season,start = "09-01", end = "08-01"):
-    #Given a season, return schedule data
-    # param 'season' - NHL season to scrape
-    # param 'start' - Start date in season
-    # param 'end' - End date in season
+def nhl_scrape_schedule(season:int, start:str = '', end:str = ''):
+    """
+    Given season and an optional date range, retrieve NHL schedule data.
+
+    Args:
+        season (int): 
+            The NHL season formatted such as "20242025".
+        start (str, optional): 
+            The date string (MM-DD) to start the schedule scrape at. Default is a blank string.
+        end (str, optional): 
+            The date string (MM-DD) to end the schedule scrape at. Default is a blank string.
+
+    Returns:
+        pd.DataFrame: 
+            A DataFrame containing the schedule data for the specified season and date range.
+    """
 
     api = "https://api-web.nhle.com/v1/schedule/"
 
-    #Determine how to approach scraping; if month in season is after the new year the year must be adjusted
-    new_year = ["01","02","03","04","05","06"]
-    if start[:2] in new_year:
-        start = str(int(season[:4])+1)+"-"+start
-        end = str(season[:-4])+"-"+end
+    #If either start or end are blank then find start and endpoints for specified season
+    if start == '' or end == '':
+        season_data = rs.get('https://api.nhle.com/stats/rest/en/season').json()['data']
+        season_data = [s for s in season_data if s['id'] == season][0]
+        start = season_data['startDate'][0:10]
+        end = season_data['endDate'][0:10]
     else:
-        start = str(season[:4])+"-"+start
-        end = str(season[:-4])+"-"+end
+        #Determine how to approach scraping; if month in season is after the new year the year must be adjusted
+        new_year = ["01","02","03","04","05","06"]
+        if start[:2] in new_year:
+            start = f'{int(str(season)[:4])+1}-{start}'
+            end = f'{str(season)[:-4]}-{end}'
+        else:
+            start = f'{int(str(season)[:4])}-{start}'
+            end = f'{str(season)[:-4]}-{end}'
 
     form = '%Y-%m-%d'
 
@@ -274,9 +306,9 @@ def nhl_scrape_schedule(season,start = "09-01", end = "08-01"):
     for i in range(day):
         #For each day, call NHL api and retreive info on all games of selected game
         inc = start+timedelta(days=i)
-        print("Scraping games on " + str(inc)[:10]+"...")
+        print(f'Scraping games on {str(inc)[:10]}...')
         
-        get = rs.get(api+str(inc)[:10]).json()
+        get = rs.get(f'{api}{str(inc)[:10]}').json()
         gameWeek = pd.json_normalize(list(pd.json_normalize(get['gameWeek'])['games'])[0])
         
         #Return nothing if there's nothing
@@ -302,43 +334,81 @@ def nhl_scrape_schedule(season,start = "09-01", end = "08-01"):
     #Return: specificed schedule data
     return df
 
-def nhl_scrape_season(season,split_shifts = False, season_types = [2,3], remove = ['period-start','period-end','game-end','challenge','stoppage'], start = "09-01", end = "08-01", local=False, local_path = SCHEDULE_PATH, verbose = False, sources = False, errors = False):
-    #Given season, scrape all play-by-play occuring within the season
-    # param 'season' - NHL season to scrape
-    # param 'split_shifts' - boolean which splits pbp and shift events if true
-    # param 'remove' - list of events to remove from final dataframe
-    # param 'start' - Start date in season
-    # param 'end' - End date in season
-    # param 'local' - boolean indicating whether to use local file to scrape game_ids
-    # param 'local_path' - path of local file
-    # param 'verbose' - boolean which adds additional event info if true
-    # param 'sources - boolean scraping the html and json sources to a master directory if true 
-    # param 'errors' - boolean returning game ids which did not scrape if true
+def nhl_scrape_season(season:int, split_shifts:bool = False, season_types:list[int] = [2,3], remove:list[str] = [], start:str = '', end:str = '', local:bool=False, local_path:str = SCHEDULE_PATH, verbose:bool = False, sources:bool = False, errors:bool = False):
+    """
+    Given season, scrape all play-by-play occuring within the season.
 
+    Args:
+        season (int): 
+            The NHL season formatted such as "20242025".
+        split_shifts (bool, optional):
+            If True, returns a dict with separate 'pbp' and 'shifts' DataFrames. Default is False.
+        season_types (List[int], optional):
+            List of season_types to include in scraping process.  Default is all regular season and playoff games which are 2 and 3 respectfully.
+        remove (List[str], optional):
+            List of event types to remove from the result. Default is an empty list.
+        start (str, optional): 
+            The date string (MM-DD) to start the schedule scrape at. Default is a blank string.
+        end (str, optional): 
+            The date string (MM-DD) to end the schedule scrape at. Default is a blank string.
+        local (bool, optional):
+            If True, use local file to retreive schedule data.
+        local_path (bool, optional):
+            If True, specifies the path with schedule data necessary to scrape a season's games (only relevant if local = True).
+        verbose (bool, optional):
+            If True, generates extra event features (such as those required to calculate xG). Default is False.
+        sources (bool, optional):
+            If True, saves raw HTML, JSON, SHIFTS, and single-game full play-by-play to a separate folder in the working directory. Default is False.
+        errors (bool, optional):
+            If True, includes a list of game IDs that failed to scrape in the return. Default is False.
+
+    Returns:
+        pd.DataFrame:
+            If split_shifts is False, returns a single DataFrame of play-by-play data.
+        dict[str, pd.DataFrame]:
+            If split_shifts is True, returns a dictionary with keys:
+            - 'pbp': play-by-play events
+            - 'shifts': shift change events
+            - 'errors' (optional): list of game IDs that failed if errors=True
+    """
+     
     #Determine whether to use schedule data in repository or to scrape
     if local:
         load = pd.read_csv(local_path)
         load['date'] = pd.to_datetime(load['date'])
-        
-        start = f'{(season[0:4] if int(start[0:2])>=9 else season[4:8])}-{int(start[0:2])}-{int(start[3:5])}'
-        end =  f'{(season[0:4] if int(end[0:2])>=9 else season[4:8])}-{int(end[0:2])}-{int(end[3:5])}'
-        
-        load = load.loc[(load['season'].astype(str)==season)&
+
+        if start == '' or end == '':
+            season_data = rs.get('https://api.nhle.com/stats/rest/en/season').json()['data']
+            season_data = [s for s in season_data if s['id'] == season][0]
+            start = season_data['startDate'][0:10]
+            end = season_data['endDate'][0:10]
+            
+            form = '%Y-%m-%d'
+
+            #Create datetime values from dates
+            start = datetime.strptime(start,form)
+            end = datetime.strptime(end,form)
+
+        else:   
+            start = f'{(str(season)[0:4] if int(start[0:2])>=9 else str(season)[4:8])}-{start[0:2]}-{start[3:5]}'
+            end =  f'{(str(season)[0:4] if int(end[0:2])>=9 else str(season)[4:8])}-{end[0:2]}-{end[3:5]}'
+            
+        load = load.loc[(load['season']==season)&
                         (load['season_type'].isin(season_types))&
                         (load['date']>=start)&(load['date']<=end)]
         
-        game_ids = list(load['id'].astype(str))
+        game_ids = load['id'].to_list()
     else:
         load = nhl_scrape_schedule(season,start,end)
-        load = load.loc[(load['season'].astype(str)==season)&(load['season_type'].isin(season_types))]
-        game_ids = list(load['id'].astype(str))
+        load = load.loc[(load['season']==season)&(load['season_type'].isin(season_types))]
+        game_ids = load['id'].to_list()
 
     #If no games found, terminate the process
     if not game_ids:
         print('No games found for dates in season...')
         return ""
     
-    print(f"Scraping games from {season[0:4]}-{season[4:8]} season...")
+    print(f"Scraping games from {str(season)[0:4]}-{str(season)[4:8]} season...")
     start = time.perf_counter()
 
     #Perform scrape
@@ -354,11 +424,22 @@ def nhl_scrape_season(season,split_shifts = False, season_types = [2,3], remove 
     #Return: Complete pbp and shifts data for specified season as well as dataframe of game_ids which failed to return data
     return data
 
-def nhl_scrape_seasons_info(seasons = []):
-    #Returns info related to NHL seasons (by default, all seasons are included)
+def nhl_scrape_seasons_info(seasons:list[int] = []):
+    """
+    Returns info related to NHL seasons (by default, all seasons are included)
+    Args:
+        seasons (List[int], optional): 
+            The NHL season formatted such as "20242025".
+
+    Returns:
+        pd.DataFrame: 
+            A DataFrame containing the information for requested seasons.
+    """
+
+    #
     # param 'season' - list of seasons to include
 
-    print("Scraping info for seasons: " + str(seasons))
+    print(f'Scraping info for seasons: {seasons}')
     api = "https://api.nhle.com/stats/rest/en/season"
     info = "https://api-web.nhle.com/v1/standings-season"
     data = rs.get(api).json()['data']
@@ -374,12 +455,20 @@ def nhl_scrape_seasons_info(seasons = []):
     else:
         return df.sort_values(by=['id'])
 
-def nhl_scrape_standings(arg = "now", season_type = 2):
-    #Returns standings
-    # param 'arg' - by default, this is "now" returning active NHL standings.  May also be a specific date formatted as YYYY-MM-DD, a season (scrapes the last standings date for the season) or a year (for playoffs).
-    # param 'season_type' - by default, this scrapes the regular season standings.  If set to 3, it returns the playoff bracket for the specified season
+def nhl_scrape_standings(arg:str = "now", season_type:int = 2):
+    """
+    Returns standings or playoff bracket
+    Args:
+        arg (str, optional):
+            Date formatted as 'YYYY-MM-DD' to scrape standings for specific date or 'now' for current standings. Default is 'now'.
+        season_type (int, optional):
+            Part of season to scrape.  If 3 (playoffs) then scrape the playoff bracket for the season implied by arg. When arg = 'now' this is ignored. Default is 2.
 
-    #arg param is ignored when set to "now" if season_type param is 3
+    Returns:
+        pd.DataFrame: 
+            A DataFrame containing the standings information (or playoff bracket).
+    """
+
     if season_type == 3:
         if arg == "now":
             arg = NEW
@@ -404,9 +493,19 @@ def nhl_scrape_standings(arg = "now", season_type = 2):
 
         return pd.json_normalize(data)
 
-def nhl_scrape_roster(season):
-    #Given a nhl season, return rosters for all participating teams
-    # param 'season' - NHL season to scrape
+def nhl_scrape_roster(season: int):
+    """
+    Returns rosters for all teams in a given season.
+
+    Args:
+        season (int):
+            The NHL season formatted such as "20242025".
+
+    Returns:
+        pd.DataFrame: 
+            A DataFrame containing the rosters for all teams in the specified season.
+    """
+
     print("Scrpaing rosters for the "+ season + "season...")
     teaminfo = pd.read_csv(info_path)
 
@@ -435,8 +534,18 @@ def nhl_scrape_roster(season):
 
     return pd.concat(rosts)
 
-def nhl_scrape_prospects(team):
-    #Given team abbreviation, retreive current team prospects
+def nhl_scrape_prospects(team:str):
+    """
+    Returns prospects for specified team
+
+    Args:
+        team (str):
+            Three character team abbreviation such as 'BOS'
+
+    Returns:
+        pd.DataFrame: 
+            A DataFrame containing the prospect data for the specified team.
+    """
 
     api = f'https://api-web.nhle.com/v1/prospects/{team}'
 
@@ -452,10 +561,20 @@ def nhl_scrape_prospects(team):
     #Return: team prospects
     return prospects
 
-def nhl_scrape_team_info(country = False):
-    #Given option to return franchise or country, return team information
+def nhl_scrape_team_info(country:bool = False):
+    """
+    Returns team or country information from the NHL API.
 
-    print('Scraping team information...')
+    Args:
+        country (bool, optional):
+            If True, returns country information instead of NHL team information.
+
+    Returns:
+        pd.DataFrame: 
+            A DataFrame containing team or country information from the NHL API.
+    """
+
+    print(f'Scraping {'country' if country else 'team'} information...')
     api = f'https://api.nhle.com/stats/rest/en/{'country' if country else 'team'}'
     
     data =  pd.json_normalize(rs.get(api).json()['data'])
@@ -467,8 +586,19 @@ def nhl_scrape_team_info(country = False):
 
     return data.sort_values(by=(['country3Code','countryCode','iocCode','countryName'] if country else ['fullName','triCode','id']))
 
-def nhl_scrape_player_data(player_ids):
-    #Given player id, return player information
+def nhl_scrape_player_data(player_ids:list[int]):
+    """
+    Returns player data for specified players.
+
+    Args:
+        player_ids (list[int]):
+            List of NHL API player IDs to retrieve information for.
+
+    Returns:
+        pd.DataFrame: 
+            A DataFrame containing player data for specified players.
+    """
+
     infos = []
     for player_id in player_ids:
         player_id = int(player_id)
@@ -489,15 +619,28 @@ def nhl_scrape_player_data(player_ids):
     else:
         return pd.DataFrame()
 
-def nhl_scrape_draft_rankings(arg = 'now', category = ''):
-    #Given url argument for timeframe and prospect category, return draft rankings
-    #Category 1 is North American Skaters
-    #Category 2 is International Skaters
-    #Category 3 is North American Goalie
-    #Category 4 is International Goalie
+def nhl_scrape_draft_rankings(arg:str = 'now', category:int = 0):
+    """
+    Returns draft rankings
+    Args:
+        arg (str, optional):
+            Date formatted as 'YYYY-MM-DD' to scrape draft rankings for specific date or 'now' for current draft rankings. Default is 'now'.
+        category (int, optional):
+            Category number for prospects.  When arg = 'now' this does not apply.
+
+            - Category 1 is North American Skaters.
+            - Category 2 is International Skaters.
+            - Category 3 is North American Goalie.
+            - Category 4 is International Goalie
+
+            Default is 0 (all prospects).
+    Returns:
+        pd.DataFrame: 
+            A DataFrame containing draft rankings.
+    """
 
     #Player category only applies when requesting a specific season
-    api = f"https://api-web.nhle.com/v1/draft/rankings/{arg}/{category}" if category != "" else f"https://api-web.nhle.com/v1/draft/rankings/{arg}"
+    api = f"https://api-web.nhle.com/v1/draft/rankings/{arg}/{category}" if category > 0 else f"https://api-web.nhle.com/v1/draft/rankings/{arg}"
     data = pd.json_normalize(rs.get(api).json()['rankings'])
 
     #Add player name columns
@@ -506,10 +649,16 @@ def nhl_scrape_draft_rankings(arg = 'now', category = ''):
     #Return: prospect rankings
     return data
 
-def nhl_apply_xG(pbp):
-    #Given play-by-play data, return this data with xG-related columns
-
-    #param 'pbp' - play-by-play data
+def nhl_apply_xG(pbp: pd.DataFrame):
+    """
+    Given play-by-play data, return this data with xG-related columns
+    Args:
+        pbp (pd.DataFrame):
+            A DataFrame containing play-by-play data generated within the WBSA Hockey package.
+    Returns:
+        pd.DataFrame: 
+            A DataFrame containing input play-by-play data with xG column.
+    """
 
     print(f'Applying WSBA xG to model with seasons: {pbp['season'].drop_duplicates().to_list()}')
 
@@ -518,7 +667,7 @@ def nhl_apply_xG(pbp):
     
     return pbp
 
-def nhl_shooting_impacts(agg,type):
+def shooting_impacts(agg, type):
     #Given stats table generated from the nhl_calculate_stats function, return table with shot impacts
     #Only 5v5 is supported as of now
 
@@ -868,7 +1017,7 @@ def nhl_shooting_impacts(agg,type):
         #Return: skater stats with shooting impacts
         return df
 
-def nhl_calculate_stats(pbp,type,season_types,game_strength,split_game=False,roster_path=DEFAULT_ROSTER,shot_impact=False):
+def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team'], season_types:list[int], game_strength: Union[Literal['all'], list[str]], split_game:bool = False, roster_path:str = DEFAULT_ROSTER, shot_impact:bool = False):
     #Given play-by-play, seasonal information, game_strength, rosters, and xG model, return aggregated stats
     # param 'pbp' - play-by-play dataframe
     # param 'type' - type of stats to calculate ('skater', 'goalie', or 'team')
@@ -879,6 +1028,33 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,split_game=False,ros
     # param 'roster_path' - path to roster file
     # param 'shot_impact' - boolean determining if the shot impact model will be applied to the dataset
 
+    """
+    Given play-by-play data, seasonal information, game strength, rosters, and an xG model,
+    return aggregated statistics at the skater, goalie, or team level.
+
+    Args:
+        pbp (pd.DataFrame):
+            A DataFrame containing play-by-play event data.
+        type (Literal['skater', 'goalie', 'team']):
+            Type of statistics to calculate. Must be one of 'skater', 'goalie', or 'team'.
+        season (int): 
+            The NHL season formatted such as "20242025".
+        season_types (List[int], optional):
+            List of season_types to include in scraping process.  Default is all regular season and playoff games which are 2 and 3 respectfully.
+        game_strength (str or list[str]):
+            List of game strength states to include (e.g., ['5v5','5v4','4v5']).
+        split_game (bool, optional):
+            If True, aggregates stats separately for each game; otherwise, stats are aggregated across all games.  Default is False.
+        roster_path (str, optional):
+            File path to the roster data used for mapping players and teams.
+        shot_impact (bool, optional):
+            If True, applies shot impact metrics to the stats DataFrame.  Default is False.
+
+    Returns:
+        pd.DataFrame:
+            A DataFrame containing the aggregated statistics according to the selected parameters.
+    """
+    
     print(f"Calculating statistics for all games in the provided play-by-play data at {game_strength} for {type}s...\nSeasons included: {pbp['season'].drop_duplicates().to_list()}...")
     start = time.perf_counter()
 
@@ -970,7 +1146,7 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,split_game=False,ros
 
         #Apply shot impacts if necessary
         if shot_impact:
-            complete = nhl_shooting_impacts(complete,'goalie')
+            complete = shooting_impacts(complete,'goalie')
         
         end = time.perf_counter()
         length = end-start
@@ -1014,7 +1190,7 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,split_game=False,ros
         ]+[f'{stat}/60' for stat in PER_SIXTY[11:len(PER_SIXTY)]]]
         #Apply shot impacts if necessary
         if shot_impact:
-            complete = nhl_shooting_impacts(complete,'team')
+            complete = shooting_impacts(complete,'team')
         
         end = time.perf_counter()
         length = end-start
@@ -1117,7 +1293,7 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,split_game=False,ros
         
         #Apply shot impacts if necessary (Note: this will remove skaters with fewer than 150 minutes of TOI due to the shot impact TOI rule)
         if shot_impact:
-            complete = nhl_shooting_impacts(complete,'skater')
+            complete = shooting_impacts(complete,'skater')
         
         end = time.perf_counter()
         length = end-start
@@ -1125,16 +1301,34 @@ def nhl_calculate_stats(pbp,type,season_types,game_strength,split_game=False,ros
 
         return complete
 
-def nhl_plot_skaters_shots(pbp,skater_dict,strengths,marker_dict=event_markers,onice = 'indv',title = True,legend=False):
-    #Returns dict of plots for specified skaters
-    # param 'pbp' - pbp to plot data
-    # param 'skater_dict' - skaters to plot shots for (format: {'Patrice Bergeron':['20242025','BOS']})
-    # param 'strengths' - strengths to include in plotting
-    # param 'marker_dict' - dict with markers to use for events
-    # param 'onice' - can set which shots to include in plotting for the specified skater ('indv', 'for', 'against')
-    # param 'title' - bool including title when true
-    # param 'legend' - bool which includes legend if true
-    # param 'xg' - xG model to apply to pbp for plotting
+def nhl_plot_skaters_shots(pbp:pd.DataFrame, skater_dict:dict, strengths:Union[Literal['all'], list[str]], marker_dict:dict = event_markers, onice:Literal['indv','for','against'] = ['indv'], title:bool = True, legend:bool = False):
+    """
+    Return a dictionary of shot plots for the specified skaters.
+
+    Args:
+        pbp (pd.DataFrame):
+            A DataFrame containing play-by-play event data to be visualized.
+        skater_dict (dict[str, list[str]]):
+            Dictionary of skaters to plot, where each key is a player name and the value is a list 
+            with season and team info (e.g., {'Patrice Bergeron': ['20242025', 'BOS']}).
+        strengths (str or list[str]):
+            List of game strength states to include (e.g., ['5v5','5v4','4v5']).
+        marker_dict (dict[str, dict], optional):
+            Dictionary of event types mapped to marker styles used in plotting.
+        onice (Literal['indv', 'for', 'against'], optional):
+            Determines which shot events to include for the player:
+            - 'indv': only the player's own shots,
+            - 'for': shots taken by the player's team while they are on ice,
+            - 'against': shots taken by the opposing team while the player is on ice.
+        title (bool, optional):
+            Whether to include a plot title.
+        legend (bool, optional):
+            Whether to include a legend on the plots.
+
+    Returns:
+        dict[str, matplotlib.figure.Figure]:
+            A dictionary mapping each skater’s name to their corresponding matplotlib shot plot figure.
+    """
 
     print(f'Plotting the following skater shots: {skater_dict}...')
 
@@ -1149,15 +1343,28 @@ def nhl_plot_skaters_shots(pbp,skater_dict,strengths,marker_dict=event_markers,o
     #Return: list of plotted skater shot charts
     return skater_plots
 
-def nhl_plot_games(pbp,events,strengths,game_ids='all',marker_dict=event_markers,team_colors={'away':'primary','home':'primary'},legend=False):
-    #Returns dict of plots for specified games
-    # param 'pbp' - pbp to plot data
-    # param 'events' - type of events to plot
-    # param 'strengths' - strengths to include in plotting
-    # param 'game_ids' - games to plot (list if not set to 'all')
-    # param 'marker_dict' - dict with colors to use for events
-    # param 'legend' - bool which includes legend if true
-    # param 'xg' - xG model to apply to pbp for plotting
+def nhl_plot_games(pbp:pd.DataFrame, events:list[str], strengths:Union[Literal['all'], list[str]], game_ids: Union[Literal['all'], list[int]] = 'all', marker_dict:dict = event_markers, team_colors:dict = {'away':'primary','home':'primary'}, legend:bool =False):
+    """
+    Returns a dictionary of event plots for the specified games.
+
+    Args:
+        pbp (pd.DataFrame):
+            A DataFrame containing play-by-play event data.
+        events (list[str]):
+            List of event types to include in the plot (e.g., ['shot-on-goal', 'goal']).
+        strengths (str or list[str]):
+            List of game strength states to include (e.g., ['5v5','5v4','4v5']).
+        game_ids (str or list[int]):
+            List of game IDs to plot. If set to 'all', plots will be generated for all games in the DataFrame.
+        marker_dict (dict[str, dict]):
+            Dictionary mapping event types to marker styles and/or colors used in plotting.
+        legend (bool):
+            Whether to include a legend on the plots.
+
+    Returns:
+        dict[int, matplotlib.figure.Figure]:
+            A dictionary mapping each game ID to its corresponding matplotlib event plot figure.
+    """
 
     #Find games to scrape
     if game_ids == 'all':
