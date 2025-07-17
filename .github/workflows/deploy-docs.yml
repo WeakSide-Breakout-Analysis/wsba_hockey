@@ -24,7 +24,7 @@ jobs:
 
     - name: Build docs
       run: |
-        sphinx-build docs/source docs/build/html
+        sphinx-build src/wsba_hockey/docs/source src/wsba_hockey/docs/build/html
 
     - name: Deploy to GitHub Pages
       uses: peaceiris/actions-gh-pages@v3
