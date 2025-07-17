@@ -17,5 +17,3 @@ src/wsba_hockey/flask/
 src/wsba_hockey/aws_pbp/
 make.bat
 Makefile
-docs/
-src/wsba_hockey/api

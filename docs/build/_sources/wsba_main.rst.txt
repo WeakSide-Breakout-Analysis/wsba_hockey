@@ -1,0 +1,7 @@
+wsba_main module
+================
+
+.. automodule:: wsba_main
+   :members:
+   :undoc-members:
+   :show-inheritance:

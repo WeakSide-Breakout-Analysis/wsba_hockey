@@ -89,7 +89,7 @@ wsba.repo_load_schedule(seasons=['20212022','20222023','20232024','20242025'])
 ```
 
 ## DOCUMENTATION
-View full documentation here: [link text](https://owensingh38.github.io/wsba_hockey/)
+View full documentation here: [WSBA Hockey Package Documentation](https://owensingh38.github.io/wsba_hockey/)
 
 ## ACKNOWLEDGEMENTS AND CREDITS 
 ### Huge thanks to the following:
