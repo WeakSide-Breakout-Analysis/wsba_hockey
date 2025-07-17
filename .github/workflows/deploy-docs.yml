@@ -24,10 +24,10 @@ jobs:
 
     - name: Build docs
       run: |
-        sphinx-build src/wsba_hockey/docs/source src/wsba_hockey/docs/build/html
+        sphinx-build docs/source docs/build
 
     - name: Deploy to GitHub Pages
       uses: peaceiris/actions-gh-pages@v3
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_dir: docs/build/html
+        publish_dir: docs/build

@@ -88,6 +88,9 @@ wsba.repo_load_rosters(seasons=['20212022','20222023','20232024','20242025'])
 wsba.repo_load_schedule(seasons=['20212022','20222023','20232024','20242025'])
 ```
 
+## DOCUMENTATION
+View full documentation here: [link text](https://owensingh38.github.io/wsba_hockey/)
+
 ## ACKNOWLEDGEMENTS AND CREDITS 
 ### Huge thanks to the following:
 Harry Shomer - Creator of the hockey_scraper package, which contains select utils functions within this package and otherwise inspires the creation of this package.
