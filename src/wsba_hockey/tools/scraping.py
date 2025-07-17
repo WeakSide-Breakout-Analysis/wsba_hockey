@@ -509,26 +509,26 @@ async def parse_html(info):
     
     data = pd.concat(event_log)
     data['event_type'] = data['event_type'].replace({
-     "PGSTR": "pre-game-start",
-     "PGEND": "pre-game-end",
-     'GSTR':"game-start",
-     "ANTHEM":"anthem",
-     "PSTR":"period-start",
-     "FAC":"faceoff",
-     "SHOT":"shot-on-goal",
-     "BLOCK":"blocked-shot",
-     "STOP":"stoppage",
-     "MISS":"missed-shot",
-     "HIT":"hit",
-     "GOAL":"goal",
-     "GIVE":"giveaway",
-     "TAKE":"takeaway",
-     "DELPEN":"delayed-penalty",
-     "PENL":"penalty",
-     "CHL":"challenge",
-     "SOC":'shootout-complete',
-     "PEND":"period-end",
-     "GEND":"game-end"
+        "PGSTR": "pre-game-start",
+        "PGEND": "pre-game-end",
+        'GSTR':"game-start",
+        "ANTHEM":"anthem",
+        "PSTR":"period-start",
+        "FAC":"faceoff",
+        "SHOT":"shot-on-goal",
+        "BLOCK":"blocked-shot",
+        "STOP":"stoppage",
+        "MISS":"missed-shot",
+        "HIT":"hit",
+        "GOAL":"goal",
+        "GIVE":"giveaway",
+        "TAKE":"takeaway",
+        "DELPEN":"delayed-penalty",
+        "PENL":"penalty",
+        "CHL":"challenge",
+        "SOC":'shootout-complete',
+        "PEND":"period-end",
+        "GEND":"game-end"
     })
     
     #Return: parsed HTML pbp

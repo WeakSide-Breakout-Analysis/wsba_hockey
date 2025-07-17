@@ -1,5 +1,5 @@
+api/
 __pycache__/
-tools/__pycache__/
 src/wsba_hockey/pbp/
 src/wsba_hockey/stats/
 src/wsba_hockey/tools/xg_model/moneypuck/shots/
@@ -15,4 +15,6 @@ src/wsba_hockey/backblaze_pbp/
 src/wsba_hockey/data_pipelines.py
 src/wsba_hockey/flask/
 src/wsba_hockey/aws_pbp/
-src/wsba_hockey/api/
+make.bat
+Makefile
+docs/

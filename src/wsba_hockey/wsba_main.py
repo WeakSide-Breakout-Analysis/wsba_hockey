@@ -1,9 +1,10 @@
 import random
 import os
-import requests as rs
-import pandas as pd
 import asyncio
 import time
+import requests as rs
+import pandas as pd
+import matplotlib.pyplot as plt
 from typing import Literal, Union
 from datetime import datetime, timedelta, date
 from wsba_hockey.tools.scraping import *
@@ -323,7 +324,7 @@ def nhl_scrape_season(season:int, split_shifts:bool = False, season_types:list[i
         split_shifts (bool, optional):
             If True, returns a dict with separate 'pbp' and 'shifts' DataFrames. Default is False.
         season_types (List[int], optional):
-            List of season_types to include in scraping process.  Default is all regular season and playoff games which are 2 and 3 respectfully.
+            List of season_types to include in scraping process.  Default is all regular season and playoff games which are 2 and 3 respectively.
         remove (List[str], optional):
             List of event types to remove from the result. Default is an empty list.
         start (str, optional): 
@@ -631,6 +632,41 @@ def nhl_scrape_draft_rankings(arg:str = 'now', category:int = 0):
 
     #Return: prospect rankings
     return data
+
+def nhl_scrape_game_info(game_ids:list[int]):
+    """
+    Given a set of game_ids (NHL API), return information for each game.
+
+    Args:
+        game_ids (List[int] or ['random', int, int, int]):
+            List of NHL game IDs to scrape or use ['random', n, start_year, end_year] to fetch n random games.
+    
+    Returns:
+        pd.DataFrame:
+            An DataFrame containing information for each game.    
+    """
+
+    print(f'Finding game information for games: {game_ids}')
+
+    link = 'https://api-web.nhle.com/v1/gamecenter'
+
+    #Scrape information
+    df = pd.concat([pd.json_normalize(rs.get(f'{link}/{game_id}/landing').json()) for game_id in game_ids])
+
+    #Add extra info
+    df['date'] = df['gameDate']
+    df['season_type'] = df['gameType']
+    df['away_team_abbr'] = df['awayTeam.abbrev']
+    df['home_team_abbr'] = df['homeTeam.abbrev']
+    df['game_title'] = df['away_team_abbr'] + " @ " + df['home_team_abbr'] + " - " + df['date']
+    df['estStartTime'] = pd.to_datetime(df['startTimeUTC']).dt.tz_convert('US/Eastern').dt.strftime("%I:%M %p")
+
+    front_col = ['id','season','date','season_type','game_title','away_team_abbr','home_team_abbr','estStartTime']
+    df = df[front_col+[col for col in df.columns.to_list() if col not in front_col]]
+
+    #Return: game information
+    return df
+
 
 def nhl_apply_xG(pbp: pd.DataFrame):
     """
@@ -1023,7 +1059,7 @@ def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team']
         season (int): 
             The NHL season formatted such as "20242025".
         season_types (List[int], optional):
-            List of season_types to include in scraping process.  Default is all regular season and playoff games which are 2 and 3 respectfully.
+            List of season_types to include in scraping process.  Default is all regular season and playoff games which are 2 and 3 respectively.
         game_strength (str or list[str]):
             List of game strength states to include (e.g., ['5v5','5v4','4v5']).
         split_game (bool, optional):
@@ -1363,19 +1399,37 @@ def nhl_plot_games(pbp:pd.DataFrame, events:list[str], strengths:Union[Literal['
     #Return: list of plotted game events
     return game_plots
 
-def repo_load_rosters(seasons = []):
-    #Returns roster data from repository
-    # param 'seasons' - list of seasons to include
+def repo_load_rosters(seasons:list[int] = []):
+    """
+    Returns roster data from repository
+
+    Args:
+        seasons (list[int], optional):
+            A DataFrame containing play-by-play event data.
+
+    Returns:
+        pd.DataFrame:
+            A DataFrame containing roster data for supplied seasons.
+    """
 
     data = pd.read_csv(DEFAULT_ROSTER)
-    if len(seasons)>0:
+    if not seasons:
         data = data.loc[data['season'].isin(seasons)]
 
     return data
 
-def repo_load_schedule(seasons = []):
-    #Returns schedule data from repository
-    # param 'seasons' - list of seasons to include
+def repo_load_schedule(seasons:list[int] = []):
+    """
+    Returns schedule data from repository
+
+    Args:
+        seasons (list[int], optional):
+            A DataFrame containing play-by-play event data.
+
+    Returns:
+        pd.DataFrame:
+            A DataFrame containing the schedule data for the specified season and date range.    
+    """
 
     data = pd.read_csv(SCHEDULE_PATH)
     if len(seasons)>0:
@@ -1384,12 +1438,30 @@ def repo_load_schedule(seasons = []):
     return data
 
 def repo_load_teaminfo():
-    #Returns team data from repository
+    """
+    Returns team data from repository
+
+    Args:
+
+    Returns:
+        pd.DataFrame:
+            A DataFrame containing general team information.
+    """
 
     return pd.read_csv(INFO_PATH)
 
-def repo_load_pbp(seasons = []):
-    #Returns play-by-play data from repository
+def repo_load_pbp(seasons:list = []):
+    """
+    Returns play-by-play data from repository
+
+    Args:
+        seasons (List[int], optional): 
+                The NHL season formatted such as "20242025".
+    Returns:
+        pd.DataFrame:
+            A DataFrame containing full play-by-play data for the selected season.
+    """
+    #
     # param 'seasons' - list of seasons to include
 
     #Add parquet to total
@@ -1399,6 +1471,209 @@ def repo_load_pbp(seasons = []):
     return pd.concat(dfs)
 
 def repo_load_seasons():
-    #List of available seasons to scrape
+    """
+    Returns list of available seasons
+
+    Args:
+
+    Returns:
+        pd.DataFrame:
+            A DataFrame containing a list of seasons available in the WSBA Hockey package.
+    """
 
     return SEASONS
+
+## CLASSES ##
+class NHL_Database:
+    """
+    A class for managing and analyzing NHL play-by-play data.
+
+    This class supports game scraping, filtering, stat calculation, and plotting.
+    It initializes with either a provided list of game IDs or a default/random set.
+
+    Attributes:
+        name (str):
+            Designated name of the database.
+        pbp (pd.DataFrame): 
+            Combined play-by-play data for selected games.
+        games (list[int]): 
+            Unique game IDs currently in the dataset.
+        stats (dict[str, dict[str, pd.DataFrame]]): 
+            Dictionary storing calculated stats by type and name.
+        plots (dict[int, matplotlib.figure.Figure]): 
+            Dictionary storing plot outputs keyed by game or event.
+
+    Args:
+        game_ids (list[int], optional): 
+            List of game IDs to scrape initially.
+        pbp (pd.DataFrame, optional): 
+            Existing PBP DataFrame to load instead of scraping.
+    """
+
+    def __init__(self, name:str, game_ids:list[int] = [], pbp:pd.DataFrame = pd.DataFrame()):
+        """
+        Initialize the WSBA_Database with scraped or preloaded PBP data.
+
+        If no `pbp` is provided and `game_ids` is empty, a random set of games will be scraped.
+
+        Args:
+            name (str):
+                Name of database.
+            game_ids (list[int], optional): 
+                List of NHL game IDs to scrape in initialization.
+            pbp (pd.DataFrame, optional): 
+                Existing play-by-play data to initialization.
+
+        Returns:
+            pd.DataFrame: 
+                The initialized play-by-play dataset.
+        """
+
+        print('Initializing database...')
+        self.name = name
+
+        if game_ids:
+            self.pbp = nhl_scrape_game(game_ids)
+        else:
+            self.pbp = nhl_scrape_game(['random',3,2010,2024]) if pbp.empty else pbp
+
+        self.games = self.pbp['game_id'].drop_duplicates().to_list()
+        self.stats = {}
+        self.plots = {}
+        
+    def add_games(self, game_ids:list[int]):
+        """
+        Add additional games to the existing play-by-play dataset.
+
+        Args:
+            game_ids (list[int]): 
+                List of game IDs to scrape and append.
+
+        Returns:
+            pd.DataFrame: 
+                The updated play-by-play dataset.
+        """
+
+        print('Adding games...')
+        self.pbp = pd.concat([self.pbp,wsba.nhl_scrape_game(game_ids)])
+
+        return self.pbp
+    
+    def select_games(self, game_ids:list[int]):
+        """
+        Return a filtered subset of the PBP data for specific games.
+
+        Args:
+            game_ids (list[int]): 
+                List of game IDs to include.
+
+        Returns:
+            pd.DataFrame: 
+                Filtered PBP data matching the selected games.
+        """
+         
+        print('Selecting games...')
+
+        df = self.pbp
+        return df.loc[df['game_id'].isin(game_ids)]
+
+    def add_stats(self, name:str, type:Literal['skater','goalie','team'], season_types:list[int], game_strength: Union[Literal['all'], list[str]], split_game:bool = False, roster_path:str = DEFAULT_ROSTER, shot_impact:bool = False):
+        """
+        Calculate and store statistics for the given play-by-play data.
+
+        Args:
+            name (str): 
+                Key name to store the results under.
+            type (Literal['skater', 'goalie', 'team']):
+                Type of statistics to calculate. Must be one of 'skater', 'goalie', or 'team'.
+            season (int): 
+                The NHL season formatted such as "20242025".
+            season_types (List[int], optional):
+                List of season_types to include in scraping process.  Default is all regular season and playoff games which are 2 and 3 respectively.
+            game_strength (str or list[str]):
+                List of game strength states to include (e.g., ['5v5','5v4','4v5']).
+            split_game (bool, optional):
+                If True, aggregates stats separately for each game; otherwise, stats are aggregated across all games.  Default is False.
+            roster_path (str, optional):
+                File path to the roster data used for mapping players and teams.
+            shot_impact (bool, optional):
+                If True, applies shot impact metrics to the stats DataFrame.  Default is False.
+
+        Returns:
+            pd.DataFrame: 
+                The calculated statistics.
+        """
+
+        df =  wsba.nhl_calculate_stats(self.pbp, type, season_types, game_strength, split_game, roster_path, shot_impact)
+        self.stats.update({type:{name:df}})
+
+        return df
+    
+    def add_game_plots(self, events:list[str], strengths:Union[Literal['all'], list[str]], game_ids: Union[Literal['all'], list[int]] = 'all', marker_dict:dict = event_markers, team_colors:dict = {'away':'primary','home':'primary'}, legend:bool = False):
+        """
+        Generate visualizations of game events based on play-by-play data.
+
+        Args:
+            events (list[str]):
+                List of event types to include in the plot (e.g., ['shot-on-goal', 'goal']).
+            strengths (str or list[str]):
+                List of game strength states to include (e.g., ['5v5','5v4','4v5']).
+            game_ids (str or list[int]):
+                List of game IDs to plot. If set to 'all', plots will be generated for all games in the DataFrame.
+            marker_dict (dict[str, dict]):
+                Dictionary mapping event types to marker styles and/or colors used in plotting.
+            legend (bool):
+                Whether to include a legend on the plots.
+
+        Returns:
+            dict[int, matplotlib.figure.Figure]:
+                A dictionary mapping each game ID to its corresponding matplotlib event plot figure.
+        """
+        
+        self.plots.update(nhl_plot_games(self.pbp, events, strengths, game_ids, marker_dict, team_colors, legend))
+
+        return self.plots    
+    
+    def export_data(self, path:str = ''):
+        """
+        Export the data within the object to a specified directory.
+
+        The method writes:
+        - The full play-by-play DataFrame to a CSV file.
+        - All calculated statistics by type and name to CSV files in subfolders.
+        - All stored plots to PNG files.
+
+        If no path is provided, exports to a folder named after the database (`self.name/`).
+
+        Args:
+            path (str, optional): 
+                Root folder to export data into. Defaults to `self.name/`.
+        """
+
+        print('Exporting data...')
+        start = time.perf_counter()
+
+        # Use default path if none provided
+        path = f'{self.name}/' if path == '' else os.path.join(path,f'{self.name}')
+        os.makedirs(path, exist_ok=True)
+
+        # Export master PBP
+        self.pbp.to_csv(os.path.join(path, 'pbp.csv'), index=False)
+
+        # Export stats
+        for stat_type in self.stats.keys():
+            for name, df in self.stats[stat_type].items():
+                stat_path = os.path.join(path, 'stats', stat_type)
+                os.makedirs(stat_path, exist_ok=True)
+                df.to_csv(os.path.join(stat_path, f'{name}.csv'), index=False)
+
+        # Export plots
+        plot_path = os.path.join(path, 'plots')
+        os.makedirs(plot_path, exist_ok=True)
+        for game_id, plot in self.plots.items():
+            plot[0].savefig(os.path.join(plot_path, f'{game_id}.png'))
+
+        # Completion message
+        end = time.perf_counter()
+        length = end - start
+        print(f"...finished in {length:.2f} {'seconds' if length < 60 else 'minutes'}.")
