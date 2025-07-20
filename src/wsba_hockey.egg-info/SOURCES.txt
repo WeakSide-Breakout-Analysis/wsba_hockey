@@ -14,7 +14,5 @@ src/wsba_hockey/tools/scraping.py
 src/wsba_hockey/tools/xg_model.py
 src/wsba_hockey/tools/archive/old_scraping.py
 src/wsba_hockey/tools/utils/__init__.py
-src/wsba_hockey/tools/utils/config.py
-src/wsba_hockey/tools/utils/save_pages.py
 src/wsba_hockey/tools/utils/shared.py
 tests/tests.py
