@@ -108,7 +108,12 @@ def fix_players(pbp):
         pbp[f'add_player_{i+1}_name'] = np.where(pbp[f'event_player_{i+1}_name'].isna(),pbp[f'event_player_{i+1}_id'].astype(str).replace(names_dict),np.nan)
         pbp[f'event_player_{i+1}_name'] = pbp[f'event_player_{i+1}_name'].combine_first(pbp[f'add_player_{i+1}_name'])
 
-    pbp['event_goalie_name'] = pbp['event_goalie_id'].astype(str).replace(names_dict)
+    #For the first three pbp seasons the event_goalie_id isn't included as a column
+    try:
+        pbp['event_goalie_name'] = pbp['event_goalie_id'].astype(str).replace(names_dict)
+    except KeyError:
+        pbp['event_goalie_id'] = np.where(pbp['event_team_venue']=='home',pbp['home_goalie_id'],pbp['away_goalie_id']).astype(str)
+        pbp['event_goalie_name'] = pbp['event_goalie_id'].astype(str).replace(names_dict)
 
     #Add hands
     pbp['event_player_1_hand'] = pbp['event_player_1_id'].astype(str).str.replace('.0','').replace(roster_dict)

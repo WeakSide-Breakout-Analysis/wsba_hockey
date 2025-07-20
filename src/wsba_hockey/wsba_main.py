@@ -34,7 +34,8 @@ SEASONS = [
     20212022,
     20222023,
     20232024,
-    20242025
+    20242025,
+    20252026
 ]
 
 CONVERT_SEASONS = {2007: 20072008, 
@@ -54,7 +55,28 @@ CONVERT_SEASONS = {2007: 20072008,
                    2021: 20212022, 
                    2022: 20222023, 
                    2023: 20232024, 
-                   2024: 20242025}
+                   2024: 20242025,
+                   2025: 20252026}
+
+SEASON_NAMES = {20072008: '2007-08', 
+                20082009: '2008-09',
+                20092010: '2009-10', 
+                20102011: '2010-11',
+                20112012: '2011-12', 
+                20122013: '2012-13',
+                20132014: '2013-14', 
+                20142015: '2014-15',
+                20152016: '2015-16', 
+                20162017: '2016-17',
+                20172018: '2017-18',
+                20182019: '2018-19', 
+                20192020: '2019-20',
+                20202021: '2020-21', 
+                20212022: '2021-22',
+                20222023: '2022-23', 
+                20232024: '2023-24',
+                20242025: '2024-25',
+                20252025: '2025-26'}
 
 CONVERT_TEAM_ABBR = {'L.A':'LAK',
                      'N.J':'NJD',
@@ -72,6 +94,7 @@ KNOWN_PROBS = {
     2008020259:'HTML data is completely missing for this game.',
     2008020409:'HTML data is completely missing for this game.',
     2008021077:'HTML data is completely missing for this game.',
+    2008030311:'Missing shifts data for game between Pittsburgh and Carolina',
     2009020081:'HTML pbp for this game between Pittsburgh and Carolina is missing all but the period start and first faceoff events, for some reason.',
     2009020658:'Missing shifts data for game between New York Islanders and Dallas.',
     2009020885:'Missing shifts data for game between Sharks and Blue Jackets.',
@@ -99,7 +122,7 @@ def nhl_scrape_game(game_ids:list[int], split_shifts:bool = False, remove:list[s
     Given a set of game_ids (NHL API), return complete play-by-play information as requested.
 
     Args:
-        game_ids (List[int] or ['random', int, int, int]):
+        game_ids (int or List[int] or ['random', int, int, int]):
             List of NHL game IDs to scrape or use ['random', n, start_year, end_year] to fetch n random games.
         split_shifts (bool, optional):
             If True, returns a dict with separate 'pbp' and 'shifts' DataFrames. Default is False.
@@ -122,10 +145,13 @@ def nhl_scrape_game(game_ids:list[int], split_shifts:bool = False, remove:list[s
             - 'errors' (optional): list of game IDs that failed if errors=True
     """
     
+    #Wrap game_id in a list if only a single game_id is provided
+    game_ids = [game_ids] if type(game_ids) != list else game_ids
+
     pbps = []
     if game_ids[0] == 'random':
         #Randomize selection of game_ids
-        #Some ids returned may be invalid (for example, 2020021300)
+        #Some ids returned may be invalid (for example, 2020022000)
         num = game_ids[1]
         start = game_ids[2] if len(game_ids) > 1 else 2007
         end = game_ids[3] if len(game_ids) > 2 else (date.today().year)-1
@@ -190,7 +216,7 @@ def nhl_scrape_game(game_ids:list[int], split_shifts:bool = False, remove:list[s
             
             #Track error
             error_ids.append(game_id)
- 
+            
     #Add all pbps together
     if not pbps:
         print("\rNo data returned.")
@@ -1149,6 +1175,9 @@ def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team']
         #Find player headshot
         complete['Headshot'] = 'https://assets.nhle.com/mugs/nhl/'+complete['Season'].astype(str)+'/'+complete['Team']+'/'+complete['ID'].astype(int).astype(str)+'.png'
 
+        #Convert season name
+        complete['Season'] = complete['Season'].replace(SEASON_NAMES)
+
         head = ['Goalie','ID','Game'] if 'Game' in complete.columns else ['Goalie','ID']
         complete = complete[head+[
             "Season","Team",'WSBA',
@@ -1191,6 +1220,9 @@ def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team']
         complete['xGF%'] = complete['xGF']/(complete['xGF']+complete['xGA'])
         complete['FF%'] = complete['FF']/(complete['FF']+complete['FA'])
         complete['CF%'] = complete['CF']/(complete['CF']+complete['CA'])
+        
+        #Convert season name
+        complete['Season'] = complete['Season'].replace(SEASON_NAMES)
 
         head = ['Team','Game'] if 'Game' in complete.columns else ['Team']
         complete = complete[head+[
@@ -1285,6 +1317,9 @@ def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team']
         for type in shot_types:
             for stat in PER_SIXTY[:3]:
                 type_metrics.append(f'{type.capitalize()}{stat}')
+
+        #Convert season name
+        complete['Season'] = complete['Season'].replace(SEASON_NAMES)
 
         head = ['Player','ID','Game'] if 'Game' in complete.columns else ['Player','ID']
         complete = complete[head+[
@@ -1529,13 +1564,13 @@ class NHL_Database:
                 The initialized play-by-play dataset.
         """
 
-        print('Initializing database...')
+        print(f'Initializing database "{name}"...')
         self.name = name
 
         if game_ids:
-            self.pbp = nhl_scrape_game(game_ids)
+            self.pbp = nhl_apply_xG(nhl_scrape_game(game_ids))
         else:
-            self.pbp = nhl_scrape_game(['random',3,2010,2024]) if pbp.empty else pbp
+            self.pbp = nhl_apply_xG(nhl_scrape_game(['random',3,2007,2024])) if pbp.empty else pbp
 
         self.games = self.pbp['game_id'].drop_duplicates().to_list()
         self.stats = {}
@@ -1555,7 +1590,7 @@ class NHL_Database:
         """
 
         print('Adding games...')
-        self.pbp = pd.concat([self.pbp,wsba.nhl_scrape_game(game_ids)])
+        self.pbp = pd.concat([self.pbp,nhl_apply_xG(wsba.nhl_scrape_game(game_ids))])
 
         return self.pbp
     
@@ -1650,7 +1685,7 @@ class NHL_Database:
                 Root folder to export data into. Defaults to `self.name/`.
         """
 
-        print('Exporting data...')
+        print(f'Exporting data in database "{self.name}"...')
         start = time.perf_counter()
 
         # Use default path if none provided

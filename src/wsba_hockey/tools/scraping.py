@@ -90,22 +90,26 @@ def get_game_roster(json):
 def get_game_coaches(game_id):
     #Given game info, return head coaches for away and home team
     
-    #Retreive data
-    json = rs.get(f'https://api-web.nhle.com/v1/gamecenter/{game_id}/right-rail').json()
-    data = json['gameInfo']
-
-    #Add coaches
+    #Retreive data (or try to)
     try:
-        away = data['awayTeam']['headCoach']['default'].upper()
-        home = data['homeTeam']['headCoach']['default'].upper()
-        
-        coaches = {'away':away,
-                'home':home}
-    except KeyError:
-        return {}
+        json = rs.get(f'https://api-web.nhle.com/v1/gamecenter/{game_id}/right-rail').json()
+        data = json['gameInfo']
 
-    #Return: dict with coaches
-    return coaches
+        #Add coaches
+        try:
+            away = data['awayTeam']['headCoach']['default'].upper()
+            home = data['homeTeam']['headCoach']['default'].upper()
+            
+            coaches = {'away':away,
+                    'home':home}
+        except KeyError:
+            return {}
+
+        #Return: dict with coaches
+        return coaches
+    except rs.JSONDecodeError:
+        #Right-rail content is missing for some playoff games in 2019-20
+        return {}
     
 def get_game_info(game_id):
     #Given game_id, return game information
@@ -247,17 +251,20 @@ async def parse_json(info):
     # x, y - Raw coordinates from JSON pbp
     # x_adj, y_adj - Adjusted coordinates configuring the away offensive zone to the left and the home offensive zone to the right
     #Some games (mostly preseason and all star games) do not include coordinates. 
-    
-    try:
-        events = adjust_coords(events)
-
-    except KeyError:
-        print(f"No coordinates found for game {info['game_id'][0]}...")
-    
-        events['x_adj'] = np.nan
-        events['y_adj'] = np.nan
-        events['event_distance'] = np.nan
-        events['event_angle'] = np.nan
+    if info['season'] in [20052006, 20062007, 20072008, 20082009, 20092010]:
+        #If the json is used as a supplement for the ESPN pbp data then remove unnecessary columns
+        events = events.drop(columns=['x','y','event_team_venue','period_seconds_elapsed','game_id',
+                                      'period_time_elapsed', 'shot_type', 'zone_code', 'event_player_1_id', 'event_player_2_id', 'event_player_3_id'],
+                                      errors='ignore')
+    else:
+        try:
+            events = adjust_coords(events)
+        except KeyError:
+            print(f"No coordinates found for game {info['game_id'][0]}...")
+            events['x_adj'] = np.nan
+            events['y_adj'] = np.nan
+            events['event_distance'] = np.nan
+            events['event_angle'] = np.nan
         
     #Period time adjustments (only 'seconds_elapsed' is included in the resulting data)
     events['period_seconds_elapsed'] = events['period_time_elasped'].apply(convert_to_seconds)
@@ -563,141 +570,78 @@ def espn_game_id(date,away,home):
     return game_id
 
 async def parse_espn(date,away,home):
-    #Given a date formatted as YYYY-MM-DD and teams, return game events
+    #Given a date formatted as YYYY-MM-DD and teams, return game events from ESPN
     game_id = espn_game_id(date,away,home)
-    url = f'https://www.espn.com/nhl/playbyplay/_/gameId/{game_id}'
     
-    #Code modified from Patrick Bacon
+    #Hidden ESPN API endpoint (akin to the gamecenter/{game_id}/play-by-play NHL endpoint)
+    url = f'https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/summary?event={game_id}'
+    data = rs.get(url).json()
+    teams = data['boxscore']['teams']
 
-    #Retreive game events as json
-    page = rs.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout = 500)
-    soup = BeautifulSoup(page.content.decode('ISO-8859-1'), 'lxml', multi_valued_attributes = None)
-    json = json_lib.loads(str(soup).split('"playGrps":')[1].split(',"tms"')[0])
-
-    #DataFrame of time-related info for events
-    clock_df = pd.DataFrame()
-
-    for period in range(0, len(json)):
-        clock_df = clock_df._append(pd.DataFrame(json[period]))
-
-    clock_df = clock_df[~pd.isna(clock_df.clock)]
-
-    # Needed to add .split(',"st":3')[0] for playoffs
-
-    #DataFrame of coordinates for events
-    coords_df = pd.DataFrame(json_lib.loads(str(soup).split('plays":')[1].split(',"st":1')[0].split(',"st":2')[0].split(',"st":3')[0]))
-
-    clock_df = clock_df.assign(
-        clock = clock_df.clock.apply(lambda x: x['displayValue'])
-    )
-
-    coords_df = coords_df.assign(
-        coords_x = coords_df[~pd.isna(coords_df.coordinate)].coordinate.apply(lambda x: x['x']).astype(int),
-        coords_y = coords_df[~pd.isna(coords_df.coordinate)].coordinate.apply(lambda y: y['y']).astype(int),
-    )
-
-    #Combine
-    espn_events = coords_df.merge(clock_df.loc[:, ['id', 'clock']])
-
-    espn_events = espn_events.assign(
-        period = espn_events['period'].apply(lambda x: x['number']),
-        minutes = espn_events['clock'].str.split(':').apply(lambda x: x[0]).astype(int),
-        seconds = espn_events['clock'].str.split(':').apply(lambda x: x[1]).astype(int),
-        event_type = espn_events['type'].apply(lambda x: x['txt'])
-    )
-
-    espn_events = espn_events.assign(coords_x = np.where((pd.isna(espn_events.coords_x)) & (pd.isna(espn_events.coords_y)) &
-                (espn_events.event_type=='Face Off'), 0, espn_events.coords_x
-    ),
-                      coords_y = np.where((pd.isna(espn_events.coords_x)) & (pd.isna(espn_events.coords_y)) &
-                (espn_events.event_type=='Face Off'), 0, espn_events.coords_y))
-
-    espn_events = espn_events[(~pd.isna(espn_events.coords_x)) & (~pd.isna(espn_events.coords_y))]
-
-    espn_events = espn_events.assign(
-        coords_x = espn_events.coords_x.astype(int),
-        coords_y = espn_events.coords_y.astype(int)
-    )
-    
-    #Rename events
-    #The turnover event includes just one player in the event information, meaning takeaways will have no coordinates for play-by-plays created by ESPN scraping
-    espn_events['event_type'] = espn_events['event_type'].replace({
-        "Face Off":'faceoff',
-        "Hit":'hit',
-        "Shot":'shot-on-goal',
-        "Missed":'missed-shot',
-        "Blocked":'blocked-shot',
-        "Goal":'goal',
-        "Delayed Penalty":'delayed-penalty',
-        "Penalty":'penalty',
+    #Retreive plays
+    espn_events = pd.json_normalize(data['plays']).rename(columns={
+        'period.number':'period',
+        'clock.displayValue':'period_time_elapsed',
+        'coordinate.x':'x',
+        'coordinate.y':'y',
+        'type.text':'event_type',
     })
-
-    #Period time adjustments (only 'seconds_elapsed' is included in the resulting data)
-    espn_events['period_time_simple'] = espn_events['clock'].str.replace(":","",regex=True)
-    espn_events['period_seconds_elapsed'] = np.where(espn_events['period_time_simple'].str.len()==3,
-                                            ((espn_events['period_time_simple'].str[0].astype(int)*60)+espn_events['period_time_simple'].str[-2:].astype(int)),
-                                            ((espn_events['period_time_simple'].str[0:2].astype(int)*60)+espn_events['period_time_simple'].str[-2:].astype(int)))
-    espn_events['seconds_elapsed'] = ((espn_events['period']-1)*1200)+espn_events['period_seconds_elapsed']
-
-    espn_events = espn_events.rename(columns = {'text':'description'})
-
-    #Add event team
-    espn_events['event_team_abbr'] = espn_events['homeAway'].replace({
-        "away":away,
-        "home":home
-    })
-
-    #Some games (mostly preseason and all star games) do not include coordinates.  
-    try:
-        espn_events['x_fixed'] = abs(espn_events['coords_x'])
-        espn_events['y_fixed'] = np.where(espn_events['coords_x']<0,-espn_events['coords_y'],espn_events['coords_y'])
-        espn_events['x_adj'] = np.where(espn_events['homeAway']=="home",espn_events['x_fixed'],-espn_events['x_fixed'])
-        espn_events['y_adj'] = np.where(espn_events['homeAway']=="home",espn_events['y_fixed'],-espn_events['y_fixed'])
-        espn_events['event_distance'] = np.sqrt(((89 - espn_events['x_fixed'])**2) + (espn_events['y_fixed']**2))
-        espn_events['event_angle'] = np.degrees(np.arctan2(abs(espn_events['y_fixed']), abs(89 - espn_events['x_fixed'])))
-    except TypeError:
-        print(f"No coordinates found for ESPN game...")
     
-        espn_events['x_fixed'] = np.nan
-        espn_events['y_fixed'] = np.nan
-        espn_events['x_adj'] = np.nan
-        espn_events['y_adj'] = np.nan
-        espn_events['event_distance'] = np.nan
-        espn_events['event_angle'] = np.nan
+    #Some games are missing plays on ESPN, for some reason
 
-    #Assign score and fenwick for each event
-    fenwick_events = ['missed-shot','shot-on-goal','goal']
-    ag = 0
-    ags = []
-    hg = 0
-    hgs = []
+    if espn_events.empty:
+        print(f"No coordinates found for game ...")
+        return pd.DataFrame(columns=['period','seconds_elapsed','event_type','event_team_abbr'])
+    else:
+        #Retreive event team venue with team data (maintain the team abbreviation fill-in at the bottom)
+        espn_events['event_team_venue'] = espn_events['team.id'].replace({
+            teams[0]['team']['id']: teams[0]['homeAway'],
+            teams[1]['team']['id']: teams[1]['homeAway']
+        })
 
-    af = 0
-    afs = []
-    hf = 0
-    hfs = []
-    for event,team in zip(list(espn_events['event_type']),list(espn_events['homeAway'])):
-        if event in fenwick_events:
-            if team == "home":
-                hf += 1
-                if event == 'goal':
-                    hg += 1
-            else:
-                af += 1
-                if event == 'goal':
-                    ag += 1
-       
-        ags.append(ag)
-        hgs.append(hg)
-        afs.append(af)
-        hfs.append(hf)
+        #Rename events
+        #The turnover event includes just one player in the event information, meaning giveaways and takeaways will have no coordinates for play-by-plays created by ESPN scraping
+        espn_events['event_type'] = espn_events['event_type'].replace({
+            "Face Off":'faceoff',
+            "Hit":'hit',
+            "Shot":'shot-on-goal',
+            "Missed":'missed-shot',
+            "Blocked":'blocked-shot',
+            "Goal":'goal',
+            "Delayed Penalty":'delayed-penalty',
+            "Penalty":'penalty'
+        })
 
-    espn_events['away_score'] = ags
-    espn_events['home_score'] = hgs
-    espn_events['away_fenwick'] = afs
-    espn_events['home_fenwick'] = hfs
-    #Return: play-by-play events in supplied game from ESPN
-    return espn_events
+        #Period time adjustments (only 'seconds_elapsed' is included in the resulting data)
+        espn_events['period_time_elapsed'] = espn_events['period_time_elapsed'].fillna('0:00')
+        espn_events['period_seconds_elapsed'] = espn_events['period_time_elapsed'].apply(convert_to_seconds)
+        espn_events['seconds_elapsed'] = ((espn_events['period']-1)*1200)+espn_events['period_seconds_elapsed']
+
+        #Add event team data
+        espn_events['event_team_abbr'] = espn_events['event_team_venue'].replace({
+            "away":away,
+            "home":home
+        })
+        
+        #Add temporary game_id for coordinate adjustment
+        espn_events['game_id'] = game_id
+
+        #Coordinate adjustments:
+        # x, y - Raw coordinates from JSON pbp
+        # x_adj, y_adj - Adjusted coordinates configuring the away offensive zone to the left and the home offensive zone to the right
+        #Some games (mostly preseason and all star games) do not include coordinates. 
+        try:
+            espn_events = adjust_coords(espn_events)
+        except KeyError:
+            print(f"No coordinates found for game ...")
+        
+            espn_events['x_adj'] = np.nan
+            espn_events['y_adj'] = np.nan
+            espn_events['event_distance'] = np.nan
+            espn_events['event_angle'] = np.nan
+
+        #Return: play-by-play events in supplied game from ESPN
+        return espn_events
 
 def assign_target(data):
     #Assign target number to plays to assist with merging
@@ -712,26 +656,48 @@ def assign_target(data):
     #Revert sort and return dataframe
     return data.reset_index()
 
+async def no_data(): 
+    #Allows the passage of espn_pbp data if it is not needed
+    pass
+
 async def combine_pbp(info,sources):
     #Given game info, return complete play-by-play data for provided game
 
     #Create tasks
     html_task = asyncio.create_task(parse_html(info))
     if info['season'] in [20052006, 20062007, 20072008, 20082009, 20092010]:
-        json_task = asyncio.create_task(parse_espn(str(info['game_date']),info['away_team_abbr'],info['home_team_abbr']))
+        espn_task = asyncio.create_task(parse_espn(str(info['game_date']),info['away_team_abbr'],info['home_team_abbr']))
         json_type = 'espn'
     else:
-        json_task = asyncio.create_task(parse_json(info))
+        espn_task = asyncio.create_task(no_data())
         json_type = 'nhl'
 
-    html_pbp, json_pbp = await asyncio.gather(html_task, json_task)
+    json_task = asyncio.create_task(parse_json(info))
+
+    html_pbp, json_pbp, espn_pbp = await asyncio.gather(html_task, json_task, espn_task)
     
     #Route data combining - json if season is after 2009-2010:
     if json_type == 'espn':
         #ESPN x HTML
-        espn_pbp = json_pbp.rename(columns={'coords_x':'x',"coords_y":'y'}).sort_values(['period','seconds_elapsed']).reset_index()
+        espn_pbp = espn_pbp.sort_values(['period','seconds_elapsed']).reset_index()
         merge_col = ['period','seconds_elapsed','event_type','event_team_abbr']
+        
+        #Add additional information to espn_pbp with NHL json data
+        espn_pbp = pd.merge(espn_pbp,json_pbp,how='left')
 
+        if sources:
+            dirs_html = f'sources/{info['season']}/HTML/'
+            dirs_json = f'sources/{info['season']}/JSON/'
+
+            if not os.path.exists(dirs_html):
+                os.makedirs(dirs_html)
+            if not os.path.exists(dirs_json):
+                os.makedirs(dirs_json)
+
+            html_pbp.to_csv(f'{dirs_html}{info['game_id']}_HTML.csv',index=False)
+            espn_pbp.to_csv(f'{dirs_json}{info['game_id']}_JSON.csv',index=False)
+
+        print(f' merging on columns...',end="")
         #Merge pbp
         df = pd.merge(html_pbp,espn_pbp,how='left',on=merge_col)
 
@@ -832,7 +798,7 @@ def parse_shifts_json(info):
 def analyze_shifts(shift, id, name, pos, team):
     #Collects teams in given shifts html (parsed by Beautiful Soup)
     #Modified version of Harry Shomer's analyze_shifts function in the hockey_scraper package
-    shifts = dict()
+    shifts = {}
 
     shifts['player_name'] = name.upper()
     shifts['player_id'] = id
@@ -869,28 +835,38 @@ def parse_shifts_html(info,home):
     td, teams = get_soup(doc)
 
     team = teams[0]
-    players = dict()
+    players = {}
 
     # Iterates through each player shifts table with the following data:
     # Shift #, Period, Start, End, and Duration.
     for t in td:
         t = t.get_text()
-        if ',' in t:     # If a comma exists it is a player
+        if ',' in t and re.match(r'\d+', t):     # If a comma and number exists it is a player
             name = t
             
             name = name.split(',')
             number = int(name[0][:2].strip())
-            id = rosters[str(number)][4]
-            players[id] = dict()
+            #In very rare cases a player listed will be among the scratches for the same game.  
+            #Keeping these is more likely than not misattribution
+            try:
+                id = rosters[str(number)][4]
+                players[id] = {}
 
-            #HTML shift functions assess one team at a time, which simplifies the lookup process with number to name and id
-            
-            players[id]['name'] = rosters[str(number)][2]
-            players[id]['pos'] = rosters[str(number)][1]
+                #HTML shift functions assess one team at a time, which simplifies the lookup process with number to name and id
+                
+                players[id]['name'] = rosters[str(number)][2]
+                players[id]['pos'] = rosters[str(number)][1]
 
-            players[id]['shifts'] = []
+                players[id]['shifts'] = []
+            except KeyError:
+                continue
         else:
-            players[id]['shifts'].extend([t])
+            #If id somehow is not assigned at any point before this is ran then just skip
+            try:
+                #Pushes shifts to current player
+                players[id]['shifts'].extend([t])
+            except UnboundLocalError:
+                continue
 
     for key in players.keys():
         # Create lists of shifts-table columns for analysis

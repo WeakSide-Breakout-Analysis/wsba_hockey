@@ -13,30 +13,28 @@ import wsba_hockey as wsba
 ```
 
 ## ALL FEATURES
-### Note: Features yet included are marked with *
-
 
 ## SCRAPING
 ### NHL Play-by-Play (of any game frame up to a full season)
 #### Functions:
 
 ```python
-wsba.nhl_scrape_game(['2024020918'],split_shifts=False,remove=['game-end'])
-wsba.nhl_scrape_season('20242025',split_shifts=False,remove=['game-end'],local=True)
+wsba.nhl_scrape_game(2024020918,split_shifts=False,remove=['game-end'])
+wsba.nhl_scrape_season(20242025,split_shifts=False,remove=['game-end'],local=True)
 ```
 
 ### NHL Season Information
 
 ```python
-wsba.nhl_scrape_schedule('20242025')
-wsba.nhl_scrape_seasons_info(seasons=['20212022','20222023','20232024','20242025'])
+wsba.nhl_scrape_schedule(20242025)
+wsba.nhl_scrape_seasons_info(seasons=[20212022,20222023,20232024,20242025])
 wsba.nhl_scrape_standings(arg = '2024-03-20')
 ```
 
 ### NHL Rosters and Player Information
 
 ```python
-wsba.nhl_scrape_roster('20242025')
+wsba.nhl_scrape_roster(20242025)
 wsba.nhl_scrape_team_info()
 ```
 
@@ -51,7 +49,7 @@ wsba.nhl_scrape_prospects('BOS')
 ## DATA ANALYTICS
 ### Expected Goals
 ```python
-pbp = wsba.nhl_scrape_game(['2024020918'],split_shifts=False,remove=['game-end'])
+pbp = wsba.nhl_scrape_game(2024020918,split_shifts=False,remove=['game-end'])
 pbp = wsba.nhl_apply_xG(pbp)
 ```
 
@@ -59,15 +57,15 @@ pbp = wsba.nhl_apply_xG(pbp)
 
 ### Stat Aggregation
 ```python
-pbp = wsba.nhl_scrape_season('20232024',remove=[], local = True)
+pbp = wsba.nhl_scrape_season(20232024,remove=[], local = True)
 wsba.nhl_calculate_stats(pbp,'skater',[2],['5v5','4v4','3v3'],shot_impact = True)
 ```
 ### Shot Plotting (Plots, Heatmaps, etc.)
 ```python
 skater_dict = {
-    'Patrice Bergeron':['20212022','BOS']
+    'Patrice Bergeron':[20212022,'BOS']
 }
-pbp = wsba.nhl_scrape_season('20212022',remove=[], local = True)
+pbp = wsba.nhl_scrape_season(20212022,remove=[], local = True)
 
 wsba.nhl_plot_skaters_shots(pbp,skater_dict,['5v5'],onice='for',legend=True)
 wsba.nhl_plot_games(pbp,legend=True)
@@ -76,16 +74,16 @@ wsba.nhl_plot_games(pbp,legend=True)
 ## REPOSITORY 
 ### Past Season Play-by-Play
 ```python
-wsba.repo_load_pbp(seasons=['20212022','20222023','20232024','20242025'])
+wsba.repo_load_pbp(seasons=[20212022,20222023,20232024,20242025])
 ```
 ### Team Information
 ```python
 wsba.repo_load_teaminfo()
-wsba.repo_load_rosters(seasons=['20212022','20222023','20232024','20242025'])
+wsba.repo_load_rosters(seasons=[20212022,20222023,20232024,20242025])
 ```
 ### Schedule
 ```python
-wsba.repo_load_schedule(seasons=['20212022','20222023','20232024','20242025'])
+wsba.repo_load_schedule(seasons=[20212022,20222023,20232024,20242025])
 ```
 
 ## DOCUMENTATION
