@@ -100,9 +100,7 @@ KNOWN_PROBS = {
     2009020885:'Missing shifts data for game between Sharks and Blue Jackets.',
     2010020124:'Game between Capitals and Hurricanes is sporadically missing player on-ice data',
     2012020018:'HTML events contain mislabeled events.',
-    2013020971:'On March 10th, 2014, Stars forward Rich Peverley suffered from a cardiac episode midgame and as a result, the remainder of the game was postponed.  \nThe game resumed on April 9th, and the only goal scorer in the game, Blue Jackets forward Nathan Horton, did not appear in the resumed game due to injury.  Interestingly, Horton would never play in the NHL again.',
     2018021133:'Game between Lightning and Capitals has incorrectly labeled event teams (i.e. WSH TAKEAWAY - #71 CIRELLI (Cirelli is a Tampa Bay skater in this game)).',
-    2019020876:'Due to the frightening collapse of Blues defensemen Jay Bouwmeester, a game on February 2nd, 2020 between the Ducks and Blues was postponed.  \nWhen the game resumed, Ducks defensemen Hampus Lindholm, who assisted on a goal in the inital game, did not play in the resumed match.'
 }
 
 SHOT_TYPES = ['wrist','deflected','tip-in','slap','backhand','snap','wrap-around','poke','bat','cradle','between-legs']
@@ -1165,7 +1163,7 @@ def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team']
                                             'birthCountry':'Nationality'})
         
         #WSBA
-        complete['WSBA'] = complete['Goalie']+complete['Team']+complete['Season'].astype(str)
+        complete['WSBA'] = complete['ID'].astype(str).str.replace('.0','')+complete['Team']+complete['Season'].astype(str)
 
         #Add player age
         complete['Birthday'] = pd.to_datetime(complete['Birthday'])
@@ -1306,7 +1304,7 @@ def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team']
         #Remove goalies that occasionally appear in a set
         complete = complete.loc[complete['Position']!='G']
         #Add WSBA ID
-        complete['WSBA'] = complete['Player']+complete['Season'].astype(str)+complete['Team']
+        complete['WSBA'] = complete['ID'].astype(str).str.replace('.0','')+complete['Season'].astype(str)+complete['Team']
 
         #Add per 60 stats
         for stat in PER_SIXTY:
