@@ -2,3 +2,4 @@ __pycache__/
 .vscode/
 make.bat
 Makefile
+src/wsba_hockey/tools/game_pred.py

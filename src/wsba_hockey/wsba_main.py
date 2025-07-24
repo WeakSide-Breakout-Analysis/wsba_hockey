@@ -105,7 +105,7 @@ KNOWN_PROBS = {
 
 SHOT_TYPES = ['wrist','deflected','tip-in','slap','backhand','snap','wrap-around','poke','bat','cradle','between-legs']
 
-NEW = 2024
+NEW = 2025
 
 EVENTS = ['faceoff','hit','giveaway','takeaway','blocked-shot','missed-shot','shot-on-goal','goal','penalty']
 
@@ -459,14 +459,14 @@ def nhl_scrape_seasons_info(seasons:list[int] = []):
     else:
         return df.sort_values(by=['id'])
 
-def nhl_scrape_standings(arg:str | int = "now", season_type:int = 2):
+def nhl_scrape_standings(arg:int | list[int] | Literal['now'] = 'now', season_type:int = 2):
     """
     Returns standings or playoff bracket
     Args:
-        arg (str or int, optional):
-            Date formatted as 'YYYY-MM-DD' to scrape standings, NHL season such as "20242025", or 'now' for current standings. Default is 'now'.
+        arg (int or list[int] or str, optional):
+            Date formatted as 'YYYY-MM-DD' to scrape standings, NHL season such as "20242025", list of NHL seasons, or 'now' for current standings. Default is 'now'.
         season_type (int, optional):
-            Part of season to scrape.  If 3 (playoffs) then scrape the playoff bracket for the season implied by arg. When arg = 'now' this is ignored. Default is 2.
+            Part of season to scrape.  If 3 (playoffs) then scrape the playoff bracket for the season implied by arg. When arg = 'now' this is defaulted to the most recent playoff year.  Any dates passed through are parsed as seasons. Default is 2.
 
     Returns:
         pd.DataFrame: 
@@ -475,31 +475,59 @@ def nhl_scrape_standings(arg:str | int = "now", season_type:int = 2):
 
     if season_type == 3:
         if arg == "now":
-            arg = NEW
+            arg = [NEW]
+        elif type(arg) == int:
+            #Find year from season
+            arg = [str(arg)[4:8]]
+        elif type(arg) == list:
+            #Find year from seasons
+            arg = [str(s)[4:8] for s in arg]
+        else:
+            #Find year from season from date
+            arg = [int(arg[0:4])+1 if (9 < int(arg[5:7]) < 13) else int(arg[0:4])]
 
-        print(f"Scraping playoff bracket for date: {arg}")
-        api = f"https://api-web.nhle.com/v1/playoff-bracket/{arg}"
+        print(f"Scraping playoff bracket for season{'s' if len(arg)>1 else ''}: {arg}")
+        
+        dfs = []
+        for season in arg:
+            api = f"https://api-web.nhle.com/v1/playoff-bracket/{season}"
 
-        data = rs.get(api).json()['series']
+            data = rs.get(api).json()['series']
+            dfs.append(pd.json_normalize(data))
 
-        return pd.json_normalize(data)
+        #Return: playoff bracket
+        return pd.concat(dfs)
 
     else:
         if arg == "now":
             print("Scraping standings as of now...")
+            arg = [arg]
         elif arg in SEASONS:
             print(f'Scraping standings for season: {arg}')
+            arg = [arg]
+        elif type(arg) == list:
+            print(f'Scraping standings for seasons: {arg}')
         else:
             print(f"Scraping standings for date: {arg}")
+            arg = [arg]
 
-        season_data = rs.get('https://api.nhle.com/stats/rest/en/season').json()['data']
-        season_data = [s for s in season_data if s['id'] == arg][0]
-        end = season_data['regularSeasonEndDate'][0:10]
+        dfs = []
+        for search in arg:
+            #If the end is an int then its a season otherwise it is either 'now' or a date as a string
+            if type(search) == int:
+                season_data = rs.get('https://api.nhle.com/stats/rest/en/season').json()['data']
+                season_data = [s for s in season_data if s['id'] == search][0]
+                end = season_data['regularSeasonEndDate'][0:10]
+            else:
+                end = search
+                
+            api = f"https://api-web.nhle.com/v1/standings/{end}"
 
-        api = f"https://api-web.nhle.com/v1/standings/{end}"
-        data = rs.get(api).json()['standings']
+            data = rs.get(api).json()['standings']
+            dfs.append(pd.json_normalize(data))
 
-        return pd.json_normalize(data)
+        #Return: standings data
+        return pd.concat(dfs)
 
 def nhl_scrape_roster(season: int):
     """
@@ -627,7 +655,7 @@ def nhl_scrape_player_data(player_ids:list[int]):
     else:
         return pd.DataFrame()
 
-def nhl_scrape_draft_rankings(arg:str = 'now', category:int = 0):
+def nhl_scrape_draft_rankings(arg:str | Literal['now'] = 'now', category:int = 0):
     """
     Returns draft rankings
     Args:

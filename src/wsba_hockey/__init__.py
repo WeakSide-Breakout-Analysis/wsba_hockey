@@ -7,6 +7,7 @@ from wsba_hockey.wsba_main import (
     nhl_scrape_roster,
     nhl_scrape_draft_rankings,
     nhl_scrape_prospects,
+    nhl_scrape_team_info,
     nhl_scrape_game_info,
     nhl_calculate_stats,
     nhl_apply_xG,
