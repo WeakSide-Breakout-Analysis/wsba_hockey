@@ -11,6 +11,7 @@ from wsba_hockey.tools.scraping import *
 from wsba_hockey.tools.xg_model import *
 from wsba_hockey.tools.agg import *
 from wsba_hockey.tools.plotting import *
+from wsba_hockey.tools.columns import col_map
 
 ### WSBA HOCKEY ###
 ## Provided below are all integral functions in the WSBA Hockey Python package. ##
@@ -114,8 +115,19 @@ SCHEDULE_PATH = os.path.join(DIR,'tools\\schedule\\schedule.csv')
 INFO_PATH = os.path.join(DIR,'tools\\teaminfo\\nhl_teaminfo.csv')
 DEFAULT_ROSTER = os.path.join(DIR,'tools\\rosters\\nhl_rosters.csv')
 
+#Load column names for standardization
+COL_MAP = col_map()
+
+DRAFT_CAT = {
+    0: 'All Prospects',
+    1: 'North American Skaters',
+    2: 'International Skater',
+    3: 'North American Goalies',
+    4: 'International Goalies'
+}
+
 ## SCRAPE FUNCTIONS ##
-def nhl_scrape_game(game_ids:list[int], split_shifts:bool = False, remove:list[str] = [], verbose:bool = False, sources:bool = False, errors:bool = False):
+def nhl_scrape_game(game_ids:int | list[int], split_shifts:bool = False, remove:list[str] = [], verbose:bool = False, sources:bool = False, errors:bool = False):
     """
     Given a set of game_ids (NHL API), return complete play-by-play information as requested.
 
@@ -319,24 +331,17 @@ def nhl_scrape_schedule(season:int, start:str = '', end:str = ''):
         if gameWeek.empty:
             game.append(gameWeek)
         else:
-            gameWeek['date'] = get['gameWeek'][0]['date']
-
-            gameWeek['season_type'] = gameWeek['gameType']
-            gameWeek['away_team_abbr'] = gameWeek['awayTeam.abbrev']
-            gameWeek['home_team_abbr'] = gameWeek['homeTeam.abbrev']
-            gameWeek['game_title'] = gameWeek['away_team_abbr'] + " @ " + gameWeek['home_team_abbr'] + " - " + gameWeek['date']
-            gameWeek['estStartTime'] = pd.to_datetime(gameWeek['startTimeUTC']).dt.tz_convert('US/Eastern').dt.strftime("%I:%M %p")
-
-            front_col = ['id','season','date','season_type','game_title','away_team_abbr','home_team_abbr','estStartTime']
-            gameWeek = gameWeek[front_col+[col for col in gameWeek.columns.to_list() if col not in front_col]]
+            gameWeek['game_date'] = get['gameWeek'][0]['date']
+            gameWeek['game_title'] = gameWeek['awayTeam.abbrev'] + " @ " + gameWeek['homeTeam.abbrev'] + " - " + gameWeek['game_date']
+            gameWeek['start_time_est'] = pd.to_datetime(gameWeek['startTimeUTC']).dt.tz_convert('US/Eastern').dt.strftime("%I:%M %p")
 
         game.append(gameWeek)
         
-    #Concatenate all games
-    df = pd.concat(game)
+    #Concatenate all games and standardize column naming
+    df = pd.concat(game).rename(columns=COL_MAP['schedule'],errors='ignore')
     
     #Return: specificed schedule data
-    return df
+    return df[[col for col in COL_MAP['schedule'].values() if col in df.columns]]
 
 def nhl_scrape_season(season:int, split_shifts:bool = False, season_types:list[int] = [2,3], remove:list[str] = [], start:str = '', end:str = '', local:bool=False, local_path:str = SCHEDULE_PATH, verbose:bool = False, sources:bool = False, errors:bool = False):
     """
@@ -399,13 +404,13 @@ def nhl_scrape_season(season:int, split_shifts:bool = False, season_types:list[i
             
         load = load.loc[(load['season']==season)&
                         (load['season_type'].isin(season_types))&
-                        (load['date']>=start)&(load['date']<=end)]
+                        (load['game_date']>=start)&(load['game_date']<=end)]
         
-        game_ids = load['id'].to_list()
+        game_ids = load['game_id'].to_list()
     else:
         load = nhl_scrape_schedule(season,start,end)
         load = load.loc[(load['season']==season)&(load['season_type'].isin(season_types))]
-        game_ids = load['id'].to_list()
+        game_ids = load['game_id'].to_list()
 
     #If no games found, terminate the process
     if not game_ids:
@@ -440,10 +445,9 @@ def nhl_scrape_seasons_info(seasons:list[int] = []):
             A DataFrame containing the information for requested seasons.
     """
 
-    #
-    # param 'season' - list of seasons to include
-
     print(f'Scraping info for seasons: {seasons}')
+    
+    #Load two different data sources: general season info and standings data related to season
     api = "https://api.nhle.com/stats/rest/en/season"
     info = "https://api-web.nhle.com/v1/standings-season"
     data = rs.get(api).json()['data']
@@ -452,12 +456,17 @@ def nhl_scrape_seasons_info(seasons:list[int] = []):
     df = pd.json_normalize(data)
     df_2 = pd.json_normalize(data_2)
 
-    df = pd.merge(df,df_2,how='outer',on=['id'])
+    #Remove common columns
+    df_2 = df_2.drop(columns=['conferencesInUse', 'divisionsInUse', 'pointForOTlossInUse','rowInUse','tiesInUse','wildcardInUse'])
     
+    df = pd.merge(df,df_2,how='outer',on=['id']).rename(columns=COL_MAP['season_info'])
+    
+    df = df[[col for col in COL_MAP['season_info'].values() if col in df.columns]]
+
     if len(seasons) > 0:
-        return df.loc[df['id'].astype(str).isin(seasons)].sort_values(by=['id'])
+        return df.loc[df['season'].isin(seasons)].sort_values(by=['season'])
     else:
-        return df.sort_values(by=['id'])
+        return df.sort_values(by=['season'])
 
 def nhl_scrape_standings(arg:int | list[int] | Literal['now'] = 'now', season_type:int = 2):
     """
@@ -526,8 +535,11 @@ def nhl_scrape_standings(arg:int | list[int] | Literal['now'] = 'now', season_ty
             data = rs.get(api).json()['standings']
             dfs.append(pd.json_normalize(data))
 
+        #Standardize columns
+        df = pd.concat(dfs).rename(columns=COL_MAP['standings'])
+
         #Return: standings data
-        return pd.concat(dfs)
+        return df[[col for col in COL_MAP['standings'].values() if col in df.columns]]
 
 def nhl_scrape_roster(season: int):
     """
@@ -542,33 +554,40 @@ def nhl_scrape_roster(season: int):
             A DataFrame containing the rosters for all teams in the specified season.
     """
 
-    print("Scrpaing rosters for the "+ season + "season...")
+    print(f'Scrpaing rosters for the {season} season...')
     teaminfo = pd.read_csv(info_path)
 
     rosts = []
-    for team in list(teaminfo['Team']):
+    for team in teaminfo['team_abbr'].drop_duplicates():
         try:
-            print("Scraping " + team + " roster...")
-            api = "https://api-web.nhle.com/v1/roster/"+team+"/"+season
+            print(f'Scraping {team} roster...')
+            api = f'https://api-web.nhle.com/v1/roster/{team}/{season}'
             
             data = rs.get(api).json()
             forwards = pd.json_normalize(data['forwards'])
-            forwards['headingPosition'] = "F"
+            forwards['heading_position'] = "F"
             dmen = pd.json_normalize(data['defensemen'])
-            dmen['headingPosition'] = "D"
+            dmen['heading_position'] = "D"
             goalies = pd.json_normalize(data['goalies'])
-            goalies['headingPosition'] = "G"
+            goalies['heading_position'] = "G"
 
             roster = pd.concat([forwards,dmen,goalies]).reset_index(drop=True)
-            roster['fullName'] = (roster['firstName.default']+" "+roster['lastName.default']).str.upper()
+            roster['player_name'] = (roster['firstName.default']+" "+roster['lastName.default']).str.upper()
             roster['season'] = str(season)
             roster['team_abbr'] = team
 
             rosts.append(roster)
         except:
-            print("No roster found for " + team + "...")
+            print(f'No roster found for {team}...')
 
-    return pd.concat(rosts)
+    #Combine rosters
+    df = pd.concat(rosts)
+
+    #Standardize columns
+    df = df.rename(columns=COL_MAP['roster'])
+
+    #Return: roster data for provided season
+    return df[[col for col in COL_MAP['roster'].values() if col in df.columns]]
 
 def nhl_scrape_prospects(team:str):
     """
@@ -586,16 +605,21 @@ def nhl_scrape_prospects(team:str):
     api = f'https://api-web.nhle.com/v1/prospects/{team}'
 
     data = rs.get(api).json()
-    
+
+    print(f'Scraping {team} prospects...')
+
     #Iterate through positions
     players = [pd.json_normalize(data[pos]) for pos in ['forwards','defensemen','goalies']]
 
     prospects = pd.concat(players)
     #Add name columns
-    prospects['fullName'] = (prospects['firstName.default']+" "+prospects['lastName.default']).str.upper()
+    prospects['player_name'] = (prospects['firstName.default']+" "+prospects['lastName.default']).str.upper()
 
+    #Standardize columns
+    prospects = prospects.rename(columns=COL_MAP['prospects'])
+    
     #Return: team prospects
-    return prospects
+    return prospects[[col for col in COL_MAP['prospects'].values() if col in prospects.columns]]
 
 def nhl_scrape_team_info(country:bool = False):
     """
@@ -620,9 +644,13 @@ def nhl_scrape_team_info(country:bool = False):
         data['logo_light'] = 'https://assets.nhle.com/logos/nhl/svg/'+data['triCode']+'_light.svg'
         data['logo_dark'] = 'https://assets.nhle.com/logos/nhl/svg/'+data['triCode']+'_dark.svg'
 
-    return data.sort_values(by=(['country3Code','countryCode','iocCode','countryName'] if country else ['fullName','triCode','id']))
+    #Standardize columns
+    data = data.rename(columns=COL_MAP['team_info'])
 
-def nhl_scrape_player_data(player_ids:list[int]):
+    #Return: team or country info 
+    return data[[col for col in COL_MAP['team_info'].values() if col in data.columns]].sort_values(by=(['country_abbr','country_name'] if country else ['team_abbr','team_name']))
+
+def nhl_scrape_player_info(player_ids:list[int]):
     """
     Returns player data for specified players.
 
@@ -635,6 +663,7 @@ def nhl_scrape_player_data(player_ids:list[int]):
             A DataFrame containing player data for specified players.
     """
 
+    print(f'Retreiving player information for {player_ids}...')
     infos = []
     for player_id in player_ids:
         player_id = int(player_id)
@@ -642,7 +671,7 @@ def nhl_scrape_player_data(player_ids:list[int]):
 
         data = pd.json_normalize(rs.get(api).json())
         #Add name column
-        data['fullName'] = (data['firstName.default'] + " " + data['lastName.default']).str.upper()
+        data['player_name'] = (data['firstName.default'] + " " + data['lastName.default']).str.upper()
 
         #Append
         infos.append(data)
@@ -650,8 +679,11 @@ def nhl_scrape_player_data(player_ids:list[int]):
     if infos:
         df = pd.concat(infos)
         
+        #Standardize columns
+        df = df.rename(columns=COL_MAP['player_info'])
+
         #Return: player data
-        return df
+        return df[[col for col in COL_MAP['player_info'].values() if col in df.columns]]
     else:
         return pd.DataFrame()
 
@@ -666,8 +698,8 @@ def nhl_scrape_draft_rankings(arg:str | Literal['now'] = 'now', category:int = 0
 
             - Category 1 is North American Skaters.
             - Category 2 is International Skaters.
-            - Category 3 is North American Goalie.
-            - Category 4 is International Goalie
+            - Category 3 is North American Goalies.
+            - Category 4 is International Goalies
 
             Default is 0 (all prospects).
     Returns:
@@ -675,15 +707,26 @@ def nhl_scrape_draft_rankings(arg:str | Literal['now'] = 'now', category:int = 0
             A DataFrame containing draft rankings.
     """
 
+    print(f'Scraping draft rankings for {arg}...\nCategory: {DRAFT_CAT[category]}...')
+
     #Player category only applies when requesting a specific season
     api = f"https://api-web.nhle.com/v1/draft/rankings/{arg}/{category}" if category > 0 else f"https://api-web.nhle.com/v1/draft/rankings/{arg}"
     data = pd.json_normalize(rs.get(api).json()['rankings'])
 
     #Add player name columns
-    data['fullName'] = (data['firstName']+" "+data['lastName']).str.upper()
+    data['player_name'] = (data['firstName']+" "+data['lastName']).str.upper()
+
+    #Fix positions
+    data['positionCode'] = data['positionCode'].replace({
+        'LW':'L',
+        'RW':'R'
+    })
+
+    #Standardize columns
+    data = data.rename(columns=COL_MAP['draft_rankings'])
 
     #Return: prospect rankings
-    return data
+    return data[[col for col in COL_MAP['draft_rankings'].values() if col in data.columns]]
 
 def nhl_scrape_game_info(game_ids:list[int]):
     """
@@ -698,6 +741,9 @@ def nhl_scrape_game_info(game_ids:list[int]):
             An DataFrame containing information for each game.    
     """
 
+    #Wrap game_id in a list if only a single game_id is provided
+    game_ids = [game_ids] if type(game_ids) != list else game_ids
+
     print(f'Finding game information for games: {game_ids}')
 
     link = 'https://api-web.nhle.com/v1/gamecenter'
@@ -706,18 +752,15 @@ def nhl_scrape_game_info(game_ids:list[int]):
     df = pd.concat([pd.json_normalize(rs.get(f'{link}/{game_id}/landing').json()) for game_id in game_ids])
 
     #Add extra info
-    df['date'] = df['gameDate']
-    df['season_type'] = df['gameType']
-    df['away_team_abbr'] = df['awayTeam.abbrev']
-    df['home_team_abbr'] = df['homeTeam.abbrev']
-    df['game_title'] = df['away_team_abbr'] + " @ " + df['home_team_abbr'] + " - " + df['date']
-    df['estStartTime'] = pd.to_datetime(df['startTimeUTC']).dt.tz_convert('US/Eastern').dt.strftime("%I:%M %p")
+    df['game_date'] = df['gameDate']
+    df['game_title'] = df['awayTeam.abbrev'] + " @ " + df['homeTeam.abbrev'] + " - " + df['game_date']
+    df['start_time_est'] = pd.to_datetime(df['startTimeUTC']).dt.tz_convert('US/Eastern').dt.strftime("%I:%M %p")
 
-    front_col = ['id','season','date','season_type','game_title','away_team_abbr','home_team_abbr','estStartTime']
-    df = df[front_col+[col for col in df.columns.to_list() if col not in front_col]]
+    #Standardize columns
+    df = df.rename(columns=COL_MAP['schedule'])
 
     #Return: game information
-    return df
+    return df[[col for col in COL_MAP['schedule'].values() if col in df.columns]]
 
 
 def nhl_apply_xG(pbp: pd.DataFrame):
@@ -1172,23 +1215,23 @@ def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team']
 
         #Import rosters and player info
         rosters = pd.read_csv(roster_path)
-        names = rosters[['id','fullName',
-                            'headshot','positionCode','shootsCatches',
-                            'heightInInches','weightInPounds',
-                            'birthDate','birthCountry']].drop_duplicates(subset=['id','fullName'],keep='last')
+        names = rosters[['player_id','player_name',
+                            'headshot','position','handedness',
+                            'height_in','weight_lbs',
+                            'birth_date','birth_country']].drop_duplicates(subset=['player_id','player_name'],keep='last')
 
         #Add names
-        complete = pd.merge(complete,names,how='left',left_on='ID',right_on='id')
+        complete = pd.merge(complete,names,how='left',left_on='ID',right_on='player_id')
 
         #Rename if there are no missing names
-        complete = complete.rename(columns={'fullName':'Goalie',
+        complete = complete.rename(columns={'player_name':'Goalie',
                                             'headshot':'Headshot',
-                                            'positionCode':'Position',
-                                            'shootsCatches':'Handedness',
-                                            'heightInInches':'Height (in)',
-                                            'weightInPounds':'Weight (lbs)',
-                                            'birthDate':'Birthday',
-                                            'birthCountry':'Nationality'})
+                                            'position':'Position',
+                                            'handedness':'Handedness',
+                                            'height_in':'Height (in)',
+                                            'weight_lbs':'Weight (lbs)',
+                                            'birth_date':'Birthday',
+                                            'birth_country':'Nationality'})
         
         #WSBA
         complete['WSBA'] = complete['ID'].astype(str).str.replace('.0','')+complete['Team']+complete['Season'].astype(str)
@@ -1300,23 +1343,23 @@ def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team']
 
         #Import rosters and player info
         rosters = pd.read_csv(roster_path)
-        names = rosters[['id','fullName',
-                            'headshot','positionCode','shootsCatches',
-                            'heightInInches','weightInPounds',
-                            'birthDate','birthCountry']].drop_duplicates(subset=['id','fullName'],keep='last')
+        names = rosters[['player_id','player_name',
+                            'headshot','position','handedness',
+                            'height_in','weight_lbs',
+                            'birth_date','birth_country']].drop_duplicates(subset=['player_id','player_name'],keep='last')
 
         #Add names
-        complete = pd.merge(complete,names,how='left',left_on='ID',right_on='id')
+        complete = pd.merge(complete,names,how='left',left_on='ID',right_on='player_id')
 
         #Rename if there are no missing names
-        complete = complete.rename(columns={'fullName':'Player',
+        complete = complete.rename(columns={'player_name':'Player',
                                             'headshot':'Headshot',
-                                            'positionCode':'Position',
-                                            'shootsCatches':'Handedness',
-                                            'heightInInches':'Height (in)',
-                                            'weightInPounds':'Weight (lbs)',
-                                            'birthDate':'Birthday',
-                                            'birthCountry':'Nationality'})
+                                            'position':'Position',
+                                            'handedness':'Handedness',
+                                            'height_in':'Height (in)',
+                                            'weight_lbs':'Weight (lbs)',
+                                            'birth_date':'Birthday',
+                                            'birth_country':'Nationality'})
 
         #Set TOI to minute
         complete['TOI'] = complete['TOI']/60

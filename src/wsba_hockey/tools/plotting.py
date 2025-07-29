@@ -50,7 +50,7 @@ def prep_plot_data(pbp,events,strengths,marker_dict=event_markers):
         pbp = wsba_xG(pbp)
         pbp['xG'] = np.where(pbp['xG'].isna(),0,pbp['xG'])
 
-    pbp['WSBA'] = pbp['event_player_1_name']+pbp['season'].astype(str)+pbp['event_team_abbr']
+    pbp['WSBA'] = pbp['event_player_1_id'].astype(str)+pbp['season'].astype(str)+pbp['event_team_abbr']
     
     pbp['x_plot'] = np.where(pbp['x']<0,-pbp['y_adj'],pbp['y_adj'])
     pbp['y_plot'] = abs(pbp['x_adj'])
@@ -88,8 +88,8 @@ def plot_skater_shots(pbp, player, season, team, strengths, title = None, marker
     pbp = pbp.loc[(pbp['season'].astype(str)==season)&((pbp['away_team_abbr']==team)|(pbp['home_team_abbr']==team))]
 
     team_data = pd.read_csv(info_path)
-    team_color = list(team_data.loc[team_data['WSBA']==f'{team}{season}','Primary Color'])[0]
-    team_color_2nd = list(team_data.loc[team_data['WSBA']==f'{team}{season}','Secondary Color'])[0]
+    team_color = list(team_data.loc[team_data['WSBA']==f'{team}{season}','primary_color'])[0]
+    team_color_2nd = list(team_data.loc[team_data['WSBA']==f'{team}{season}','secondary_color'])[0]
 
     if onice in ['for','against']:
         skater = pbp.loc[(pbp[f'onice_{onice}'].str.contains(player.upper()))]
@@ -123,8 +123,8 @@ def plot_game_events(pbp,game_id,events,strengths,marker_dict=event_markers,team
 
     team_data = pd.read_csv(info_path)
     team_info ={
-        'away_color':'#000000' if list(team_data.loc[team_data['WSBA']==f'{away_abbr}{season}','Secondary Color'])[0]=='#FFFFFF' else list(team_data.loc[team_data['WSBA']==f'{away_abbr}{season}',f'{team_colors['away'].capitalize()} Color'])[0],
-        'home_color': list(team_data.loc[team_data['WSBA']==f'{home_abbr}{season}',f'{team_colors['home'].capitalize()} Color'])[0],
+        'away_color':'#000000' if list(team_data.loc[team_data['WSBA']==f'{away_abbr}{season}','secondary_color'])[0]=='#FFFFFF' else list(team_data.loc[team_data['WSBA']==f'{away_abbr}{season}',f'{team_colors['away']}_color'])[0],
+        'home_color': list(team_data.loc[team_data['WSBA']==f'{home_abbr}{season}',f'{team_colors['home']}_color'])[0],
         'away_logo': f'tools/logos/png/{away_abbr}{season}.png',
         'home_logo': f'tools/logos/png/{home_abbr}{season}.png',
     }

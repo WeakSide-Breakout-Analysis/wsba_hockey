@@ -90,18 +90,18 @@ def fix_players(pbp):
     print('Adding player info to pbp...')
 
     #Load roster and all players
-    roster = pd.read_csv(roster_path).drop_duplicates(['id'])[['fullName','id','shootsCatches']]
+    roster = pd.read_csv(roster_path).drop_duplicates(['player_id'])[['player_name','player_id','handedness']]
 
     #Some players are missing from the roster file (generally in newer seasons); add these manually
-    miss = list(pbp.loc[~(pbp['event_player_1_id'].isin(list(roster['id'])))&(pbp['event_player_1_id'].notna()),'event_player_1_id'].drop_duplicates())
+    miss = list(pbp.loc[~(pbp['event_player_1_id'].isin(list(roster['player_id'])))&(pbp['event_player_1_id'].notna()),'event_player_1_id'].drop_duplicates())
     if miss:
-        add = wsba.nhl_scrape_player_data(miss).rename(columns={'playerId':'id'})[['fullName','id','shootsCatches']]
+        add = wsba.nhl_scrape_player_info(miss)[['player_name','player_id','handedness']]
         roster = pd.concat([roster,add]).reset_index(drop=True)
 
     #Conversion dict
-    roster['id'] = roster['id'].astype(str)
-    roster_dict = roster.set_index('id').to_dict()['shootsCatches']
-    names_dict = roster.set_index('id').to_dict()['fullName']
+    roster['player_id'] = roster['player_id'].astype(str)
+    roster_dict = roster.set_index('player_id').to_dict()['handedness']
+    names_dict = roster.set_index('player_id').to_dict()['player_name']
 
     #Add player names
     for i in range(3):
