@@ -504,8 +504,11 @@ def nhl_scrape_standings(arg:int | list[int] | Literal['now'] = 'now', season_ty
             data = rs.get(api).json()['series']
             dfs.append(pd.json_normalize(data))
 
+        #Combine and standardize columns
+        df = pd.concat(dfs).rename(columns=COL_MAP['standings'])
+
         #Return: playoff bracket
-        return pd.concat(dfs)
+        return df[[col for col in COL_MAP['standings'].values() if col in df.columns]]
 
     else:
         if arg == "now":
@@ -664,6 +667,10 @@ def nhl_scrape_player_info(player_ids:list[int]):
     """
 
     print(f'Retreiving player information for {player_ids}...')
+
+    #Wrap game_id in a list if only a single game_id is provided
+    player_ids = [player_ids] if type(player_ids) != list else player_ids
+
     infos = []
     for player_id in player_ids:
         player_id = int(player_id)
