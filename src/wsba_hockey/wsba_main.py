@@ -85,7 +85,7 @@ CONVERT_TEAM_ABBR = {'L.A':'LAK',
                      'T.B':'TBL',
                      'PHX':'ARI'}
 
-PER_SIXTY = ['Fi','xGi','Gi','A1','A2','P1','P','Si','OZF','NZF','DZF','FF','FA','xGF','xGA','GF','GA','SF','SA','CF','CA','HF','HA','Give','Take','Penl','Penl2','Penl5','Draw','Block','GSAx']
+PER_SIXTY = ['Fi','xGi','Gi','A1','A2','P1','P','Si','OZF','NZF','DZF','FF','FA','xGF','xGA','GF','GA','SF','SA','CF','CA','HF','HA','Give','Take','Penl','Penl2','Penl5','Draw','PIM','Block','GSAx']
 
 #Some games in the API are specifically known to cause errors in scraping.
 #This list is updated as frequently as necessary
@@ -289,7 +289,7 @@ def nhl_scrape_schedule(season:int, start:str = '', end:str = ''):
             A DataFrame containing the schedule data for the specified season and date range.
     """
 
-    api = "https://api-web.nhle.com/v1/schedule/"
+    api = "https://api-web.nhle.com/v1/score/"
 
     #If either start or end are blank then find start and endpoints for specified season
     if start == '' or end == '':
@@ -325,7 +325,7 @@ def nhl_scrape_schedule(season:int, start:str = '', end:str = ''):
         print(f'Scraping games on {str(inc)[:10]}...')
         
         get = rs.get(f'{api}{str(inc)[:10]}').json()
-        gameWeek = pd.json_normalize(list(pd.json_normalize(get['gameWeek'])['games'])[0])
+        gameWeek = pd.json_normalize(get['games']).drop(columns=['goals'],errors='ignore')
         
         #Return nothing if there's nothing
         if gameWeek.empty:
@@ -382,34 +382,53 @@ def nhl_scrape_season(season:int, split_shifts:bool = False, season_types:list[i
     """
      
     #Determine whether to use schedule data in repository or to scrape
-    if local:
-        load = pd.read_csv(local_path)
-        load['date'] = pd.to_datetime(load['date'])
+    local_failed = False
 
-        if start == '' or end == '':
-            season_data = rs.get('https://api.nhle.com/stats/rest/en/season').json()['data']
-            season_data = [s for s in season_data if s['id'] == season][0]
-            start = season_data['startDate'][0:10]
-            end = season_data['endDate'][0:10]
-            
+    if local:
+        try:
+            load = pd.read_csv(local_path)
+            load['game_date'] = pd.to_datetime(load['game_date'])
+
+            if start == '' or end == '':
+                season_data = rs.get('https://api.nhle.com/stats/rest/en/season').json()['data']
+                season_data = [s for s in season_data if s['id'] == season][0]
+                
+                season_start = season_data['startDate'][0:10]
+                season_end = season_data['endDate'][0:10]
+
+            else:   
+                season_start = f'{(str(season)[0:4] if int(start[0:2])>=9 else str(season)[4:8])}-{start[0:2]}-{start[3:5]}'
+                season_end =  f'{(str(season)[0:4] if int(end[0:2])>=9 else str(season)[4:8])}-{end[0:2]}-{end[3:5]}'
+
             form = '%Y-%m-%d'
 
             #Create datetime values from dates
-            start = datetime.strptime(start,form)
-            end = datetime.strptime(end,form)
+            start_date = datetime.strptime(season_start,form)
+            end_date = datetime.strptime(season_end,form)
 
-        else:   
-            start = f'{(str(season)[0:4] if int(start[0:2])>=9 else str(season)[4:8])}-{start[0:2]}-{start[3:5]}'
-            end =  f'{(str(season)[0:4] if int(end[0:2])>=9 else str(season)[4:8])}-{end[0:2]}-{end[3:5]}'
+            load = load.loc[(load['season']==season)&
+                            (load['season_type'].isin(season_types))&
+                            (load['game_date']>=start_date)&(load['game_date']<=end_date)&
+                            (load['game_schedule_state']=='OK')&
+                            (load['game_state']!='FUT')
+                            ]
             
+            game_ids = load['game_id'].to_list()
+        except KeyError:
+            #If loading games locally fails then force a scrape
+            local_failed = True
+            print('Loading games locally has failed.  Loading schedule data with a scrape...')
+    else:
+        local_failed = True
+
+    if local_failed:
+        load = nhl_scrape_schedule(season,start,end)
         load = load.loc[(load['season']==season)&
                         (load['season_type'].isin(season_types))&
-                        (load['game_date']>=start)&(load['game_date']<=end)]
+                        (load['game_schedule_state']=='OK')&
+                        (load['game_state']!='FUT')
+                        ]
         
-        game_ids = load['game_id'].to_list()
-    else:
-        load = nhl_scrape_schedule(season,start,end)
-        load = load.loc[(load['season']==season)&(load['season_type'].isin(season_types))]
         game_ids = load['game_id'].to_list()
 
     #If no games found, terminate the process

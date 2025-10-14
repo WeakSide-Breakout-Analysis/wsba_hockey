@@ -38,6 +38,7 @@ def col_map():
             'periodDescriptor.maxRegulationPeriods':'period_max_regulation',
             'periodDescriptor.periodType':'period_type',
             'gameOutcome.lastPeriodType':'period_type_last',
+            'gameOutcome.otPeriods':'ot_periods',
             'seriesUrl':'series_url',
             'seriesStatus.round':'series_round',
             'seriesStatus.seriesAbbrev':'series_abbr',
@@ -48,7 +49,11 @@ def col_map():
             'seriesStatus.topSeedTeamAbbrev':'top_seed_team_abbr',
             'seriesStatus.bottomSeedTeamAbbrev':'bottom_seed_team_abbr',
             'seriesStatus.topSeedWins':'top_seed_wins',
-            'seriesStatus.bottomSeedWins':'bottom_seed_wins'
+            'seriesStatus.bottomSeedWins':'bottom_seed_wins',
+            'clock.timeRemaining':'period_time_remaining',
+            'clock.secondsRemaining':'period_seconds_remaining',
+            'clock.running':'period_clock_running',
+            'clock.inIntermission':'game_in_intermission'
         },
         'season_info':{
             'id':'season',
