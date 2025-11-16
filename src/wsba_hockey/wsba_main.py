@@ -340,6 +340,13 @@ def nhl_scrape_schedule(season:int, start:str = '', end:str = ''):
     #Concatenate all games and standardize column naming
     df = pd.concat(game).rename(columns=COL_MAP['schedule'],errors='ignore')
     
+    #Set logo links to dark variants (if any data exists)
+    try:
+        for team in ['away','home']:
+            df[f'{team}_team_logo'] = df[f'{team}_team_logo'].str.replace('light','dark')
+    except KeyError:
+        print('No games found for range of dates provided.')
+
     #Return: specificed schedule data
     return df[[col for col in COL_MAP['schedule'].values() if col in df.columns]]
 
