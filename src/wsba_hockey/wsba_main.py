@@ -77,7 +77,7 @@ SEASON_NAMES = {20072008: '2007-08',
                 20222023: '2022-23', 
                 20232024: '2023-24',
                 20242025: '2024-25',
-                20252025: '2025-26'}
+                20252026: '2025-26'}
 
 CONVERT_TEAM_ABBR = {'L.A':'LAK',
                      'N.J':'NJD',
@@ -178,9 +178,13 @@ def nhl_scrape_game(game_ids:int | list[int], split_shifts:bool = False, remove:
             #Ensure id validity (and that number of scraped games is equal to specified value)
             rand_id = f'{rand_year}{rand_season_type:02d}{rand_game:04d}'
             try: 
-                rs.get(f"https://api-web.nhle.com/v1/gamecenter/{rand_id}/play-by-play").json()
-                i += 1
-                game_ids.append(rand_id)
+                #If game exists and has at least begun, then scraping can occur.
+                rand_data = rs.get(f"https://api-web.nhle.com/v1/gamecenter/{rand_id}/play-by-play").json()
+                if rand_data['gameState'] == 'FUT':
+                    continue
+                else:
+                    i += 1
+                    game_ids.append(rand_id)
             except: 
                 continue
         
@@ -272,13 +276,13 @@ def nhl_scrape_game(game_ids:int | list[int], split_shifts:bool = False, remove:
         else:
             return pbp
 
-def nhl_scrape_schedule(season:int, start:str = '', end:str = ''):
+def nhl_scrape_schedule(season:int | Literal['now'] = 'now', start:str = '', end:str = ''):
     """
     Given season and an optional date range, retrieve NHL schedule data.
 
     Args:
-        season (int): 
-            The NHL season formatted such as "20242025".
+        season (int or str, optional): 
+            The NHL season formatted such as "20242025" or "now".  Default is "now".
         start (str, optional): 
             The date string (MM-DD) to start the schedule scrape at. Default is a blank string.
         end (str, optional): 
@@ -290,28 +294,32 @@ def nhl_scrape_schedule(season:int, start:str = '', end:str = ''):
     """
 
     api = "https://api-web.nhle.com/v1/score/"
-
-    #If either start or end are blank then find start and endpoints for specified season
-    if start == '' or end == '':
-        season_data = rs.get('https://api.nhle.com/stats/rest/en/season').json()['data']
-        season_data = [s for s in season_data if s['id'] == season][0]
-        start = season_data['startDate'][0:10]
-        end = season_data['endDate'][0:10]
-    else:
-        #Determine how to approach scraping; if month in season is after the new year the year must be adjusted
-        new_year = ["01","02","03","04","05","06"]
-        if start[:2] in new_year:
-            start = f'{int(str(season)[:4])+1}-{start}'
-            end = f'{str(season)[:-4]}-{end}'
-        else:
-            start = f'{int(str(season)[:4])}-{start}'
-            end = f'{str(season)[:-4]}-{end}'
-
     form = '%Y-%m-%d'
 
-    #Create datetime values from dates
-    start = datetime.strptime(start,form)
-    end = datetime.strptime(end,form)
+    #If the season argument is now (live schedule) then skip this step
+    if season == 'now':
+        #Set start and end to filler values to ensure only one date is scraped (the phrase 'now' will be appened pre-scrape)
+        start = end = datetime.now()
+    else:
+        #If either start or end are blank then find start and endpoints for specified season
+        if start == '' or end == '':
+            season_data = rs.get('https://api.nhle.com/stats/rest/en/season').json()['data']
+            season_data = [s for s in season_data if s['id'] == season][0]
+            start = season_data['startDate'][0:10]
+            end = season_data['endDate'][0:10]
+        else:
+            #Determine how to approach scraping; if month in season is after the new year the year must be adjusted
+            new_year = ["01","02","03","04","05","06"]
+            if start[:2] in new_year:
+                start = f'{int(str(season)[:4])+1}-{start}'
+                end = f'{str(season)[:-4]}-{end}'
+            else:
+                start = f'{int(str(season)[:4])}-{start}'
+                end = f'{str(season)[:-4]}-{end}'
+
+        #Create datetime values from dates
+        start = datetime.strptime(start,form)
+        end = datetime.strptime(end,form)
 
     game = []
 
@@ -320,18 +328,22 @@ def nhl_scrape_schedule(season:int, start:str = '', end:str = ''):
         #Handles dates which are over a year apart
         day = 365 + day
     for i in range(day):
-        #For each day, call NHL api and retreive info on all games of selected game
+        now = season == 'now'
         inc = start+timedelta(days=i)
-        print(f'Scraping games on {str(inc)[:10]}...')
         
-        get = rs.get(f'{api}{str(inc)[:10]}').json()
+        date_string = 'now' if now else str(inc)[:10]
+
+        #For each day, call NHL api and retreive info on all games of selected game
+        print(f'Scraping games {'as of' if now else 'on'} {date_string}...')
+        
+        get = rs.get(f'{api}{date_string}').json()
         gameWeek = pd.json_normalize(get['games']).drop(columns=['goals'],errors='ignore')
         
         #Return nothing if there's nothing
         if gameWeek.empty:
             game.append(gameWeek)
         else:
-            gameWeek['game_date'] = get['gameWeek'][0]['date']
+            gameWeek['game_date'] = get['currentDate']
             gameWeek['game_title'] = gameWeek['awayTeam.abbrev'] + " @ " + gameWeek['homeTeam.abbrev'] + " - " + gameWeek['game_date']
             gameWeek['start_time_est'] = pd.to_datetime(gameWeek['startTimeUTC']).dt.tz_convert('US/Eastern').dt.strftime("%I:%M %p")
 
@@ -553,9 +565,19 @@ def nhl_scrape_standings(arg:int | list[int] | Literal['now'] = 'now', season_ty
         for search in arg:
             #If the end is an int then its a season otherwise it is either 'now' or a date as a string
             if type(search) == int:
+                #Check if the season date is during the requested season - if so then use this date to find the current standings for the requested season
                 season_data = rs.get('https://api.nhle.com/stats/rest/en/season').json()['data']
                 season_data = [s for s in season_data if s['id'] == search][0]
-                end = season_data['regularSeasonEndDate'][0:10]
+                
+                season_start = season_data['startDate']
+                season_end = season_data['regularSeasonEndDate']
+
+                today = datetime.now().strftime("%Y-%m-%d")
+                
+                if season_start <= today <= season_end:
+                    end = today[0:10]
+                else:
+                    end = season_end[0:10]
             else:
                 end = search
                 
