@@ -592,13 +592,16 @@ def nhl_scrape_standings(arg:int | list[int] | Literal['now'] = 'now', season_ty
         #Return: standings data
         return df[[col for col in COL_MAP['standings'].values() if col in df.columns]]
 
-def nhl_scrape_roster(season: int):
+def nhl_scrape_roster(season: int, teams: list[str] | None = None):
     """
-    Returns rosters for all teams in a given season.
+    Returns rosters for a selection teams in a given season.
 
     Args:
         season (int):
             The NHL season formatted such as "20242025".
+
+        teams (str, optional):
+            List of teams(three letter abbreviation) to scrape.
 
     Returns:
         pd.DataFrame: 
@@ -608,8 +611,11 @@ def nhl_scrape_roster(season: int):
     print(f'Scrpaing rosters for the {season} season...')
     teaminfo = pd.read_csv(info_path)
 
+    if not teams:
+        teams = teaminfo['team_abbr'].drop_duplicates()
+
     rosts = []
-    for team in teaminfo['team_abbr'].drop_duplicates():
+    for team in teams:
         try:
             print(f'Scraping {team} roster...')
             api = f'https://api-web.nhle.com/v1/roster/{team}/{season}'
@@ -1479,7 +1485,7 @@ def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team']
 
         return complete
 
-def nhl_plot_skaters_shots(pbp:pd.DataFrame, skater_dict:dict, strengths:Union[Literal['all'], list[str]], marker_dict:dict = event_markers, onice:Literal['indv','for','against'] = ['indv'], title:bool = True, legend:bool = False):
+def nhl_plot_skaters_shots(pbp:pd.DataFrame, skater_dict:dict[str | int, list[int, str]], strengths:Union[Literal['all'], list[str]] = 'all', strengths_title:str | None = None, marker_dict:dict = event_markers, onice:Literal['indv','for','against'] = ['indv'], title:bool = True, legend:bool = False):
     """
     Return a dictionary of shot plots for the specified skaters.
 
@@ -1488,9 +1494,11 @@ def nhl_plot_skaters_shots(pbp:pd.DataFrame, skater_dict:dict, strengths:Union[L
             A DataFrame containing play-by-play event data to be visualized.
         skater_dict (dict[str, list[str]]):
             Dictionary of skaters to plot, where each key is a player name and the value is a list 
-            with season and team info (e.g., {'Patrice Bergeron': ['20242025', 'BOS']}).
-        strengths (str or list[str]):
+            with season and team info (e.g., {'Patrice Bergeron': [20212022, 'BOS']} or {8470638: [20212022, 'BOS']}).
+        strengths (str or list[str], optional):
             List of game strength states to include (e.g., ['5v5','5v4','4v5']).
+        strengths_title (str or None, optional):
+            Specify a title to describe the strengths states included in the plot.  Default is None (strengths shown will be a full list of the included strengths in the plot).
         marker_dict (dict[str, dict], optional):
             Dictionary of event types mapped to marker styles used in plotting.
         onice (Literal['indv', 'for', 'against'], optional):
@@ -1510,18 +1518,63 @@ def nhl_plot_skaters_shots(pbp:pd.DataFrame, skater_dict:dict, strengths:Union[L
 
     print(f'Plotting the following skater shots: {skater_dict}...')
 
+    roster = pd.read_csv(DEFAULT_ROSTER)
+
     #Iterate through skaters, adding plots to dict
     skater_plots = {}
+
     for skater in skater_dict.keys():
+        skater_name = skater.upper() if isinstance(skater, str) else roster.loc[roster['player_id']==skater,'player_name'].iloc[0]
         skater_info = skater_dict[skater]
-        title = f'{skater} Fenwick Shots for {skater_info[1]} in {skater_info[0][2:4]}-{skater_info[0][6:8]}' if title else ''
-        #Key is formatted as PLAYERSEASONTEAM (i.e. PATRICE BERGERON20212022BOS)
-        skater_plots.update({f'{skater}{skater_info[0]}{skater_info[1]}':[plot_skater_shots(pbp,skater,skater_info[0],skater_info[1],strengths,title,marker_dict,onice,legend)]})
+
+        title = f'{skater_name} Fenwick Shots for {skater_info[1]} in {str(skater_info[0])[2:4]}-{str(skater_info[0])[6:8]}' if title else ''
+        #Key is formatted as IDSEASONTEAM (i.e. 847063820212022BOS)
+        skater_plots.update({f'{skater}{skater_info[0]}{skater_info[1]}':[plot_skater_shots(pbp,skater,skater_info[0],skater_info[1],strengths,strengths_title,title,marker_dict,onice,legend)]})
 
     #Return: list of plotted skater shot charts
     return skater_plots
 
-def nhl_plot_games(pbp:pd.DataFrame, events:list[str], strengths:Union[Literal['all'], list[str]], game_ids: Union[Literal['all'], list[int]] = 'all', marker_dict:dict = event_markers, team_colors:dict = {'away':'primary','home':'primary'}, legend:bool =False):
+def nhl_plot_heatmap(pbp:pd.DataFrame, skater_dict:dict[str | int, list[int, str]], strengths:Union[Literal['all'], list[str]] = 'all', strengths_title:str | None = None, title:bool = True):
+    """
+    Return a dictionary of heatmaps for the specified skaters.
+
+    Args:
+        pbp (pd.DataFrame):
+            A DataFrame containing play-by-play event data to be visualized.
+        skater_dict (dict[str, list[str]]):
+            Dictionary of skaters to plot, where each key is a player name and the value is a list 
+            with season and team info (e.g., {'Patrice Bergeron': [20212022, 'BOS']} or {8470638: [20212022, 'BOS']}).
+        strengths (str or list[str], optional):
+            List of game strength states to include (e.g., ['5v5','5v4','4v5']).
+        strengths_title (str or None, optional):
+            Specify a title to describe the strengths states included in the plot.  Default is None (strengths shown will be a full list of the included strengths in the plot).
+        title (bool, optional):
+            Whether to include a plot title.
+
+    Returns:
+        dict[str, matplotlib.figure.Figure]:
+            A dictionary mapping each skater’s name to their corresponding matplotlib heatmap figure.
+    """
+
+    print(f'Plotting full-ice heatmap for the following skaters: {skater_dict}...')
+
+    roster = pd.read_csv(DEFAULT_ROSTER)
+
+    #Iterate through skaters, adding plots to dict
+    skater_plots = {}
+
+    for skater in skater_dict.keys():
+        skater_name = skater.upper() if isinstance(skater, str) else roster.loc[roster['player_id']==skater,'player_name'].iloc[0]
+        skater_info = skater_dict[skater]
+
+        title = f'{skater_name} Heatmap for {skater_info[1]} in {str(skater_info[0])[2:4]}-{str(skater_info[0])[6:8]}' if title else ''
+        #Key is formatted as IDSEASONTEAM (i.e. 847063820212022BOS)
+        skater_plots.update({f'{skater}{skater_info[0]}{skater_info[1]}':[gen_heatmap(pbp,skater,skater_info[0],skater_info[1],strengths,strengths_title,title)]})
+
+    #Return: list of plotted skater shot charts
+    return skater_plots
+
+def nhl_plot_games(pbp:pd.DataFrame, events:list[str], strengths:Union[Literal['all'], list[str]] = 'all', game_ids: Union[Literal['all'], list[int]] = 'all', marker_dict:dict = event_markers, team_colors:dict = {'away':'primary','home':'primary'}, legend:bool =False):
     """
     Returns a dictionary of event plots for the specified games.
 
@@ -1530,13 +1583,13 @@ def nhl_plot_games(pbp:pd.DataFrame, events:list[str], strengths:Union[Literal['
             A DataFrame containing play-by-play event data.
         events (list[str]):
             List of event types to include in the plot (e.g., ['shot-on-goal', 'goal']).
-        strengths (str or list[str]):
+        strengths (str or list[str], optional):
             List of game strength states to include (e.g., ['5v5','5v4','4v5']).
-        game_ids (str or list[int]):
+        game_ids (str or list[int], optional):
             List of game IDs to plot. If set to 'all', plots will be generated for all games in the DataFrame.
-        marker_dict (dict[str, dict]):
+        marker_dict (dict[str, dict], optional):
             Dictionary mapping event types to marker styles and/or colors used in plotting.
-        legend (bool):
+        legend (bool, optional):
             Whether to include a legend on the plots.
 
     Returns:

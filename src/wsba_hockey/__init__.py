@@ -13,6 +13,7 @@ from wsba_hockey.wsba_main import (
     nhl_calculate_stats,
     nhl_apply_xG,
     nhl_plot_skaters_shots,
+    nhl_plot_heatmap,
     nhl_plot_games,
     repo_load_rosters,
     repo_load_schedule,

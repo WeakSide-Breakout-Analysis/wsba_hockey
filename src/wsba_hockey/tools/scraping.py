@@ -49,19 +49,12 @@ def get_col():
         "event_coach","away_coach","home_coach"
     ]
 
-def med_x_coord(group):
-    #Calculate median x coordinate of a corsi shot for a team in a period to determine the direction they are shooting in that period (for coordinate adjustments and geometric calculations)
-    med_x = group.loc[group['event_type'].isin(['blocked-shot','missed-shot','shot-on-goal','goal']),'x'].median(skipna=True)
-    group['med_x'] = med_x
-
-    return group
-
 def adjust_coords(pbp):
     #Given JSON or ESPN pbp data, return pbp with adjusted coordinates
 
     #Recalibrate coordinates
     #Determine the direction teams are shooting in a given period
-    pbp = pbp.groupby(['event_team_venue','period','game_id'],group_keys=False).apply(med_x_coord)
+    pbp['med_x'] = (pbp.where(pbp['event_type'].isin(['blocked-shot','missed-shot','shot-on-goal','goal'])).groupby(['event_team_venue','period','game_id'])['x'].transform('median'))
 
     pbp = pbp.reset_index(drop=True)
 
@@ -73,7 +66,12 @@ def adjust_coords(pbp):
 
     #Calculate event distance and angle relative to venue location
     pbp['event_distance'] = np.where(pbp['event_team_venue']=='home',np.sqrt(((89 - pbp['x_adj'])**2) + (pbp['y_adj']**2)),np.sqrt((((-89) - pbp['x_adj'])**2) + (pbp['y_adj']**2)))
-    pbp['event_angle'] = np.where(pbp['event_team_venue']=='away',np.degrees(np.arctan2(abs(pbp['y_adj']), abs(89 - pbp['x_adj']))),np.degrees(np.arctan2(abs(pbp['y_adj']), abs((-89) - pbp['x_adj']))))
+    pbp['event_angle'] = np.where(pbp['event_team_venue']=='home',np.degrees(np.arctan2(abs(pbp['y_adj']), abs(89 - pbp['x_adj']))),np.degrees(np.arctan2(abs(pbp['y_adj']), abs((-89) - pbp['x_adj']))))
+
+    #Adjusted coordinates move away shots to the left side of the ice and home shots to the right side of the ice
+    #Fixed shots are mapped to the same side of the ice (the right side)
+    pbp['x_fixed'] = np.abs(pbp['x_adj'])
+    pbp['y_fixed'] = np.where(pbp['x_adj']<0,pbp['y_adj']*-1,pbp['y_adj'])
 
     #Return: pbp with adjiusted coordinates
     return pbp
@@ -1126,10 +1124,10 @@ async def combine_data(info,sources):
 
     #Assign score, corsi, fenwick, and penalties for each event
     for venue in ['away','home']:
-        df[f'{venue}_score'] = ((df['event_team_venue']==venue)&(df['event_type']=='goal')).cumsum()
-        df[f'{venue}_corsi'] = ((df['event_team_venue']==venue)&(df['event_type'].isin(['blocked-shot','missed-shot','shot-on-goal','goal']))).cumsum()
-        df[f'{venue}_fenwick'] = ((df['event_team_venue']==venue)&(df['event_type'].isin(['missed-shot','shot-on-goal','goal']))).cumsum()
-        df[f'{venue}_penalties'] = ((df['event_team_venue']==venue)&(df['event_type']=='penalty')).cumsum()
+        df[f'{venue}_score'] = ((df['event_team_venue']==venue)&(df['event_type']=='goal')).cumsum().shift(1)
+        df[f'{venue}_corsi'] = ((df['event_team_venue']==venue)&(df['event_type'].isin(['blocked-shot','missed-shot','shot-on-goal','goal']))).cumsum().shift(1)
+        df[f'{venue}_fenwick'] = ((df['event_team_venue']==venue)&(df['event_type'].isin(['missed-shot','shot-on-goal','goal']))).cumsum().shift(1)
+        df[f'{venue}_penalties'] = ((df['event_team_venue']==venue)&(df['event_type']=='penalty')).cumsum().shift(1)
     
     #Add time adjustments
     df['period_time'] = np.trunc((df['seconds_elapsed']-((df['period']-1)*1200))/60).astype(str).str.replace('.0','')+":"+(df['seconds_elapsed'] % 60).astype(str).str.pad(2,'left','0')
