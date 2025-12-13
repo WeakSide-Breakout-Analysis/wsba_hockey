@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.lines import Line2D
+from matplotlib.colors import Normalize
 from hockey_rink import NHLRink
 from hockey_rink import CircularImage
 from scipy.interpolate import griddata
@@ -14,6 +15,8 @@ from wsba_hockey.tools.xg_model import *
 
 ## GLOBAL VARIABLES ##
 
+fenwick_shots = ['missed-shot','shot-on-goal','goal']
+
 event_markers = {
     'faceoff':'X',
     'hit':'P',
@@ -23,6 +26,26 @@ event_markers = {
     'goal':'*',
     'giveaway':'1',
     'takeaway':'2',
+}
+
+metrics = {
+    'xG': 'xG',
+    'Goals': 'is_goal',
+    'Shots': 'is_shot',
+    'Fenwick': 'is_fenwick',
+    'Corsi': 'is_corsi',
+    'Giveaways': 'is_give',
+    'Takeaways': 'is_take'
+}
+
+metric_events = {
+    'xG': fenwick_shots,
+    'Goals': ['goal'],
+    'Shots': ['shot-on-goal','goal'],
+    'Fenwick': fenwick_shots,
+    'Corsi': fenwick_shots+['blocked-shot'],
+    'Giveaways': ['giveaway'],
+    'Takeaways': ['takeaway']
 }
 
 legend_elements = [
@@ -78,73 +101,83 @@ def prep_plot_data(pbp,events,strengths,marker_dict=event_markers):
 
     pbp['strength_state_2'] = pbp['strength_state'].str[::-1]
 
-    pbp['strength_state'] = np.where(pbp['strength_state'].isin(['5v5','5v4','4v5']),pbp['strength_state'],'Other')
-    pbp['strength_state_2'] = np.where(pbp['strength_state_2'].isin(['5v5','5v4','4v5']),pbp['strength_state_2'],'Other')
-
     pbp['size'] = np.where(pbp['xG']<0.05,20,pbp['xG']*400)
     pbp['marker'] = pbp['event_type'].replace(marker_dict)
 
     pbp = pbp.loc[(pbp['event_type'].isin(events))]
-    
+
     if strengths != 'all':
-        pbp = pbp.loc[(pbp['strength_state'].isin(strengths))]
+        pbp = pbp.loc[(pbp['strength_state'].isin(strengths)) | (pbp['strength_state_2'].isin(strengths))]
+
+    pbp['is_shot'] = pbp['event_type'].isin(metric_events['Shots']).astype(int)
+    pbp['is_fenwick'] = pbp['event_type'].isin(metric_events['Fenwick']).astype(int)
+    pbp['is_give'] = (pbp['event_type'] == 'giveaway').astype(int)
+    pbp['is_take'] = (pbp['event_type'] == 'takeaway').astype(int)
 
     return pbp
 
-def gen_heatmap(pbp, player, season, team, strengths, strengths_title = None, title = None):
+def gen_heatmap(pbp, player, season, team, strengths, metric = 'xG', strengths_title = None, title = None):
     pbp = pbp.loc[(pbp['season']==season)]
     
-    df = prep_plot_data(pbp,['missed-shot','shot-on-goal','goal'],strengths)
+    df = prep_plot_data(pbp,metric_events[metric],strengths)
 
     df = df.fillna(0)
-    df = df.loc[(df['x_adj'].notna())&(df['y_adj'].notna())]
+    df = df.loc[(df['x_adj'].notna())&(df['y_adj'].notna())&(df['empty_net']==0)]
 
     fig, ax = plt.subplots(1, 1, figsize=(10,12), facecolor='w', edgecolor='k')
     wsba_rink(display_range='full')
 
     if isinstance(player, int):
         id_mod = '_id'
-    else:
+    elif player:
         id_mod = '_name'
         player = player.upper()
+    else:
+        id_mod = None
 
     for sit in ['for','against']:
         if sit == 'for':
             df['x'] = abs(df['x_adj'])
             df['y'] = np.where(df['x_adj']<0,-df['y_adj'],df['y_adj'])
             df['event_distance'] = abs(df['event_distance'].fillna(0))
-            df = df.loc[(df['event_distance']<=89)&(df['x']<=89)&(df['empty_net']==0)]
+            df = df.loc[(df['event_distance']<=89)&(df['x']<=89)]
 
             x_min = 0
             x_max = 100
-
-            if strengths != 'all':
-                df = df.loc[((df['strength_state'].isin(strengths)))]
 
         else:
             df['x'] = -abs(df['x_adj'])
             df['y'] = np.where(df['x_adj']>0,-df['y_adj'],df['y_adj'])
             df['event_distance'] = -abs(df['event_distance'])
-            df = df.loc[(df['event_distance']>-89)&(df['x']>-89)&(df['empty_net']==0)]
+            df = df.loc[(df['event_distance']>-89)&(df['x']>-89)]
 
             x_min = -100
             x_max = 0
 
-            if strengths != 'all':
-                df = df.loc[((df['strength_state_2'].isin(strengths)))]
+        if metric != 'xG':
+            df[metrics[metric]] = df[metrics[metric]].fillna(0).clip(0,1)
 
         [x,y] = np.round(np.meshgrid(np.linspace(x_min,x_max,(x_max-x_min)),np.linspace(-42.5,42.5,85)))
-        xgoals = griddata((df['x'],df['y']),df['xG'],(x,y),method='cubic',fill_value=0)
+        xgoals = griddata((df['x'],df['y']),df[metrics[metric]],(x,y),method='cubic',fill_value=0)
         xgoals = np.where(xgoals < 0,0,xgoals)
         xgoals_smooth = gaussian_filter(xgoals,sigma=3)
-
-        if sit == 'for':
-            player_shots = df.loc[(df[f'onice_for{id_mod}'].str.contains(str(player)))&(df['event_team_abbr']==team)]
+        
+        if player:
+            if sit == 'for':
+                player_shots = df.loc[(df[f'onice_for{id_mod}'].str.contains(str(player)))&(df['event_team_abbr']==team)&(df['strength_state'].isin(strengths) if strengths != 'all' else True)]
+            else:
+                player_shots = df.loc[(df[f'onice_against{id_mod}'].str.contains(str(player)))&(df['event_team_abbr_2']==team)&(df['strength_state_2'].isin(strengths) if strengths != 'all' else True)]
+            [x,y] = np.round(np.meshgrid(np.linspace(x_min,x_max,(x_max-x_min)),np.linspace(-42.5,42.5,85)))
+            xgoals_player = griddata((player_shots['x'],player_shots['y']),player_shots[metrics[metric]],(x,y),method='cubic',fill_value=0)
+            xgoals_player = np.where(xgoals_player < 0,0,xgoals_player)
         else:
-            player_shots = df.loc[(df[f'onice_against{id_mod}'].str.contains(str(player)))&(df['event_team_abbr_2']==team)]
-        [x,y] = np.round(np.meshgrid(np.linspace(x_min,x_max,(x_max-x_min)),np.linspace(-42.5,42.5,85)))
-        xgoals_player = griddata((player_shots['x'],player_shots['y']),player_shots['xG'],(x,y),method='cubic',fill_value=0)
-        xgoals_player = np.where(xgoals_player < 0,0,xgoals_player)
+            if sit == 'for':
+                player_shots = df.loc[(df['event_team_abbr']==team)]
+            else:
+                player_shots = df.loc[(df['event_team_abbr_2']==team)]
+            [x,y] = np.round(np.meshgrid(np.linspace(x_min,x_max,(x_max-x_min)),np.linspace(-42.5,42.5,85)))
+            xgoals_player = griddata((player_shots['x'],player_shots['y']),player_shots[metrics[metric]],(x,y),method='cubic',fill_value=0)
+            xgoals_player = np.where(xgoals_player < 0,0,xgoals_player)
 
         difference = (gaussian_filter(xgoals_player,sigma = 3)) - xgoals_smooth
         data_min= difference.min()
@@ -160,47 +193,39 @@ def gen_heatmap(pbp, player, season, team, strengths, strengths_title = None, ti
             alpha=0.6,
             cmap='bwr',
             levels=np.linspace(data_min, data_max, 12),
+            norm=Normalize(vmin=data_min,vmax=data_max),
             vmin=data_min,
             vmax=data_max
         )
     
-    ax.text(-50, -50, 'Defense', ha='center', va='bottom', fontsize=12)
-    ax.text(50, -50, 'Offense', ha='center', va='bottom', fontsize=12)
+    ax.text(-50, -50, 'Defense (Against)', ha='center', va='bottom', fontsize=12)
+    ax.text(50, -50, 'Offense (For)', ha='center', va='bottom', fontsize=12)
     
     cbar = fig.colorbar(
         cont,
         ax=ax,
         orientation='horizontal',
         shrink=0.75,
+        aspect=50,
         fraction=0.05,
         pad=0.05,
-        ticks=[data_min,data_min/2,0,data_max/2,data_max]
+        ticks=[data_min, 0 ,data_max]
     )
 
-    cbar.ax.set_xticklabels(['Lower xG', '', 'Average xG', '', 'Higher xG'])
-    cbar.set_label('Compared to League Average', fontsize=12)
+    cbar.ax.set_xticklabels(['Deficit', 'Even', 'Surplus'])
+    cbar.set_label(f'On-Ice {metric}, Compared to League Average', fontsize=12)
     
     if not strengths_title:
         strengths_title = ', '.join(strengths) if np.logical_and(isinstance(strengths, list),strengths_title==None) else strengths.title()
     
-    fig.text(0.5, 0.16, f'Strength(s): {strengths_title}', ha='center', fontsize=10)
+    fig.text(0.51, 0.175, f'Strength(s)', ha='center', fontsize=10)
+    fig.text(0.51, 0.155, f'{strengths_title}', ha='center', fontsize=10)
 
     plt.title(title)
 
     return fig
 
-def league_shots(pbp,events,strengths):
-    pbp = prep_plot_data(pbp,events,strengths)
-
-    print(pbp[['event_player_1_name','xG','x_plot','y_plot']].head(10))
-
-    [x,y] = np.round(np.meshgrid(np.linspace(-42.5,42.5,85),np.linspace(0,100,100)))
-    xgoals = griddata((pbp[f'x_plot'],pbp[f'y_plot']),pbp['xG'],(x,y),method='cubic',fill_value=0)
-    xgoals_smooth = gaussian_filter(xgoals,sigma = 3)
-
-    return xgoals_smooth
-
-def plot_skater_shots(pbp, player, season, team, strengths, strengths_title = None, title = None, marker_dict=event_markers, onice='for', legend=False):
+def plot_skater_shots(pbp, player, season, team, strengths, strengths_title = None, title = None, marker_dict=event_markers, situation='for', legend=False):
     shots = ['goal','missed-shot','shot-on-goal']
     pbp = prep_plot_data(pbp,shots,strengths,marker_dict)
     pbp = pbp.loc[(pbp['season']==season)&((pbp['away_team_abbr']==team)|(pbp['home_team_abbr']==team))]
@@ -215,8 +240,8 @@ def plot_skater_shots(pbp, player, season, team, strengths, strengths_title = No
         id_mod = '_name'
         player = player.upper()
 
-    if onice in ['for','against']:
-        skater = pbp.loc[(pbp[f'onice_{onice}{id_mod}'].str.contains(str(player)))]
+    if situation in ['for','against']:
+        skater = pbp.loc[(pbp[f'onice_{situation}{id_mod}'].str.contains(str(player)))]
         skater['color'] = np.where(skater[f'event_player_1{id_mod}']==player,team_color,team_color_2nd)
     else:
         skater = pbp.loc[pbp[f'event_player_1{id_mod}']==player]

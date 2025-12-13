@@ -609,7 +609,7 @@ def nhl_scrape_roster(season: int, teams: list[str] | None = None):
     """
 
     print(f'Scrpaing rosters for the {season} season...')
-    teaminfo = pd.read_csv(info_path)
+    teaminfo = pd.read_csv(INFO_PATH)
 
     if not teams:
         teams = teaminfo['team_abbr'].drop_duplicates()
@@ -630,12 +630,13 @@ def nhl_scrape_roster(season: int, teams: list[str] | None = None):
 
             roster = pd.concat([forwards,dmen,goalies]).reset_index(drop=True)
             roster['player_name'] = (roster['firstName.default']+" "+roster['lastName.default']).str.upper()
-            roster['season'] = str(season)
+            roster['season'] = season
             roster['team_abbr'] = team
 
             rosts.append(roster)
         except:
             print(f'No roster found for {team}...')
+            rosts.append(pd.DataFrame())
 
     #Combine rosters
     df = pd.concat(rosts)
@@ -763,6 +764,7 @@ def nhl_scrape_draft_rankings(arg:str | Literal['now'] = 'now', category:int = 0
             - Category 4 is International Goalies
 
             Default is 0 (all prospects).
+            
     Returns:
         pd.DataFrame: 
             A DataFrame containing draft rankings.
@@ -823,6 +825,81 @@ def nhl_scrape_game_info(game_ids:list[int]):
     #Return: game information
     return df[[col for col in COL_MAP['schedule'].values() if col in df.columns]]
 
+def nhl_scrape_edge(season: int, type: list[tuple[Literal['skater','goalie','team'], list[str | int]]], season_type:int = 2):
+    """
+    Returns NHL Edge stats and data for a selection of skaters, goalies, or teams in a given season.
+
+    Args:
+        season (int):
+            The NHL season formatted such as "20242025".
+
+        type (list[tuple[Literal['skater', 'goalie', 'team'], list[str | int]]]):  
+            A list of selection tuples defining what data to scrape.
+            Each tuple contains:
+                - Entity type: `'skater'`, `'goalie'`, or `'team'`
+                - Identifiers for the entity:
+                    * Skater / goalie: NHL player IDs (int or str)
+                    * Team: team abbreviations (str)
+
+            Examples:
+                ['skater', [8478402, 8480012]]
+                ['goalie', [8471214]]
+                ['team', ['BOS', 'TOR']]
+
+        season_type (int, optional):  
+            Season type identifier.
+            Defaults to 2 (regular season).
+            Common values:
+                - 2: Regular season
+                - 3: Playoffs
+
+    Returns:
+        pd.DataFrame:
+            A DataFrame containing NHL EDGE metrics for the requested
+            skaters, goalies, and/or teams for the specified season.
+    """
+    
+    print(f'Scrpaing edge data for the {season} season...')
+
+    #First value in type specifies the edge data to scrape
+    scrape = type[0]
+
+    #NHL edge endpoint for teams uses their team ID rather than their three-letter abbreviation
+    if scrape == 'team':
+        data = nhl_scrape_team_info()
+        teams = data.set_index('team_abbr')['team_id'].to_dict()
+
+        entries = [teams[team] for team in type[1]]
+    else:
+        entries = type[1]
+
+    dfs = []
+    for entry in entries:
+        try:
+            print(f'Scraping NHL Edge data for {scrape} {entry}...')
+            api = f'https://api-web.nhle.com/v1/edge/{scrape}-detail/{entry}/{season}/{season_type}'
+            
+            data = rs.get(api).json()
+            edge = pd.json_normalize(data)
+
+            edge['season'] = season
+
+            if scrape != 'team':
+                edge['player_name'] = (edge['player.firstName.default']+" "+edge['player.lastName.default']).str.upper()
+
+            dfs.append(edge)
+        except:
+            print(f'No NHL Edge data found for {scrape} {entry}...')
+            dfs.append(pd.DataFrame())
+
+    #Combine edge data
+    df = pd.concat(dfs)
+
+    #Standardize columns
+    df = df.rename(columns=COL_MAP['edge'])
+
+    #Return: dataframe including NHL Edge data for the specified type and the entries included
+    return df[[col for col in COL_MAP['edge'].values() if col in df.columns]]
 
 def nhl_apply_xG(pbp: pd.DataFrame):
     """
@@ -1193,16 +1270,6 @@ def shooting_impacts(agg, type):
         return df
 
 def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team'], season_types:list[int], game_strength: Union[Literal['all'], list[str]], split_game:bool = False, roster_path:str = DEFAULT_ROSTER, shot_impact:bool = False):
-    #Given play-by-play, seasonal information, game_strength, rosters, and xG model, return aggregated stats
-    # param 'pbp' - play-by-play dataframe
-    # param 'type' - type of stats to calculate ('skater', 'goalie', or 'team')
-    # param 'season' - season or timeframe of events in play-by-play
-    # param 'season_type' - list of season types (preseason, regular season, or playoffs) to include in aggregation
-    # param 'game_strength' - list of game_strengths to include in aggregation
-    # param 'split_game' - boolean which if true groups aggregation by game
-    # param 'roster_path' - path to roster file
-    # param 'shot_impact' - boolean determining if the shot impact model will be applied to the dataset
-
     """
     Given play-by-play data, seasonal information, game strength, rosters, and an xG model,
     return aggregated statistics at the skater, goalie, or team level.
@@ -1485,7 +1552,7 @@ def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team']
 
         return complete
 
-def nhl_plot_skaters_shots(pbp:pd.DataFrame, skater_dict:dict[str | int, list[int, str]], strengths:Union[Literal['all'], list[str]] = 'all', strengths_title:str | None = None, marker_dict:dict = event_markers, onice:Literal['indv','for','against'] = ['indv'], title:bool = True, legend:bool = False):
+def nhl_plot_skaters_shots(pbp:pd.DataFrame, skater_dict:dict[str | int, list[int, str]], strengths:Union[Literal['all'], list[str]] = 'all', strengths_title:str | None = None, marker_dict:dict = event_markers, situation:Literal['indv','for','against'] = ['indv'], title:bool = True, legend:bool = False):
     """
     Return a dictionary of shot plots for the specified skaters.
 
@@ -1501,7 +1568,7 @@ def nhl_plot_skaters_shots(pbp:pd.DataFrame, skater_dict:dict[str | int, list[in
             Specify a title to describe the strengths states included in the plot.  Default is None (strengths shown will be a full list of the included strengths in the plot).
         marker_dict (dict[str, dict], optional):
             Dictionary of event types mapped to marker styles used in plotting.
-        onice (Literal['indv', 'for', 'against'], optional):
+        situation (Literal['indv', 'for', 'against'], optional):
             Determines which shot events to include for the player:
             - 'indv': only the player's own shots,
             - 'for': shots taken by the player's team while they are on ice,
@@ -1512,8 +1579,8 @@ def nhl_plot_skaters_shots(pbp:pd.DataFrame, skater_dict:dict[str | int, list[in
             Whether to include a legend on the plots.
 
     Returns:
-        dict[str, matplotlib.figure.Figure]:
-            A dictionary mapping each skater’s name to their corresponding matplotlib shot plot figure.
+        Dict[str or int, Dict[int, Dict[str, matplotlib.figure.Figure]]]:
+            A dictionary mapping each skater’s name or id to their corresponding season, team, then matplotlib heatmap figure.
     """
 
     print(f'Plotting the following skater shots: {skater_dict}...')
@@ -1524,26 +1591,27 @@ def nhl_plot_skaters_shots(pbp:pd.DataFrame, skater_dict:dict[str | int, list[in
     skater_plots = {}
 
     for skater in skater_dict.keys():
-        skater_name = skater.upper() if isinstance(skater, str) else roster.loc[roster['player_id']==skater,'player_name'].iloc[0]
+        skater_name = skater.title() if isinstance(skater, str) else roster.loc[roster['player_id']==skater,'player_name'].iloc[0].title()
         skater_info = skater_dict[skater]
 
         title = f'{skater_name} Fenwick Shots for {skater_info[1]} in {str(skater_info[0])[2:4]}-{str(skater_info[0])[6:8]}' if title else ''
         #Key is formatted as IDSEASONTEAM (i.e. 847063820212022BOS)
-        skater_plots.update({f'{skater}{skater_info[0]}{skater_info[1]}':[plot_skater_shots(pbp,skater,skater_info[0],skater_info[1],strengths,strengths_title,title,marker_dict,onice,legend)]})
+        skater_plots.update({skater:{skater_info[0]:{skater_info[1]:plot_skater_shots(pbp,skater,skater_info[0],skater_info[1],strengths,strengths_title,title,marker_dict,situation,legend)}}})
 
     #Return: list of plotted skater shot charts
     return skater_plots
 
-def nhl_plot_heatmap(pbp:pd.DataFrame, skater_dict:dict[str | int, list[int, str]], strengths:Union[Literal['all'], list[str]] = 'all', strengths_title:str | None = None, title:bool = True):
+def nhl_plot_heatmap(pbp:pd.DataFrame, player_dict:dict[str | int | Literal[8], list[int, str]], strengths:Union[Literal['all'], list[str]] = 'all', strengths_title:str | None = None, title:bool = True):
     """
-    Return a dictionary of heatmaps for the specified skaters.
+    Return a dictionary of heatmaps for the specified players or teams.
 
     Args:
         pbp (pd.DataFrame):
             A DataFrame containing play-by-play event data to be visualized.
-        skater_dict (dict[str, list[str]]):
-            Dictionary of skaters to plot, where each key is a player name and the value is a list 
-            with season and team info (e.g., {'Patrice Bergeron': [20212022, 'BOS']} or {8470638: [20212022, 'BOS']}).
+        player_dict (dict[str, list[str]]):
+            Dictionary of players to plot, where each key is a player name and the value is a list 
+            with season and team info (e.g., {'Patrice Bergeron': [20212022, 'BOS']} or {8470638: [20212022, 'BOS']}).  
+            Setting the key to the int value 8 will generate a heatmap for the full team.
         strengths (str or list[str], optional):
             List of game strength states to include (e.g., ['5v5','5v4','4v5']).
         strengths_title (str or None, optional):
@@ -1552,27 +1620,34 @@ def nhl_plot_heatmap(pbp:pd.DataFrame, skater_dict:dict[str | int, list[int, str
             Whether to include a plot title.
 
     Returns:
-        dict[str, matplotlib.figure.Figure]:
-            A dictionary mapping each skater’s name to their corresponding matplotlib heatmap figure.
+        Dict[str or int, Dict[int, Dict[str, matplotlib.figure.Figure]]]:
+            A dictionary mapping each skater’s name or id to their corresponding season, team, then matplotlib heatmap figure.  The phrase 'Team' takes the place for team heatmaps.
     """
 
-    print(f'Plotting full-ice heatmap for the following skaters: {skater_dict}...')
+    print(f'Plotting full-ice heatmap for the following players or teams: {player_dict}...')
 
     roster = pd.read_csv(DEFAULT_ROSTER)
 
-    #Iterate through skaters, adding plots to dict
-    skater_plots = {}
+    #Iterate through players, adding plots to dict
+    player_plots = {}
 
-    for skater in skater_dict.keys():
-        skater_name = skater.upper() if isinstance(skater, str) else roster.loc[roster['player_id']==skater,'player_name'].iloc[0]
-        skater_info = skater_dict[skater]
+    for player in player_dict.keys():
+        player_info = player_dict[player]
 
-        title = f'{skater_name} Heatmap for {skater_info[1]} in {str(skater_info[0])[2:4]}-{str(skater_info[0])[6:8]}' if title else ''
-        #Key is formatted as IDSEASONTEAM (i.e. 847063820212022BOS)
-        skater_plots.update({f'{skater}{skater_info[0]}{skater_info[1]}':[gen_heatmap(pbp,skater,skater_info[0],skater_info[1],strengths,strengths_title,title)]})
+        if player == 8:
+            player = None
+            player_key = 'Team'
+            title_header = f'{player_info[1]} Team Heatmap'
+        else:
+            player_key = player
+            player_name = player.title() if isinstance(player, str) else roster.loc[roster['player_id']==player,'player_name'].iloc[0].title()
+            title_header = f'{player_name} Heatmap for {player_info[1]}'
 
-    #Return: list of plotted skater shot charts
-    return skater_plots
+        title = f'{title_header} in {str(player_info[0])[2:4]}-{str(player_info[0])[6:8]}' if title else ''
+        player_plots.update({player_key:{player_info[0]:{player_info[1]:gen_heatmap(pbp,player,player_info[0],player_info[1],strengths,'xG',strengths_title,title)}}})
+
+    #Return: list of plotted player shot charts
+    return player_plots
 
 def nhl_plot_games(pbp:pd.DataFrame, events:list[str], strengths:Union[Literal['all'], list[str]] = 'all', game_ids: Union[Literal['all'], list[int]] = 'all', marker_dict:dict = event_markers, team_colors:dict = {'away':'primary','home':'primary'}, legend:bool =False):
     """
@@ -1606,7 +1681,7 @@ def nhl_plot_games(pbp:pd.DataFrame, events:list[str], strengths:Union[Literal['
     game_plots = {}
     #Iterate through games, adding plot to dict
     for game in game_ids:
-        game_plots.update({game:[plot_game_events(pbp,game,events,strengths,marker_dict,team_colors,legend)]})
+        game_plots.update({game:plot_game_events(pbp,game,events,strengths,marker_dict,team_colors,legend)})
 
     #Return: list of plotted game events
     return game_plots

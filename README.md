@@ -45,6 +45,12 @@ wsba.nhl_scrape_draft_rankings()
 wsba.nhl_scrape_prospects('BOS')
 ```
 
+### NHL EDGE Data
+```python
+wsba.nhl_scrape_edge(20252026,['skater',[8477956, 8479987]])
+wsba.nhl_scrape_edge(20252026,['goalie',[8480280]])
+wsba.nhl_scrape_edge(20252026,['team',['BOS']])
+```
 
 ## DATA ANALYTICS
 ### Expected Goals
