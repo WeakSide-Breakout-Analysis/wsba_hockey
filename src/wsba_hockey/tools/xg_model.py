@@ -395,6 +395,7 @@ def roc_auc_curve(pbp,model_path = xg_model_path):
         model.load_model(model_path)
 
         data = pbp.loc[pbp['event_type'].isin(fenwick_events)]
+        data = data[np.isfinite(data[target])]
         
         data_sparse = sp.csr_matrix(data[[target]+continuous+boolean])
 
@@ -426,6 +427,7 @@ def reliability(pbp,model_path = xg_model_path):
         model.load_model(model_path)
 
         data = pbp.loc[pbp['event_type'].isin(fenwick_events)]
+        data = data[np.isfinite(data[target])]
         
         data_sparse = sp.csr_matrix(data[[target]+continuous+boolean])
 

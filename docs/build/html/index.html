@@ -51,13 +51,18 @@
 <li><a class="reference internal" href="#wsba_hockey.wsba_main.NHL_Database.plots"><code class="docutils literal notranslate"><span class="pre">NHL_Database.plots</span></code></a></li>
 <li><a class="reference internal" href="#wsba_hockey.wsba_main.NHL_Database.add_game_plots"><code class="docutils literal notranslate"><span class="pre">NHL_Database.add_game_plots()</span></code></a></li>
 <li><a class="reference internal" href="#wsba_hockey.wsba_main.NHL_Database.add_games"><code class="docutils literal notranslate"><span class="pre">NHL_Database.add_games()</span></code></a></li>
+<li><a class="reference internal" href="#wsba_hockey.wsba_main.NHL_Database.add_plots"><code class="docutils literal notranslate"><span class="pre">NHL_Database.add_plots()</span></code></a></li>
 <li><a class="reference internal" href="#wsba_hockey.wsba_main.NHL_Database.add_stats"><code class="docutils literal notranslate"><span class="pre">NHL_Database.add_stats()</span></code></a></li>
 <li><a class="reference internal" href="#wsba_hockey.wsba_main.NHL_Database.export_data"><code class="docutils literal notranslate"><span class="pre">NHL_Database.export_data()</span></code></a></li>
+<li><a class="reference internal" href="#wsba_hockey.wsba_main.NHL_Database.get_players"><code class="docutils literal notranslate"><span class="pre">NHL_Database.get_players()</span></code></a></li>
+<li><a class="reference internal" href="#wsba_hockey.wsba_main.NHL_Database.get_seasons"><code class="docutils literal notranslate"><span class="pre">NHL_Database.get_seasons()</span></code></a></li>
+<li><a class="reference internal" href="#wsba_hockey.wsba_main.NHL_Database.get_teams"><code class="docutils literal notranslate"><span class="pre">NHL_Database.get_teams()</span></code></a></li>
 <li><a class="reference internal" href="#wsba_hockey.wsba_main.NHL_Database.select_games"><code class="docutils literal notranslate"><span class="pre">NHL_Database.select_games()</span></code></a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#wsba_hockey.wsba_main.nhl_apply_xG"><code class="docutils literal notranslate"><span class="pre">nhl_apply_xG()</span></code></a></li>
 <li><a class="reference internal" href="#wsba_hockey.wsba_main.nhl_calculate_stats"><code class="docutils literal notranslate"><span class="pre">nhl_calculate_stats()</span></code></a></li>
+<li><a class="reference internal" href="#wsba_hockey.wsba_main.nhl_plot_game_score"><code class="docutils literal notranslate"><span class="pre">nhl_plot_game_score()</span></code></a></li>
 <li><a class="reference internal" href="#wsba_hockey.wsba_main.nhl_plot_games"><code class="docutils literal notranslate"><span class="pre">nhl_plot_games()</span></code></a></li>
 <li><a class="reference internal" href="#wsba_hockey.wsba_main.nhl_plot_heatmap"><code class="docutils literal notranslate"><span class="pre">nhl_plot_heatmap()</span></code></a></li>
 <li><a class="reference internal" href="#wsba_hockey.wsba_main.nhl_plot_skaters_shots"><code class="docutils literal notranslate"><span class="pre">nhl_plot_skaters_shots()</span></code></a></li>
@@ -70,13 +75,12 @@
 <li><a class="reference internal" href="#wsba_hockey.wsba_main.nhl_scrape_roster"><code class="docutils literal notranslate"><span class="pre">nhl_scrape_roster()</span></code></a></li>
 <li><a class="reference internal" href="#wsba_hockey.wsba_main.nhl_scrape_schedule"><code class="docutils literal notranslate"><span class="pre">nhl_scrape_schedule()</span></code></a></li>
 <li><a class="reference internal" href="#wsba_hockey.wsba_main.nhl_scrape_season"><code class="docutils literal notranslate"><span class="pre">nhl_scrape_season()</span></code></a></li>
+<li><a class="reference internal" href="#wsba_hockey.wsba_main.nhl_scrape_seasons"><code class="docutils literal notranslate"><span class="pre">nhl_scrape_seasons()</span></code></a></li>
 <li><a class="reference internal" href="#wsba_hockey.wsba_main.nhl_scrape_seasons_info"><code class="docutils literal notranslate"><span class="pre">nhl_scrape_seasons_info()</span></code></a></li>
 <li><a class="reference internal" href="#wsba_hockey.wsba_main.nhl_scrape_standings"><code class="docutils literal notranslate"><span class="pre">nhl_scrape_standings()</span></code></a></li>
 <li><a class="reference internal" href="#wsba_hockey.wsba_main.nhl_scrape_team_info"><code class="docutils literal notranslate"><span class="pre">nhl_scrape_team_info()</span></code></a></li>
-<li><a class="reference internal" href="#wsba_hockey.wsba_main.repo_load_pbp"><code class="docutils literal notranslate"><span class="pre">repo_load_pbp()</span></code></a></li>
 <li><a class="reference internal" href="#wsba_hockey.wsba_main.repo_load_rosters"><code class="docutils literal notranslate"><span class="pre">repo_load_rosters()</span></code></a></li>
 <li><a class="reference internal" href="#wsba_hockey.wsba_main.repo_load_schedule"><code class="docutils literal notranslate"><span class="pre">repo_load_schedule()</span></code></a></li>
-<li><a class="reference internal" href="#wsba_hockey.wsba_main.repo_load_seasons"><code class="docutils literal notranslate"><span class="pre">repo_load_seasons()</span></code></a></li>
 <li><a class="reference internal" href="#wsba_hockey.wsba_main.repo_load_teaminfo"><code class="docutils literal notranslate"><span class="pre">repo_load_teaminfo()</span></code></a></li>
 <li><a class="reference internal" href="#wsba_hockey.wsba_main.shooting_impacts"><code class="docutils literal notranslate"><span class="pre">shooting_impacts()</span></code></a></li>
 </ul>
@@ -166,7 +170,7 @@ It initializes with either a provided list of game IDs or a default/random set.<
 <dd><p>Dictionary storing plot outputs keyed by game or event.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>dict[int, matplotlib.figure.Figure]</p>
+<dd class="field-odd"><p>dict[int, matplotlib.figure.Figure] |  dict[str or int, dict[int, dict[str, matplotlib.figure.Figure]]]</p>
 </dd>
 </dl>
 </dd></dl>
@@ -190,6 +194,7 @@ It initializes with either a provided list of game IDs or a default/random set.<
 <li><p><strong>strengths</strong> (<em>str</em><em> or </em><em>list</em><em>[</em><em>str</em><em>]</em>) – List of game strength states to include (e.g., [‘5v5’,’5v4’,’4v5’]).</p></li>
 <li><p><strong>game_ids</strong> (<em>str</em><em> or </em><em>list</em><em>[</em><em>int</em><em>]</em>) – List of game IDs to plot. If set to ‘all’, plots will be generated for all games in the DataFrame.</p></li>
 <li><p><strong>marker_dict</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>dict</em><em>]</em>) – Dictionary mapping event types to marker styles and/or colors used in plotting.</p></li>
+<li><p><strong>team_colors</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>str</em><em>]</em>) – Dictionary mapping team venue (home or away) to its primary or secondary color.</p></li>
 <li><p><strong>legend</strong> (<em>bool</em>) – Whether to include a legend on the plots.</p></li>
 </ul>
 </dd>
@@ -220,8 +225,43 @@ It initializes with either a provided list of game IDs or a default/random set.<
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="wsba_hockey.wsba_main.NHL_Database.add_plots">
+<span class="sig-name descname"><span class="pre">add_plots</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">plot</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'shot'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'heatmap'</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">player_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="m"><span class="pre">8</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strengths</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'all'</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'all'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strengths_title</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">marker_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">{'blocked-shot':</span> <span class="pre">'v',</span> <span class="pre">'faceoff':</span> <span class="pre">'X',</span> <span class="pre">'giveaway':</span> <span class="pre">'1',</span> <span class="pre">'goal':</span> <span class="pre">'*',</span> <span class="pre">'hit':</span> <span class="pre">'P',</span> <span class="pre">'missed-shot':</span> <span class="pre">'o',</span> <span class="pre">'shot-on-goal':</span> <span class="pre">'D',</span> <span class="pre">'takeaway':</span> <span class="pre">'2'}</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">situation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'indv'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'for'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'against'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'indv'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">legend</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#wsba_hockey.wsba_main.NHL_Database.add_plots" title="Link to this definition"></a></dt>
+<dd><p>Generate visualizations for players or teams based on play-by-play data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>plot</strong> (<em>str</em>) – Type of plot to generate (shot plot or heatmap)</p></li>
+<li><p><strong>player_dict</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>list</em><em>[</em><em>str</em><em>]</em><em>]</em>) – <p>Dictionary of players to plot, where each key is a player name and the value is a list
+with season and team info (e.g., {‘Patrice Bergeron’: [20212022, ‘BOS’]} or {8470638: [20212022, ‘BOS’]}).
+Setting the key to the int value 8 will generate a heatmap for the full team.</p>
+<p>If generating a shot plot, only skaters can be plotted.</p>
+</p></li>
+<li><p><strong>strengths</strong> (<em>str</em><em> or </em><em>list</em><em>[</em><em>str</em><em>]</em><em>, </em><em>optional</em>) – List of game strength states to include (e.g., [‘5v5’,’5v4’,’4v5’]).</p></li>
+<li><p><strong>strengths_title</strong> (<em>str</em><em> or </em><em>None</em><em>, </em><em>optional</em>) – Specify a title to describe the strengths states included in the plot.  Default is None (strengths shown will be a full list of the included strengths in the plot).</p></li>
+<li><p><strong>marker_dict</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>dict</em><em>]</em>) – Dictionary mapping event types to marker styles and/or colors used in plotting.  Only applies when plot is equal to ‘shot’.</p></li>
+<li><p><strong>situation</strong> (<em>Literal</em><em>[</em><em>'indv'</em><em>, </em><em>'for'</em><em>, </em><em>'against'</em><em>]</em><em>, </em><em>optional</em>) – <p>Determines which shot events to include for the player:
+- ‘indv’: only the player’s own shots,
+- ‘for’: shots taken by the player’s team while they are on ice,
+- ‘against’: shots taken by the opposing team while the player is on ice.</p>
+<p>Only applies when plot is equal to ‘shot’.</p>
+</p></li>
+<li><p><strong>title</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to include a plot title.</p></li>
+<li><p><strong>legend</strong> (<em>bool</em>) – Whether to include a legend on the plots.  Only applies when plot is equal to ‘shot’.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A dictionary mapping each skater’s name or id to their corresponding season, team, then matplotlib heatmap figure.  The phrase ‘Team’ takes the place for team heatmaps.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Dict[str or int, Dict[int, Dict[str, matplotlib.figure.Figure]]]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="wsba_hockey.wsba_main.NHL_Database.add_stats">
-<span class="sig-name descname"><span class="pre">add_stats</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'skater'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'goalie'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'team'</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">season_types</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">game_strength</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'all'</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">split_game</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">roster_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'C:\\Users\\owenb\\OneDrive\\Desktop\\Owen\\WSBA\\wsba_hockey\\src\\wsba_hockey\\tools\\rosters\\nhl_rosters.csv'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shot_impact</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#wsba_hockey.wsba_main.NHL_Database.add_stats" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">add_stats</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'skater'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'goalie'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'team'</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">game_strength</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'all'</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'all'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">season_types</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">split_game</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">roster_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'C:\\Users\\owenb\\OneDrive\\Desktop\\Owen\\WSBA\\wsba_hockey\\src\\wsba_hockey\\tools\\rosters\\nhl_rosters.csv'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shot_impact</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">simple_col</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#wsba_hockey.wsba_main.NHL_Database.add_stats" title="Link to this definition"></a></dt>
 <dd><p>Calculate and store statistics for the given play-by-play data.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -229,11 +269,12 @@ It initializes with either a provided list of game IDs or a default/random set.<
 <li><p><strong>name</strong> (<em>str</em>) – Key name to store the results under.</p></li>
 <li><p><strong>type</strong> (<em>Literal</em><em>[</em><em>'skater'</em><em>, </em><em>'goalie'</em><em>, </em><em>'team'</em><em>]</em>) – Type of statistics to calculate. Must be one of ‘skater’, ‘goalie’, or ‘team’.</p></li>
 <li><p><strong>season</strong> (<em>int</em>) – The NHL season formatted such as “20242025”.</p></li>
-<li><p><strong>season_types</strong> (<em>List</em><em>[</em><em>int</em><em>]</em><em>, </em><em>optional</em>) – List of season_types to include in scraping process.  Default is all regular season and playoff games which are 2 and 3 respectively.</p></li>
-<li><p><strong>game_strength</strong> (<em>str</em><em> or </em><em>list</em><em>[</em><em>str</em><em>]</em>) – List of game strength states to include (e.g., [‘5v5’,’5v4’,’4v5’]).</p></li>
+<li><p><strong>game_strength</strong> (<em>int</em><em> or </em><em>list</em><em>[</em><em>str</em><em>]</em>) – List of game strength states to include (e.g., [‘5v5’,’5v4’,’4v5’]).</p></li>
+<li><p><strong>season_types</strong> (<em>int</em><em> or </em><em>List</em><em>[</em><em>int</em><em>]</em><em>, </em><em>optional</em>) – List of season_types to include in scraping process.  Default is all regular season and playoff games which are 2 and 3 respectively.</p></li>
 <li><p><strong>split_game</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, aggregates stats separately for each game; otherwise, stats are aggregated across all games.  Default is False.</p></li>
 <li><p><strong>roster_path</strong> (<em>str</em><em>, </em><em>optional</em>) – File path to the roster data used for mapping players and teams.</p></li>
 <li><p><strong>shot_impact</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, applies shot impact metrics to the stats DataFrame.  Default is False.</p></li>
+<li><p><strong>simple_col</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, retains the column names (abbreviated and non-standard) used when developing the package.  Default is False.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -257,6 +298,48 @@ It initializes with either a provided list of game IDs or a default/random set.<
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>path</strong> (<em>str</em><em>, </em><em>optional</em>) – Root folder to export data into. Defaults to <cite>self.name/</cite>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="wsba_hockey.wsba_main.NHL_Database.get_players">
+<span class="sig-name descname"><span class="pre">get_players</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#wsba_hockey.wsba_main.NHL_Database.get_players" title="Link to this definition"></a></dt>
+<dd><p>Return list of player IDs in the database.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>List of player IDs.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>List</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="wsba_hockey.wsba_main.NHL_Database.get_seasons">
+<span class="sig-name descname"><span class="pre">get_seasons</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#wsba_hockey.wsba_main.NHL_Database.get_seasons" title="Link to this definition"></a></dt>
+<dd><p>Return list of seasons in the database.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>List of seasons IDs.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>List</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="wsba_hockey.wsba_main.NHL_Database.get_teams">
+<span class="sig-name descname"><span class="pre">get_teams</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#wsba_hockey.wsba_main.NHL_Database.get_teams" title="Link to this definition"></a></dt>
+<dd><p>Return list of teams in the database.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>List of teams IDs.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>List</p>
 </dd>
 </dl>
 </dd></dl>
@@ -298,20 +381,21 @@ It initializes with either a provided list of game IDs or a default/random set.<
 
 <dl class="py function">
 <dt class="sig sig-object py" id="wsba_hockey.wsba_main.nhl_calculate_stats">
-<span class="sig-prename descclassname"><span class="pre">wsba_hockey.wsba_main.</span></span><span class="sig-name descname"><span class="pre">nhl_calculate_stats</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pbp</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'skater'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'goalie'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'team'</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">season_types</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">game_strength</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'all'</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">split_game</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">roster_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'C:\\Users\\owenb\\OneDrive\\Desktop\\Owen\\WSBA\\wsba_hockey\\src\\wsba_hockey\\tools\\rosters\\nhl_rosters.csv'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shot_impact</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#wsba_hockey.wsba_main.nhl_calculate_stats" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">wsba_hockey.wsba_main.</span></span><span class="sig-name descname"><span class="pre">nhl_calculate_stats</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pbp</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'skater'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'goalie'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'team'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'game_score'</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">game_strength</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'all'</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'all'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">season_types</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">[2,</span> <span class="pre">3]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">split_game</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">roster_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'C:\\Users\\owenb\\OneDrive\\Desktop\\Owen\\WSBA\\wsba_hockey\\src\\wsba_hockey\\tools\\rosters\\nhl_rosters.csv'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shot_impact</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">simple_col</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#wsba_hockey.wsba_main.nhl_calculate_stats" title="Link to this definition"></a></dt>
 <dd><p>Given play-by-play data, seasonal information, game strength, rosters, and an xG model,
 return aggregated statistics at the skater, goalie, or team level.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>pbp</strong> (<em>pd.DataFrame</em>) – A DataFrame containing play-by-play event data.</p></li>
-<li><p><strong>type</strong> (<em>Literal</em><em>[</em><em>'skater'</em><em>, </em><em>'goalie'</em><em>, </em><em>'team'</em><em>]</em>) – Type of statistics to calculate. Must be one of ‘skater’, ‘goalie’, or ‘team’.</p></li>
+<li><p><strong>type</strong> (<em>Literal</em><em>[</em><em>'skater'</em><em>, </em><em>'goalie'</em><em>, </em><em>'team'</em><em>, </em><em>'game_score'</em><em>]</em>) – Type of statistics to calculate. Must be one of ‘skater’, ‘goalie’, ‘team’, or ‘game_score’ (specific combination of skaters and goaltenders by game).</p></li>
 <li><p><strong>season</strong> (<em>int</em>) – The NHL season formatted such as “20242025”.</p></li>
-<li><p><strong>season_types</strong> (<em>List</em><em>[</em><em>int</em><em>]</em><em>, </em><em>optional</em>) – List of season_types to include in scraping process.  Default is all regular season and playoff games which are 2 and 3 respectively.</p></li>
-<li><p><strong>game_strength</strong> (<em>str</em><em> or </em><em>list</em><em>[</em><em>str</em><em>]</em>) – List of game strength states to include (e.g., [‘5v5’,’5v4’,’4v5’]).</p></li>
-<li><p><strong>split_game</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, aggregates stats separately for each game; otherwise, stats are aggregated across all games.  Default is False.</p></li>
+<li><p><strong>game_strength</strong> (<em>int</em><em> or </em><em>list</em><em>[</em><em>str</em><em>]</em><em>, </em><em>optional</em>) – List of game strength states to include (e.g., [‘5v5’,’5v4’,’4v5’]).  Default is ‘all’.</p></li>
+<li><p><strong>season_types</strong> (<em>int</em><em> or </em><em>List</em><em>[</em><em>int</em><em>]</em><em>, </em><em>optional</em>) – List of season_types to include in scraping process.  Default is all regular season and playoff games which are 2 and 3 respectively.</p></li>
+<li><p><strong>split_game</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, aggregates stats separately for each game; otherwise, stats are aggregated across all games.  Value is ignored when type == ‘game_score’.  Default is False.</p></li>
 <li><p><strong>roster_path</strong> (<em>str</em><em>, </em><em>optional</em>) – File path to the roster data used for mapping players and teams.</p></li>
 <li><p><strong>shot_impact</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, applies shot impact metrics to the stats DataFrame.  Default is False.</p></li>
+<li><p><strong>simple_col</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, retains the column names (abbreviated and non-standard) used when developing the package.  Default is False.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -319,6 +403,27 @@ return aggregated statistics at the skater, goalie, or team level.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>pd.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="wsba_hockey.wsba_main.nhl_plot_game_score">
+<span class="sig-prename descclassname"><span class="pre">wsba_hockey.wsba_main.</span></span><span class="sig-name descname"><span class="pre">nhl_plot_game_score</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pbp</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">game_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'all'</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'all'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#wsba_hockey.wsba_main.nhl_plot_game_score" title="Link to this definition"></a></dt>
+<dd><p>Returns a dictionary of game score bar charts for the specified games.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>pbp</strong> (<em>pd.DataFrame</em>) – A DataFrame containing play-by-play event data.</p></li>
+<li><p><strong>game_ids</strong> (<em>str</em><em> or </em><em>list</em><em>[</em><em>int</em><em>]</em><em>, </em><em>optional</em>) – List of game IDs to plot. If set to ‘all’, plots will be generated for all games in the DataFrame.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A dictionary mapping each game ID to its corresponding set of game score charts.
+Each game is separated into two keys, one for each team (three-letter abbreviation such as ‘BOS’).</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict[int, dict[str, matplotlib.figure.Figure]]</p>
 </dd>
 </dl>
 </dd></dl>
@@ -640,6 +745,23 @@ dict[str, pd.DataFrame]:</p>
 </dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="wsba_hockey.wsba_main.nhl_scrape_seasons">
+<span class="sig-prename descclassname"><span class="pre">wsba_hockey.wsba_main.</span></span><span class="sig-name descname"><span class="pre">nhl_scrape_seasons</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">analytic</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#wsba_hockey.wsba_main.nhl_scrape_seasons" title="Link to this definition"></a></dt>
+<dd><p>Returns list of NHL seasons</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>analytic</strong> (<em>bool</em><em>, </em><em>optional</em>) – Filters list of seasons to those only included in the WSBA Hockey package (2007-2008 and beyond) if True.  Default is False.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A DataFrame containing a list of all NHL seasons.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>pd.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="wsba_hockey.wsba_main.nhl_scrape_seasons_info">
 <span class="sig-prename descclassname"><span class="pre">wsba_hockey.wsba_main.</span></span><span class="sig-name descname"><span class="pre">nhl_scrape_seasons_info</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">seasons</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">[]</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#wsba_hockey.wsba_main.nhl_scrape_seasons_info" title="Link to this definition"></a></dt>
 <dd><p>Returns info related to NHL seasons (by default, all seasons are included)
@@ -691,23 +813,6 @@ dict[str, pd.DataFrame]:</p>
 </dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="wsba_hockey.wsba_main.repo_load_pbp">
-<span class="sig-prename descclassname"><span class="pre">wsba_hockey.wsba_main.</span></span><span class="sig-name descname"><span class="pre">repo_load_pbp</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">seasons</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">[]</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#wsba_hockey.wsba_main.repo_load_pbp" title="Link to this definition"></a></dt>
-<dd><p>Returns play-by-play data from repository</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>seasons</strong> (<em>List</em><em>[</em><em>int</em><em>]</em><em>, </em><em>optional</em>) – The NHL season formatted such as “20242025”.</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>A DataFrame containing full play-by-play data for the selected season.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>pd.DataFrame</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
 <dt class="sig sig-object py" id="wsba_hockey.wsba_main.repo_load_rosters">
 <span class="sig-prename descclassname"><span class="pre">wsba_hockey.wsba_main.</span></span><span class="sig-name descname"><span class="pre">repo_load_rosters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">seasons</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">[]</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#wsba_hockey.wsba_main.repo_load_rosters" title="Link to this definition"></a></dt>
 <dd><p>Returns roster data from repository</p>
@@ -737,21 +842,6 @@ dict[str, pd.DataFrame]:</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>pd.DataFrame</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="wsba_hockey.wsba_main.repo_load_seasons">
-<span class="sig-prename descclassname"><span class="pre">wsba_hockey.wsba_main.</span></span><span class="sig-name descname"><span class="pre">repo_load_seasons</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#wsba_hockey.wsba_main.repo_load_seasons" title="Link to this definition"></a></dt>
-<dd><p>Returns list of available seasons</p>
-<p>Args:</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>A DataFrame containing a list of seasons available in the WSBA Hockey package.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p>pd.DataFrame</p>
 </dd>
 </dl>
 </dd></dl>

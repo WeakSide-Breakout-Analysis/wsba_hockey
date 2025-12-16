@@ -1,7 +1,8 @@
 import os
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
 from matplotlib.lines import Line2D
 from matplotlib.colors import Normalize
 from hockey_rink import NHLRink
@@ -261,7 +262,8 @@ def plot_skater_shots(pbp, player, season, team, strengths, strengths_title = No
     if not strengths_title:
         strengths_title = ', '.join(strengths) if np.logical_and(isinstance(strengths, list),strengths_title==None) else strengths.title()
 
-    fig.text(0.5, 0.16, f'Strength(s): {strengths_title}', ha='center', fontsize=10)
+    fig.text(0.5, 0.07, f'Strength(s)', ha='center', fontsize=10)
+    fig.text(0.5, 0.03, f'{strengths_title}', ha='center', fontsize=10)
 
     return fig
     
@@ -269,10 +271,12 @@ def plot_game_events(pbp,game_id,events,strengths,marker_dict=event_markers,team
     pbp = prep_plot_data(pbp,events,strengths,marker_dict)
     pbp = pbp.loc[pbp['game_id'].astype(str)==str(game_id)]
     
-    away_abbr = list(pbp['away_team_abbr'])[0]
-    home_abbr = list(pbp['home_team_abbr'])[0]
-    date = list(pbp['game_date'])[0]
-    season = list(pbp['season'])[0]
+    away_abbr = pbp['away_team_abbr'].iloc[0]
+    home_abbr = pbp['home_team_abbr'].iloc[0]
+    date = pbp['game_date'].iloc[0]
+    season = pbp['season'].iloc[0]
+    away_xg = pbp.loc[pbp['event_team_venue']=='away','xG'].sum().astype(float).round(2)
+    home_xg = pbp.loc[pbp['event_team_venue']=='home','xG'].sum().astype(float).round(2)
 
     team_data = pd.read_csv(info_path)
     team_info ={
@@ -289,9 +293,120 @@ def plot_game_events(pbp,game_id,events,strengths,marker_dict=event_markers,team
 
     for event in events:
         plays = pbp.loc[pbp['event_type']==event]
-        ax.scatter(plays['x_adj'],plays['y_adj'],plays['size'],plays['color'],marker=event_markers[event],edgecolors='black' if event=='goal' else 'white',label=event,zorder=5)
+        ax.scatter(plays['x_adj'],plays['y_adj'],plays['size'],plays['color'],marker=event_markers[event],edgecolors='black' if event=='goal' else 'white',linewidths=0.75,label=event,zorder=5)
 
+    ax.text(-50, -50, f'{away_abbr} xG: {away_xg}', ha='center', va='bottom', fontsize=10)
+    ax.text(50, -50, f'{home_abbr} xG: {home_xg}', ha='center', va='bottom', fontsize=10)
     ax.set_title(f'{away_abbr} @ {home_abbr} - {date}')
     ax.legend(handles=legend_elements, bbox_to_anchor =(0.5,-0.35), loc='lower center', ncol=1).set_visible(legend)
 
     return fig
+
+def plot_game_score(df):
+    plots = {}
+
+    teams = df['team_abbr'].drop_duplicates()
+
+    for team in teams:
+        plot_df = df.loc[df['team_abbr'] == team].copy()
+        
+        try:
+            game_date = wsba.nhl_scrape_game_info(
+                df['game_id'].astype(int).iloc[0]
+            )['game_date'].iloc[0]
+        except:
+            game_date = 'Unknown Date'
+            
+        opp = [t for t in teams if t != team]
+
+        plot_df['player_name'] = plot_df['player_name'].str.title()
+
+        comp = [
+            'production_score',
+            'play_driving_score',
+            'even_strength_score',
+            'power_play_score',
+            'short_handed_score',
+            'penalties_score',
+            'puck_management_score',
+            'faceoffs_score',
+            'workload_score',
+            'goaltending_score'
+        ]
+
+        labels = [
+            'Production',
+            'Play-Driving',
+            'Even Strength',
+            'Power Play',
+            'Shorthanded',
+            'Penalties',
+            'Puck Management',
+            'Faceoffs',
+            'Goaltending Workload',
+            'Goaltending Performance'
+        ]
+
+        colors = [
+            'blue', 'red', 'green', 'orange', 'purple',
+            'grey', 'cyan', 'magenta', 'brown', 'pink'
+        ]
+
+        fig, ax = plt.subplots(figsize=(10, 8))
+        y_pos = np.arange(len(plot_df['player_name']))
+
+        right_offset = np.zeros(len(plot_df))
+        
+        left_offset = np.zeros(len(plot_df)) 
+
+        for i, col in enumerate(comp):
+            values = plot_df[col]
+            
+            pos_vals = np.where(values > 0, values, 0)
+            neg_vals = np.where(values < 0, values, 0)
+
+            ax.barh(y_pos, pos_vals, left=right_offset, height=0.6,
+                    color=colors[i], label=labels[i])
+            
+            right_offset += pos_vals 
+
+            ax.barh(y_pos, neg_vals, left=left_offset, height=0.6,
+                    color=colors[i])
+            
+            left_offset += neg_vals 
+
+        ax.axvline(0, color='black', linewidth=1)
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(
+            plot_df['player_name'] + ' (' +
+            plot_df['game_score'].astype(float).round(2).astype(str) + ')'
+        )
+        ax.invert_yaxis()
+        ax.set_xlabel('Game Score')
+        ax.set_ylabel('Player')
+
+        x_min = min(-3, np.min(left_offset))
+        x_max = max(3, np.max(right_offset))
+        ax.set_xlim(x_min, x_max)
+
+        ax.grid(True, axis='both')
+        
+        title = f'{team} Game Score - {game_date} vs {opp[0]}'
+        ax.set_title(title)
+        
+        legend = ax.legend(title='Components', bbox_to_anchor=(1.05, 1), loc='upper left')
+
+        logo_img = mpimg.imread(img_path)
+        fig.canvas.draw()
+        bbox = legend.get_window_extent().transformed(fig.transFigure.inverted())
+        
+        logo_width = bbox.width
+        logo_height = 0.3
+        logo_bottom = bbox.y0 - 0.4
+        logo_ax = fig.add_axes([bbox.x0, logo_bottom, logo_width, logo_height])
+        logo_ax.imshow(logo_img)
+        logo_ax.axis('off')
+
+        plots[team] = fig
+
+    return plots

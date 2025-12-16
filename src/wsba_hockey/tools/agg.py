@@ -1,3 +1,4 @@
+import json
 import pandas as pd
 import numpy as np
 from wsba_hockey.tools.xg_model import *
@@ -7,6 +8,12 @@ from wsba_hockey.tools.xg_model import *
 ## GLOBAL VARIABLES ##
 shot_types = ['wrist','deflected','tip-in','slap','backhand','snap','wrap-around','poke','bat','cradle','between-legs']
 fenwick_events = ['missed-shot','shot-on-goal','goal']
+
+strengths_list = {
+    'EV':['5v5','4v4','3v3'],
+    'PP':['5v4','5v3','4v3'],
+    'SH':['4v5','3v5','3v4']
+}
 
 def calc_indv(pbp,game_strength,second_group):
     # Filter by game strength if not "all"
@@ -402,3 +409,50 @@ def calc_goalie(pbp,game_strength,second_group):
     onice_stats['GSAx'] = onice_stats['xGA']-onice_stats['GA']
 
     return onice_stats
+
+def calc_game_score_features(pbp,type):
+    print('Calculating game score...')
+    clean_group = ['ID','Team','Season','Game']
+    second_group = ['season','game_id']
+
+    team_stats = calc_team(pbp,'all',['season','game_id'])[['Team','Season','Game','GF','GA']].rename(columns={'GF':'Team GF', 'GA':'Team GA'})
+
+    if type == 'skater':
+        df = calc_indv(pbp,'all',second_group)[
+            clean_group+
+            ['P','PENL%','PM%','F%']
+        ]
+        
+        for key, strengths in strengths_list.items():
+            indv = calc_indv(pbp,strengths,second_group)[
+                clean_group+
+                ['xGi']
+            ]
+            onice = calc_onice(pbp,strengths,second_group)[
+                clean_group+
+                ['xGF','xGA']
+            ]
+
+            indv['ID'] = indv['ID'].astype(float)
+            onice['ID'] = onice['ID'].astype(float)
+
+            stats = pd.merge(indv,onice,how='left')
+            stats['xGC%'] = stats['xGi']/stats['xGF']
+            stats = stats.rename(columns={col:f'{key}_{col}' for col in stats.columns if col not in clean_group})
+
+            df = pd.merge(df,stats,how='left')
+        
+        team_stats['T-GD'] = team_stats['Team GF'] - team_stats['Team GA']
+        
+        df = pd.merge(df,team_stats,how='left')
+        score = df.replace([np.inf,-np.inf],np.nan).fillna(0)
+
+    else:  
+        score = calc_goalie(pbp,'all',['season','game_id'])[['ID','Season','Team','Game','xGF','xGA','GA/xGA']]
+        score = pd.merge(score,team_stats,how='left')
+
+        score['xGF%'] = score['xGF']/(score['xGF']+score['xGA'])
+        score['T-GD'] = score['Team GF'] - score['Team GA']
+        score = score.drop(columns=['xGF','xGA','Team GF','Team GA']).replace([np.inf,-np.inf],np.nan).fillna(0)
+
+    return score

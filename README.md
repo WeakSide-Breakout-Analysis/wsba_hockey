@@ -79,10 +79,6 @@ wsba.nhl_plot_games(pbp,legend=True)
 ```
 
 ## REPOSITORY 
-### Past Season Play-by-Play
-```python
-wsba.repo_load_pbp(seasons=[20212022,20222023,20232024,20242025])
-```
 ### Team Information
 ```python
 wsba.repo_load_teaminfo()

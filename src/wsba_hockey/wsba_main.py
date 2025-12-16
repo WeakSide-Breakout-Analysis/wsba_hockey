@@ -17,28 +17,6 @@ from wsba_hockey.tools.columns import col_map
 ## Provided below are all integral functions in the WSBA Hockey Python package. ##
 
 ## GLOBAL VARIABLES ##
-SEASONS = [
-    20072008,
-    20082009,
-    20092010,
-    20102011,
-    20112012,
-    20122013,
-    20132014,
-    20142015,
-    20152016,
-    20162017,
-    20172018,
-    20182019,
-    20192020,
-    20202021,
-    20212022,
-    20222023,
-    20232024,
-    20242025,
-    20252026
-]
-
 CONVERT_SEASONS = {2007: 20072008, 
                    2008: 20082009, 
                    2009: 20092010, 
@@ -106,14 +84,32 @@ KNOWN_PROBS = {
 
 SHOT_TYPES = ['wrist','deflected','tip-in','slap','backhand','snap','wrap-around','poke','bat','cradle','between-legs']
 
-NEW = 2025
-
 EVENTS = ['faceoff','hit','giveaway','takeaway','blocked-shot','missed-shot','shot-on-goal','goal','penalty']
 
 DIR = os.path.dirname(os.path.realpath(__file__))
 SCHEDULE_PATH = os.path.join(DIR,'tools\\schedule\\schedule.csv')
 INFO_PATH = os.path.join(DIR,'tools\\teaminfo\\nhl_teaminfo.csv')
 DEFAULT_ROSTER = os.path.join(DIR,'tools\\rosters\\nhl_rosters.csv')
+GAME_SCORE = os.path.join(DIR,'tools\\game_score\\')
+
+GS_SCORE_FEATURES = {
+    'skater':["P",
+            "PENL%",
+            "PM%",
+            "F%",
+            "EV_xGC%",
+            "EV_xGF",
+            "EV_xGA",
+            "PP_xGC%",
+            "PP_xGF",
+            "PP_xGA",
+            "SH_xGC%",
+            "SH_xGF",
+            "SH_xGA"],
+
+    'goalie':["xGF%",
+            "GA/xGA"]
+}
 
 #Load column names for standardization
 COL_MAP = col_map()
@@ -351,7 +347,8 @@ def nhl_scrape_schedule(season:int | Literal['now'] = 'now', start:str = '', end
         
     #Concatenate all games and standardize column naming
     df = pd.concat(game).rename(columns=COL_MAP['schedule'],errors='ignore')
-    
+    df = df.loc[:, ~df.columns.duplicated()]
+
     #Set logo links to dark variants (if any data exists)
     try:
         for team in ['away','home']:
@@ -520,9 +517,11 @@ def nhl_scrape_standings(arg:int | list[int] | Literal['now'] = 'now', season_ty
             A DataFrame containing the standings information (or playoff bracket).
     """
 
+    current_year = datetime.now().year
+
     if season_type == 3:
         if arg == "now":
-            arg = [NEW]
+            arg = [current_year]
         elif type(arg) == int:
             #Find year from season
             arg = [str(arg)[4:8]]
@@ -552,7 +551,7 @@ def nhl_scrape_standings(arg:int | list[int] | Literal['now'] = 'now', season_ty
         if arg == "now":
             print("Scraping standings as of now...")
             arg = [arg]
-        elif arg in SEASONS:
+        elif arg in nhl_scrape_seasons():
             print(f'Scraping standings for season: {arg}')
             arg = [arg]
         elif type(arg) == list:
@@ -900,6 +899,26 @@ def nhl_scrape_edge(season: int, type: list[tuple[Literal['skater','goalie','tea
 
     #Return: dataframe including NHL Edge data for the specified type and the entries included
     return df[[col for col in COL_MAP['edge'].values() if col in df.columns]]
+
+def nhl_scrape_seasons(analytic: bool = False):
+    """
+    Returns list of NHL seasons
+
+    Args:
+        analytic (bool, optional):
+            Filters list of seasons to those only included in the WSBA Hockey package (2007-2008 and beyond) if True.  Default is False.
+
+    Returns:
+        pd.DataFrame:
+            A DataFrame containing a list of all NHL seasons.
+    """
+
+    data = rs.get('https://api-web.nhle.com/v1/season').json()
+
+    if analytic:
+        data = [season for season in data if season > 20062007]
+
+    return data
 
 def nhl_apply_xG(pbp: pd.DataFrame):
     """
@@ -1269,7 +1288,7 @@ def shooting_impacts(agg, type):
         #Return: skater stats with shooting impacts
         return df
 
-def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team'], season_types:list[int], game_strength: Union[Literal['all'], list[str]], split_game:bool = False, roster_path:str = DEFAULT_ROSTER, shot_impact:bool = False):
+def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team','game_score'], game_strength:Union[Literal['all'], str, list[str]] = 'all', season_types:int | list[int] = [2,3], split_game:bool = False, roster_path:str = DEFAULT_ROSTER, shot_impact:bool = False, simple_col:bool = False):
     """
     Given play-by-play data, seasonal information, game strength, rosters, and an xG model,
     return aggregated statistics at the skater, goalie, or team level.
@@ -1277,21 +1296,23 @@ def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team']
     Args:
         pbp (pd.DataFrame):
             A DataFrame containing play-by-play event data.
-        type (Literal['skater', 'goalie', 'team']):
-            Type of statistics to calculate. Must be one of 'skater', 'goalie', or 'team'.
+        type (Literal['skater', 'goalie', 'team', 'game_score']):
+            Type of statistics to calculate. Must be one of 'skater', 'goalie', 'team', or 'game_score' (specific combination of skaters and goaltenders by game).
         season (int): 
             The NHL season formatted such as "20242025".
-        season_types (List[int], optional):
+        game_strength (int or list[str], optional):
+            List of game strength states to include (e.g., ['5v5','5v4','4v5']).  Default is 'all'.
+        season_types (int or List[int], optional):
             List of season_types to include in scraping process.  Default is all regular season and playoff games which are 2 and 3 respectively.
-        game_strength (str or list[str]):
-            List of game strength states to include (e.g., ['5v5','5v4','4v5']).
         split_game (bool, optional):
-            If True, aggregates stats separately for each game; otherwise, stats are aggregated across all games.  Default is False.
+            If True, aggregates stats separately for each game; otherwise, stats are aggregated across all games.  Value is ignored when type == 'game_score'.  Default is False.
         roster_path (str, optional):
             File path to the roster data used for mapping players and teams.
         shot_impact (bool, optional):
             If True, applies shot impact metrics to the stats DataFrame.  Default is False.
-
+        simple_col (bool, optional):
+            If True, retains the column names (abbreviated and non-standard) used when developing the package.  Default is False.
+            
     Returns:
         pd.DataFrame:
             A DataFrame containing the aggregated statistics according to the selected parameters.
@@ -1305,6 +1326,12 @@ def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team']
         pbp['xG']
     except KeyError: 
         pbp = wsba_xG(pbp)
+
+    #If single values provided for columns typically in a list then place them into a list
+    if isinstance(season_types, int):
+        season_types = [season_types]
+    if isinstance(game_strength, str) and game_strength != 'all':
+        game_strength = [game_strength]
 
     #Apply season_type filter
     pbp = pbp.loc[(pbp['season_type'].isin(season_types))]
@@ -1322,6 +1349,114 @@ def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team']
         second_group = ['season']
 
     #Split calculation
+    if type == 'game_score':
+        #Create game score features for all positions
+        skater = calc_game_score_features(pbp,'skater')
+        goalie = calc_game_score_features(pbp,'goalie')
+
+        #Generate game score with corresponding model
+        dfs = []
+        for label, df in [('skater',skater),('goalie',goalie)]:
+            with open(os.path.join(GAME_SCORE,f'wsba_gs_{label}.json')) as f:
+                model_data = json.load(f)
+
+            #Extract model data
+            coefficients = np.array(model_data["coefficients"])
+            scaler_mean = np.array(model_data["scaler_mean"])
+            scaler_scale = np.array(model_data["scaler_scale"])
+
+            #Prepare features
+            features = df[GS_SCORE_FEATURES[label]]
+
+            #Scale features
+            features_scaled = (features - scaler_mean) / scaler_scale
+
+            #Display impact value of each variable
+            for col, coef in zip(features.columns, coefficients):
+                if col in df:
+                    df[f'{col} Score'] = features_scaled[col]*coef
+
+            #Calculate game score
+            df["GS"] = df[[f'{col} Score' for col in GS_SCORE_FEATURES[label]]].sum(axis=1)
+
+            dfs.append(df)
+        
+        #Combine game_score
+        complete = pd.concat(dfs)
+
+        #Remove entries with no ID listed
+        complete = complete.loc[complete['ID'].notna()]
+
+        #Import rosters and player info
+        rosters = pd.read_csv(roster_path)
+        names = rosters[['player_id','player_name',
+                            'headshot','position','handedness',
+                            'height_in','weight_lbs',
+                            'birth_date','birth_country']].drop_duplicates(subset=['player_id','player_name'],keep='last')
+
+        #Add names
+        complete = pd.merge(complete,names,how='left',left_on='ID',right_on='player_id')
+
+        #Rename if there are no missing names
+        complete = complete.rename(columns={'player_name':'Player',
+                                            'headshot':'Headshot',
+                                            'position':'Position',
+                                            'handedness':'Handedness',
+                                            'height_in':'Height (in)',
+                                            'weight_lbs':'Weight (lbs)',
+                                            'birth_date':'Birthday',
+                                            'birth_country':'Nationality'})
+        
+        #WSBA
+        complete['WSBA'] = complete['ID'].astype(str).str.replace('.0','')+complete['Team']+complete['Season'].astype(str)
+
+        #Add player age
+        complete['Birthday'] = pd.to_datetime(complete['Birthday'])
+        complete['season_year'] = complete['Season'].astype(str).str[4:8].astype(int)
+        complete['Age'] = complete['season_year'] - complete['Birthday'].dt.year
+
+        #Find player headshot
+        complete['Headshot'] = 'https://assets.nhle.com/mugs/nhl/'+complete['Season'].astype(str)+'/'+complete['Team']+'/'+complete['ID'].astype(int).astype(str)+'.png'
+
+        #Calculate game score composites
+        for strength in ['EV','PP','SH']:
+            complete[f'{strength} Score'] = complete[[col for col in complete.columns if f'{strength}_' in col and 'Score' in col and 'xGC%' not in col]].sum(axis=1)
+        complete['Production Score'] = complete['P Score']
+        complete['Play-Driving Score'] = complete[[col for col in complete.columns if f'_xGC%' in col and 'Score' in col]].sum(axis=1)
+        complete['Offensive Score'] = complete['Production Score']+complete['Play-Driving Score']+complete[[col for col in complete.columns if f'_xGF' in col and 'Score' in col]].sum(axis=1)
+        complete['Defensive Score'] = complete[[col for col in complete.columns if f'_xGA' in col and 'Score' in col]].sum(axis=1)
+        complete['Penalties Score'] = complete['PENL% Score'] 
+        complete['Puck Management Score'] = complete['PM% Score']
+        complete['Faceoffs Score'] = complete['F% Score']
+        complete['Misc Score'] = complete['PENL% Score']+complete['PM% Score']+complete['F% Score']
+        complete['Workload Score'] = complete['xGF% Score']
+        complete['Goaltending Score'] = complete['GA/xGA Score']
+
+        complete = complete[[
+            "Player","ID","Season","Team","Game",'WSBA',
+            'Headshot','Position','Handedness',
+            'Height (in)','Weight (lbs)',
+            'Birthday','Age','Nationality',
+            ]+GS_SCORE_FEATURES['skater']+GS_SCORE_FEATURES['goalie']+
+            [f'{col} Score' for col in GS_SCORE_FEATURES['skater']]+[f'{col} Score' for col in GS_SCORE_FEATURES['goalie']]+
+            ['EV Score','PP Score','SH Score','Production Score','Play-Driving Score',
+             'Offensive Score','Defensive Score','Workload Score','Goaltending Score',
+             'Penalties Score','Puck Management Score','Faceoffs Score',
+             'Misc Score','GS']
+        ]
+
+        #Remove goalies that appear with skaters
+        complete = complete.loc[(complete['Position']!='G') | ((complete['Position']=='G')&(complete['P'].isna()))]
+
+        #Convert season name
+        complete['Season'] = complete['Season'].replace(SEASON_NAMES)
+
+        end = time.perf_counter()
+        length = end-start
+        print(f'...finished in {(length if length <60 else length/60):.2f} {'seconds' if length <60 else 'minutes'}.')
+
+        return complete if simple_col else complete.rename(columns=COL_MAP['stats'], errors='ignore')
+
     if type == 'goalie':
         complete = calc_goalie(pbp,game_strength,second_group)
 
@@ -1392,12 +1527,12 @@ def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team']
         #Apply shot impacts if necessary
         if shot_impact:
             complete = shooting_impacts(complete,'goalie')
-        
+    
         end = time.perf_counter()
         length = end-start
         print(f'...finished in {(length if length <60 else length/60):.2f} {'seconds' if length <60 else 'minutes'}.')
 
-        return complete
+        return complete if simple_col else complete.rename(columns=COL_MAP['stats'], errors='ignore')
         
     elif type == 'team':
         complete = calc_team(pbp,game_strength,second_group)
@@ -1444,7 +1579,7 @@ def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team']
         length = end-start
         print(f'...finished in {(length if length <60 else length/60):.2f} {'seconds' if length <60 else 'minutes'}.')
 
-        return complete
+        return complete if simple_col else complete.rename(columns=COL_MAP['stats'], errors='ignore')
     else:
         indv_stats = calc_indv(pbp,game_strength,second_group)
         onice_stats = calc_onice(pbp,game_strength,second_group)
@@ -1465,6 +1600,19 @@ def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team']
         complete['xGF%'] = complete['xGF']/(complete['xGF']+complete['xGA'])
         complete['FF%'] = complete['FF']/(complete['FF']+complete['FA'])
         complete['CF%'] = complete['CF']/(complete['CF']+complete['CA'])
+
+        #Set TOI to minute
+        complete['TOI'] = complete['TOI']/60
+
+        #Add per 60 stats
+        for stat in PER_SIXTY:
+            complete[f'{stat}/60'] = (complete[stat]/complete['TOI'])*60
+
+        #Shot Type Metrics
+        type_metrics = []
+        for type in shot_types:
+            for stat in PER_SIXTY[:3]:
+                type_metrics.append(f'{type.capitalize()}{stat}')
 
         #Remove entries with no ID listed
         complete = complete.loc[complete['ID'].notna()]
@@ -1489,9 +1637,6 @@ def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team']
                                             'birth_date':'Birthday',
                                             'birth_country':'Nationality'})
 
-        #Set TOI to minute
-        complete['TOI'] = complete['TOI']/60
-
         #Add player age
         complete['Birthday'] = pd.to_datetime(complete['Birthday'])
         complete['season_year'] = complete['Season'].astype(str).str[4:8].astype(int)
@@ -1502,21 +1647,9 @@ def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team']
 
         #Remove goalies that occasionally appear in a set
         complete = complete.loc[complete['Position']!='G']
+
         #Add WSBA ID
         complete['WSBA'] = complete['ID'].astype(str).str.replace('.0','')+complete['Season'].astype(str)+complete['Team']
-
-        #Add per 60 stats
-        for stat in PER_SIXTY:
-            complete[f'{stat}/60'] = (complete[stat]/complete['TOI'])*60
-
-        #Shot Type Metrics
-        type_metrics = []
-        for type in shot_types:
-            for stat in PER_SIXTY[:3]:
-                type_metrics.append(f'{type.capitalize()}{stat}')
-
-        #Convert season name
-        complete['Season'] = complete['Season'].replace(SEASON_NAMES)
 
         head = ['Player','ID','Game'] if 'Game' in complete.columns else ['Player','ID']
         complete = complete[head+[
@@ -1545,12 +1678,15 @@ def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team']
         #Apply shot impacts if necessary (Note: this will remove skaters with fewer than 150 minutes of TOI due to the shot impact TOI rule)
         if shot_impact:
             complete = shooting_impacts(complete,'skater')
-        
+            
+        #Convert season name
+        complete['Season'] = complete['Season'].replace(SEASON_NAMES)
+
         end = time.perf_counter()
         length = end-start
         print(f'...finished in {(length if length <60 else length/60):.2f} {'seconds' if length <60 else 'minutes'}.')
 
-        return complete
+        return complete if simple_col else complete.rename(columns=COL_MAP['stats'], errors='ignore')
 
 def nhl_plot_skaters_shots(pbp:pd.DataFrame, skater_dict:dict[str | int, list[int, str]], strengths:Union[Literal['all'], list[str]] = 'all', strengths_title:str | None = None, marker_dict:dict = event_markers, situation:Literal['indv','for','against'] = ['indv'], title:bool = True, legend:bool = False):
     """
@@ -1686,6 +1822,39 @@ def nhl_plot_games(pbp:pd.DataFrame, events:list[str], strengths:Union[Literal['
     #Return: list of plotted game events
     return game_plots
 
+def nhl_plot_game_score(pbp:pd.DataFrame, game_ids: Union[Literal['all'], list[int]] = 'all'):
+    """
+    Returns a dictionary of game score bar charts for the specified games.
+
+    Args:
+        pbp (pd.DataFrame):
+            A DataFrame containing play-by-play event data.
+        game_ids (str or list[int], optional):
+            List of game IDs to plot. If set to 'all', plots will be generated for all games in the DataFrame.
+
+    Returns:
+        dict[int, dict[str, matplotlib.figure.Figure]]:
+            A dictionary mapping each game ID to its corresponding set of game score charts.
+            Each game is separated into two keys, one for each team (three-letter abbreviation such as 'BOS').
+    """
+
+    #Find games to scrape
+    if game_ids == 'all':
+        game_ids = pbp['game_id'].drop_duplicates().to_list()
+
+    print(f'Charting game score for the following games: {game_ids}...')
+
+    game_plots = {}
+    #Iterate through games, adding plot to dict
+    for game in game_ids:
+        pbp = pbp.loc[pbp['game_id']==game]
+        stats = nhl_calculate_stats(pbp,'game_score').sort_values('game_score',ascending=False)
+
+        game_plots.update({game:plot_game_score(stats)})
+
+    #Return: list of charted games
+    return game_plots
+
 def repo_load_rosters(seasons:list[int] = []):
     """
     Returns roster data from repository
@@ -1737,39 +1906,6 @@ def repo_load_teaminfo():
 
     return pd.read_csv(INFO_PATH)
 
-def repo_load_pbp(seasons:list = []):
-    """
-    Returns play-by-play data from repository
-
-    Args:
-        seasons (List[int], optional): 
-                The NHL season formatted such as "20242025".
-    Returns:
-        pd.DataFrame:
-            A DataFrame containing full play-by-play data for the selected season.
-    """
-    #
-    # param 'seasons' - list of seasons to include
-
-    #Add parquet to total
-    print(f'Loading play-by-play from the following seasons: {seasons}...')
-    dfs = [pd.read_parquet(f"https://weakside-breakout.s3.us-east-2.amazonaws.com/pbp/parquet/nhl_pbp_{season}.parquet") for season in seasons]
-
-    return pd.concat(dfs)
-
-def repo_load_seasons():
-    """
-    Returns list of available seasons
-
-    Args:
-
-    Returns:
-        pd.DataFrame:
-            A DataFrame containing a list of seasons available in the WSBA Hockey package.
-    """
-
-    return SEASONS
-
 ## CLASSES ##
 class NHL_Database:
     """
@@ -1787,7 +1923,7 @@ class NHL_Database:
             Unique game IDs currently in the dataset.
         stats (dict[str, dict[str, pd.DataFrame]]): 
             Dictionary storing calculated stats by type and name.
-        plots (dict[int, matplotlib.figure.Figure]): 
+        plots (dict[int, matplotlib.figure.Figure] |  dict[str or int, dict[int, dict[str, matplotlib.figure.Figure]]]): 
             Dictionary storing plot outputs keyed by game or event.
 
     Args:
@@ -1826,8 +1962,9 @@ class NHL_Database:
 
         self.games = self.pbp['game_id'].drop_duplicates().to_list()
         self.stats = {}
+        self.game_plots = {}
         self.plots = {}
-        
+
     def add_games(self, game_ids:list[int]):
         """
         Add additional games to the existing play-by-play dataset.
@@ -1864,7 +2001,7 @@ class NHL_Database:
         df = self.pbp
         return df.loc[df['game_id'].isin(game_ids)]
 
-    def add_stats(self, name:str, type:Literal['skater','goalie','team'], season_types:list[int], game_strength: Union[Literal['all'], list[str]], split_game:bool = False, roster_path:str = DEFAULT_ROSTER, shot_impact:bool = False):
+    def add_stats(self, name:str, type:Literal['skater','goalie','team'], game_strength:Union[Literal['all'], str, list[str]] = 'all', season_types:int | list[int] = 2, split_game:bool = False, roster_path:str = DEFAULT_ROSTER, shot_impact:bool = False, simple_col:bool = False):
         """
         Calculate and store statistics for the given play-by-play data.
 
@@ -1875,27 +2012,66 @@ class NHL_Database:
                 Type of statistics to calculate. Must be one of 'skater', 'goalie', or 'team'.
             season (int): 
                 The NHL season formatted such as "20242025".
-            season_types (List[int], optional):
-                List of season_types to include in scraping process.  Default is all regular season and playoff games which are 2 and 3 respectively.
-            game_strength (str or list[str]):
+            game_strength (int or list[str]):
                 List of game strength states to include (e.g., ['5v5','5v4','4v5']).
+            season_types (int or List[int], optional):
+                List of season_types to include in scraping process.  Default is all regular season and playoff games which are 2 and 3 respectively.
             split_game (bool, optional):
                 If True, aggregates stats separately for each game; otherwise, stats are aggregated across all games.  Default is False.
             roster_path (str, optional):
                 File path to the roster data used for mapping players and teams.
             shot_impact (bool, optional):
                 If True, applies shot impact metrics to the stats DataFrame.  Default is False.
+            simple_col (bool, optional):
+                If True, retains the column names (abbreviated and non-standard) used when developing the package.  Default is False.
 
         Returns:
             pd.DataFrame: 
                 The calculated statistics.
         """
 
-        df =  wsba.nhl_calculate_stats(self.pbp, type, season_types, game_strength, split_game, roster_path, shot_impact)
+        df =  wsba.nhl_calculate_stats(self.pbp, type, game_strength, season_types, split_game, roster_path, shot_impact, simple_col)
         self.stats.update({type:{name:df}})
 
         return df
     
+    def get_players(self):
+        """
+        Return list of player IDs in the database.
+
+        Returns:
+            List: 
+                List of player IDs.
+        """
+
+        return pd.unique(self.pbp[[
+            'away_on_1_id','away_on_2_id','away_on_3_id','away_on_4_id','away_on_5_id','away_on_6_id','away_goalie_id',
+            'home_on_1_id','home_on_2_id','home_on_3_id','home_on_4_id','home_on_5_id','home_on_6_id','home_goalie_id'
+        ]].values.ravel()).tolist()
+    
+    def get_teams(self):
+        """
+        Return list of teams in the database.
+
+        Returns:
+            List: 
+                List of teams IDs.
+        """
+
+        return pd.unique(self.pbp[['away_team_abbr','home_team_abbr']].values.ravel()).tolist()
+
+    def get_seasons(self):
+        """
+        Return list of seasons in the database.
+
+        Returns:
+            List: 
+                List of seasons IDs.
+        """
+
+        return pd.unique(self.pbp['season']).tolist()
+
+
     def add_game_plots(self, events:list[str], strengths:Union[Literal['all'], list[str]], game_ids: Union[Literal['all'], list[int]] = 'all', marker_dict:dict = event_markers, team_colors:dict = {'away':'primary','home':'primary'}, legend:bool = False):
         """
         Generate visualizations of game events based on play-by-play data.
@@ -1909,6 +2085,8 @@ class NHL_Database:
                 List of game IDs to plot. If set to 'all', plots will be generated for all games in the DataFrame.
             marker_dict (dict[str, dict]):
                 Dictionary mapping event types to marker styles and/or colors used in plotting.
+            team_colors (dict[str, str]):
+                Dictionary mapping team venue (home or away) to its primary or secondary color.
             legend (bool):
                 Whether to include a legend on the plots.
 
@@ -1917,7 +2095,49 @@ class NHL_Database:
                 A dictionary mapping each game ID to its corresponding matplotlib event plot figure.
         """
         
-        self.plots.update(nhl_plot_games(self.pbp, events, strengths, game_ids, marker_dict, team_colors, legend))
+        self.game_plots.update(nhl_plot_games(self.pbp, events, strengths, game_ids, marker_dict, team_colors, legend))
+
+        return self.game_plots    
+    
+    def add_plots(self, plot:Literal['shot','heatmap'], player_dict:dict[str | int | Literal[8], list[int, str]], strengths:Union[Literal['all'], list[str]] = 'all', strengths_title:str | None = None, marker_dict:dict = event_markers, situation:Literal['indv','for','against'] = 'indv', title:bool = True, legend:bool = False):
+        """
+        Generate visualizations for players or teams based on play-by-play data.
+
+        Args:
+            plot (str):
+                Type of plot to generate (shot plot or heatmap)
+            player_dict (dict[str, list[str]]):
+                Dictionary of players to plot, where each key is a player name and the value is a list 
+                with season and team info (e.g., {'Patrice Bergeron': [20212022, 'BOS']} or {8470638: [20212022, 'BOS']}).  
+                Setting the key to the int value 8 will generate a heatmap for the full team.
+
+                If generating a shot plot, only skaters can be plotted.
+            strengths (str or list[str], optional):
+                List of game strength states to include (e.g., ['5v5','5v4','4v5']).
+            strengths_title (str or None, optional):
+                Specify a title to describe the strengths states included in the plot.  Default is None (strengths shown will be a full list of the included strengths in the plot).
+            marker_dict (dict[str, dict]):
+                Dictionary mapping event types to marker styles and/or colors used in plotting.  Only applies when plot is equal to 'shot'.
+            situation (Literal['indv', 'for', 'against'], optional):
+                Determines which shot events to include for the player:
+                - 'indv': only the player's own shots,
+                - 'for': shots taken by the player's team while they are on ice,
+                - 'against': shots taken by the opposing team while the player is on ice.
+
+                Only applies when plot is equal to 'shot'.
+            title (bool, optional):
+                Whether to include a plot title.
+            legend (bool):
+                Whether to include a legend on the plots.  Only applies when plot is equal to 'shot'.
+
+        Returns:
+            Dict[str or int, Dict[int, Dict[str, matplotlib.figure.Figure]]]:
+                A dictionary mapping each skater’s name or id to their corresponding season, team, then matplotlib heatmap figure.  The phrase 'Team' takes the place for team heatmaps.
+        """
+        
+        data = nhl_plot_skaters_shots(self.pbp,player_dict,strengths,strengths_title,marker_dict,situation,title,legend) if plot == 'shot' else nhl_plot_heatmap(self.pbp,player_dict,strengths,strengths_title,title)
+
+        self.plots.update(data)
 
         return self.plots    
     
@@ -1954,11 +2174,22 @@ class NHL_Database:
                 os.makedirs(stat_path, exist_ok=True)
                 df.to_csv(os.path.join(stat_path, f'{name}.csv'), index=False)
 
+        # Export game plots
+        plot_path = os.path.join(path, 'game_plots')
+        os.makedirs(plot_path, exist_ok=True)
+        for game_id, plot in self.game_plots.items():
+            plot.savefig(os.path.join(plot_path, f'{game_id}.png'), bbox_inches='tight')
+
         # Export plots
         plot_path = os.path.join(path, 'plots')
         os.makedirs(plot_path, exist_ok=True)
-        for game_id, plot in self.plots.items():
-            plot[0].savefig(os.path.join(plot_path, f'{game_id}.png'))
+        for eid, seasons in self.plots.items():
+            os.makedirs(f'{plot_path}/{eid}', exist_ok=True)
+            for season, teams in seasons.items():
+                os.makedirs(f'{plot_path}/{eid}/{season}', exist_ok=True)
+                for team, plot in teams.items():
+                    os.makedirs(f'{plot_path}/{eid}/{season}/{team}', exist_ok=True)
+                    plot.savefig(os.path.join(plot_path, f'{eid}/{season}/{team}/plot.png'), bbox_inches='tight')
 
         # Completion message
         end = time.perf_counter()
