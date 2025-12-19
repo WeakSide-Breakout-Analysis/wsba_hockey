@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import numpy as np
+import pymc as pm
 import xgboost as xgb
 import scipy.sparse as sp
 import wsba_hockey.wsba_main as wsba
@@ -21,8 +22,7 @@ continuous = ['event_distance',
             'angle_from_last',
             'seconds_since_last',
             'speed_from_last',
-            'speed_of_angle_from_last',
-            'strength_diff'
+            'speed_of_angle_from_last'
             ]
 boolean = ['wrist',
         'deflected',
@@ -35,24 +35,33 @@ boolean = ['wrist',
         'bat',
         'cradle',
         'between-legs',
-        'prior_shot-on-goal_same',
-        'prior_missed-shot_same',
-        'prior_blocked-shot_same',
-        'prior_giveaway_same',
-        'prior_takeaway_same',
-        'prior_hit_same',
-        'prior_shot-on-goal_opp',
-        'prior_missed-shot_opp',
-        'prior_blocked-shot_opp',
-        'prior_giveaway_opp',
-        'prior_takeaway_opp',
-        'prior_hit_opp',
+        'other-shot',
+        'prior_same',
+        'prior_shot-on-goal',
+        'prior_missed-shot',
+        'prior_blocked-shot',
+        'prior_giveaway',
+        'prior_takeaway',
+        'prior_hit',
         'prior_faceoff',
+        'strength_3v3',
+        'strength_3v4',
+        'strength_3v5',
+        'strength_4v3',
+        'strength_4v4',
+        'strength_4v5',
+        'strength_4v6',
+        'strength_5v3',
+        'strength_5v4',
+        'strength_5v5',
+        'strength_5v6',
+        'strength_6v4',
+        'strength_6v5',
         'empty_net',
         'offwing',
         'rush',
         'rebound'
-        ]
+    ]
 
 events = ['faceoff','hit','giveaway','takeaway','blocked-shot','missed-shot','shot-on-goal','goal']
 shot_types = ['wrist','deflected','tip-in','slap','backhand','snap','wrap-around','poke','bat','cradle','between-legs']
@@ -163,25 +172,31 @@ def prep_xG_data(data):
     #Boolean variables for shot types and prior events
     for shot in shot_types:
         data[shot] = (data['shot_type']==shot).astype(int)
-    for event in events[0:len(events)-1]:
-        data[f'prior_{event}_same'] = ((data['event_type_last']==event)&(data['event_team_last']==data['event_team_abbr'])).astype(int)
-        data[f'prior_{event}_opp'] = ((data['event_type_last']==event)&(data['event_team_last']!=data['event_team_abbr'])).astype(int)
+    for event in events[:-1]:
+        data[f'prior_{event}'] = (data['event_type_last']==event).astype(int)
     
-    data['prior_faceoff'] = (data['event_type_last']=='faceoff').astype(int)
+    data['other-shot'] = (~data['shot_type'].isin(shot_types)).astype(int)
+    data['prior_same'] = (data['event_team_last']==data['event_team_abbr']).astype(int)
     
+    #Strength boolean (used instead of 'strength_diff' in order to more usefully distinguish between strength states)
+    for strength in strengths:
+        data[f'strength_{strength}'] = (data['strength_state']==strength).astype(int)
+
     #Misc variables
     data['empty_net'] = np.where((data['event_type'].isin(fenwick_events))&(data['event_goalie_id'].isna()),1,0)
-    data['regular'] = (data['season_type']==2).astype(int)
     data['offwing'] = np.where(((data['y_adj']<0)&(data['event_player_1_hand']=='L'))|((data['y_adj']>=0)&(data['event_player_1_hand']=='R')),1,0)
     
     #Return: pbp data prepared to train and calculate the xG model
     return data
 
-def wsba_xG(pbp, states = False, hypertune = False, train = False, model_path = xg_model_path, train_runs = 20, cv_runs = 20):
+def wsba_xG(pbp, model_type = 'xgb', states = False, hypertune = False, train = False, test_path = test_path, cv_path = cv_path, model_path = xg_model_path, train_runs = 20, cv_runs = 20):
     #Train and calculate the WSBA Expected Goals model
-
+    
     #Add index for future merging
     pbp['event_index'] = pbp.index
+
+    #Initialize xG column for all events
+    pbp['xG'] = 0.0
 
     #Recalibrate coordinates
     pbp = scraping.adjust_coords(pbp)
@@ -196,257 +211,261 @@ def wsba_xG(pbp, states = False, hypertune = False, train = False, model_path = 
 
     #Fix strengths
     pbp['strength_state'] = np.where((pbp['season_type']==3)&(pbp['period']>4),
-                                     (np.where(pbp['event_team_abbr']==pbp['away_team_abbr'],
-                                               pbp['away_skaters'].astype(str)+"v"+pbp['home_skaters'].astype(str),
-                                               pbp['home_skaters'].astype(str)+"v"+pbp['away_skaters'].astype(str))),
-                                     pbp['strength_state'])
+                                    (np.where(pbp['event_team_abbr']==pbp['away_team_abbr'],
+                                            pbp['away_skaters'].astype(str)+"v"+pbp['home_skaters'].astype(str),
+                                            pbp['home_skaters'].astype(str)+"v"+pbp['away_skaters'].astype(str))),
+                                    pbp['strength_state'])
 
     #Prep data and filter shot events
     data = prep_xG_data(pbp.loc[(pbp['event_type'].isin(events))&(pbp['strength_state'].isin(strengths))&(pbp['x'].notna())&(pbp['y'].notna())])
     data = data.loc[data['event_type'].isin(fenwick_events)]
+    
+    #Choose whether to predict goals with Bayesian (PyMC) or Frequentist (XGBoost) modelling
+    if model_type == 'pymc':
+        #PyMC
+        print('### PYMC MODEL ###')
 
-    #Convert to sparse
-    data_sparse = sp.csr_matrix(data[[target]+continuous+boolean])
-    is_goal_vect = data_sparse[:,0].A
-    predictors = data_sparse[:,1:]
+    else:
+        #XGBoost
+        
+        dfs = []
+        for empty_net in [False, True]:
+            #Two sub-models: Those on a goaltender and those on an empty net
+            training = data.loc[data['empty_net']==1 if empty_net else data['empty_net']==0]
 
-    #XGB DataModel
-    xgb_matrix = xgb.DMatrix(data=predictors,label=is_goal_vect,feature_names=(continuous+boolean))
+            #Calibrate paths
+            if empty_net:
+                test_path = test_path.replace('runs','runs_en')
+                cv_path = cv_path.replace('runs','runs_en')
+                model_path = model_path.replace('wsba_xg.json', 'wsba_xg_en.json')
+            else:
+                test_path = test_path
+                cv_path = cv_path
+                model_path = model_path
 
-    if train:
-        if hypertune:
-            # Number of runs
-            run_num = train_runs
+            #Convert to sparse
+            data_sparse = sp.csr_matrix(training[[target]+continuous+boolean])
+            is_goal_vect = data_sparse[:,0].A
+            predictors = data_sparse[:,1:]
 
-            # DataFrames to store results
-            best_df = pd.DataFrame(columns=["max_depth", "eta", "gamma", "subsample", "colsample_bytree", "min_child_weight", "max_delta_step"])
-            best_ll = pd.DataFrame(columns=["ll", "ll_rounds", "auc", "auc_rounds", "seed"])
+            #XGB DataModel
+            xgb_matrix = xgb.DMatrix(data=predictors,label=is_goal_vect,feature_names=(continuous+boolean))
 
-            # Loop
-            for i in range(run_num):
-                print(f"### LOOP: {i+1} ###")
-                
-                param = {
-                    "objective": "binary:logistic",
-                    "eval_metric": ["logloss", "auc"],
-                    "max_depth": 6,
-                    "eta": np.random.uniform(0.06, 0.11),
-                    "gamma": np.random.uniform(0.06, 0.12),
-                    "subsample": np.random.uniform(0.76, 0.84),
-                    "colsample_bytree": np.random.uniform(0.76, 0.8),
-                    "min_child_weight": np.random.randint(5, 23),
-                    "max_delta_step": np.random.randint(4, 9)
-                }
-                
-                # Cross-validation
-                seed = np.random.randint(0, 10000)
+            if train:
+                print('### XGBOOST MODEL TRAINING ###')
+                if hypertune:
+                    # Number of runs
+                    run_num = train_runs
+
+                    # DataFrames to store results
+                    best_df = pd.DataFrame(columns=["max_depth", "eta", "gamma", "subsample", "colsample_bytree", "min_child_weight", "max_delta_step"])
+                    best_ll = pd.DataFrame(columns=["ll", "ll_rounds", "auc", "auc_rounds", "seed"])
+
+                    print('### HYPERTUNING ###')
+                    # Loop
+                    for i in range(run_num):
+                        print(f"## LOOP: {i+1} ##")
+                        
+                        param = {
+                            "objective": "binary:logistic",
+                            "eval_metric": ["logloss", "auc"],
+                            "max_depth": 6,
+                            "eta": np.random.uniform(0.06, 0.11),
+                            "gamma": np.random.uniform(0.06, 0.12),
+                            "subsample": np.random.uniform(0.76, 0.84),
+                            "colsample_bytree": np.random.uniform(0.76, 0.8),
+                            "min_child_weight": np.random.randint(5, 23),
+                            "max_delta_step": np.random.randint(4, 9)
+                        }
+                        
+                        # Cross-validation
+                        seed = np.random.randint(0, 10000)
+                        np.random.seed(seed)
+                        
+                        cv_results = xgb.cv(
+                            params=param,
+                            dtrain=xgb_matrix,
+                            num_boost_round=1000,
+                            nfold=5,
+                            early_stopping_rounds=25,
+                            metrics=["logloss", "auc"],
+                            seed=seed
+                        )
+                        
+                        # Record results
+                        best_df.loc[i] = param
+                        best_ll.loc[i] = [
+                            cv_results["test-logloss-mean"].min(),
+                            cv_results["test-logloss-mean"].idxmin(),
+                            cv_results["test-auc-mean"].max(),
+                            cv_results["test-auc-mean"].idxmax(),
+                            seed
+                        ]
+
+                    # Combine results
+                    best_all = pd.concat([best_df, best_ll], axis=1).dropna()
+
+                    # Arrange to get best run
+                    best_all = best_all.sort_values(by="auc", ascending=False)
+
+                    best_all.to_csv(test_path,index=False)
+
+                    # Final parameters
+                    param_7_EV = {
+                        "objective": "binary:logistic",
+                        "eval_metric": ["logloss", "auc"],
+                        "gamma": best_all['gamma'].iloc[0],
+                        "subsample": best_all['subsample'].iloc[0],
+                        "max_depth": best_all['max_depth'].iloc[0],
+                        "colsample_bytree": best_all['colsample_bytree'].iloc[0],
+                        "min_child_weight": best_all['min_child_weight'].iloc[0],
+                        "max_delta_step": best_all['max_delta_step'].iloc[0],
+                    }
+
+                    # CV rounds Loop
+                    run_num = cv_runs
+                    cv_test = pd.DataFrame(columns=["AUC_rounds", "AUC", "LL_rounds", "LL", "seed"])
+
+                    print('### CROSS-VALIDATION ###')
+                    for i in range(run_num):
+                        print(f"## LOOP: {i+1} ##")
+                        
+                        seed = np.random.randint(0, 10000)
+                        np.random.seed(seed)
+                        
+                        cv_rounds = xgb.cv(
+                            params=param_7_EV,
+                            dtrain=xgb_matrix,
+                            num_boost_round=1000,
+                            nfold=5,
+                            early_stopping_rounds=25,
+                            metrics=["logloss", "auc"],
+                            seed=seed
+                        )
+                        
+                        # Record results
+                        cv_test.loc[i] = [
+                            cv_rounds["test-auc-mean"].idxmax(),
+                            cv_rounds["test-auc-mean"].max(),
+                            cv_rounds["test-logloss-mean"].idxmin(),
+                            cv_rounds["test-logloss-mean"].min(),
+                            seed
+                        ]
+
+                    # Clean results and sort to find the number of rounds to use and seed
+                    cv_final = cv_test.sort_values(by="AUC", ascending=False)
+                    cv_final.to_csv(cv_path,index=False)
+                else:
+                    # Load previous parameters
+                    best_all = pd.read_csv(test_path)
+                    cv_final = pd.read_csv(cv_path)
+
+                    print('Loaded hyperparameters...')
+                    # Final parameters
+                    param_7_EV = {
+                        "objective": "binary:logistic",
+                        "eval_metric": ["logloss", "auc"],
+                        "gamma": best_all['gamma'].iloc[0],
+                        "subsample": best_all['subsample'].iloc[0],
+                        "max_depth": best_all['max_depth'].iloc[0],
+                        "colsample_bytree": best_all['colsample_bytree'].iloc[0],
+                        "min_child_weight": best_all['min_child_weight'].iloc[0],
+                        "max_delta_step": best_all['max_delta_step'].iloc[0],
+                    }
+
+                print('Training model...')
+                seed = int(cv_final['seed'].iloc[0])
                 np.random.seed(seed)
-                
-                cv_results = xgb.cv(
-                    params=param,
-                    dtrain=xgb_matrix,
-                    num_boost_round=1000,
-                    nfold=5,
-                    early_stopping_rounds=25,
-                    metrics=["logloss", "auc"],
-                    seed=seed
-                )
-                
-                # Record results
-                best_df.loc[i] = param
-                best_ll.loc[i] = [
-                    cv_results["test-logloss-mean"].min(),
-                    cv_results["test-logloss-mean"].idxmin(),
-                    cv_results["test-auc-mean"].max(),
-                    cv_results["test-auc-mean"].idxmax(),
-                    seed
-                ]
-
-            # Combine results
-            best_all = pd.concat([best_df, best_ll], axis=1).dropna()
-
-            # Arrange to get best run
-            best_all = best_all.sort_values(by="auc", ascending=False)
-
-            best_all.to_csv(test_path,index=False)
-
-            # Final parameters
-            param_7_EV = {
-                "objective": "binary:logistic",
-                "eval_metric": ["logloss", "auc"],
-                "gamma": best_all['gamma'].iloc[0],
-                "subsample": best_all['subsample'].iloc[0],
-                "max_depth": best_all['max_depth'].iloc[0],
-                "colsample_bytree": best_all['colsample_bytree'].iloc[0],
-                "min_child_weight": best_all['min_child_weight'].iloc[0],
-                "max_delta_step": best_all['max_delta_step'].iloc[0],
-            }
-
-            # CV rounds Loop
-            run_num = cv_runs
-            cv_test = pd.DataFrame(columns=["AUC_rounds", "AUC", "LL_rounds", "LL", "seed"])
-
-            for i in range(run_num):
-                print(f"### LOOP: {i+1} ###")
-                
-                seed = np.random.randint(0, 10000)
-                np.random.seed(seed)
-                
-                cv_rounds = xgb.cv(
+                model = xgb.train(
                     params=param_7_EV,
                     dtrain=xgb_matrix,
-                    num_boost_round=1000,
-                    nfold=5,
-                    early_stopping_rounds=25,
-                    metrics=["logloss", "auc"],
-                    seed=seed
+                    num_boost_round=int(cv_final['AUC_rounds'].iloc[0]),
+                    verbose_eval=2,
                 )
                 
-                # Record results
-                cv_test.loc[i] = [
-                    cv_rounds["test-auc-mean"].idxmax(),
-                    cv_rounds["test-auc-mean"].max(),
-                    cv_rounds["test-logloss-mean"].idxmin(),
-                    cv_rounds["test-logloss-mean"].min(),
-                    seed
-                ]
+                #Save model
+                model.save_model(model_path)
+                
+            else:
+                #Load model
+                model = xgb.Booster()
+                model.load_model(model_path)
 
-            # Clean results and sort to find the number of rounds to use and seed
-            cv_final = cv_test.sort_values(by="AUC", ascending=False)
-            cv_final.to_csv(cv_path,index=False)
-        else:
-            # Load previous parameters
-            best_all = pd.read_csv(test_path)
-            cv_final = pd.read_csv(cv_path)
+                if len(training) > 0:
+                    #Predict xG for fenwick shots
+                    training['xG'] = model.predict(xgb_matrix)
 
-            print('Loaded hyperparameters...')
-            # Final parameters
-            param_7_EV = {
-                "objective": "binary:logistic",
-                "eval_metric": ["logloss", "auc"],
-                "gamma": best_all['gamma'].iloc[0],
-                "subsample": best_all['subsample'].iloc[0],
-                "max_depth": best_all['max_depth'].iloc[0],
-                "colsample_bytree": best_all['colsample_bytree'].iloc[0],
-                "min_child_weight": best_all['min_child_weight'].iloc[0],
-                "max_delta_step": best_all['max_delta_step'].iloc[0],
-            }
+                dfs.append(training)
 
-        print('Training model...')
-        seed = int(cv_final['seed'].iloc[0])
-        np.random.seed(seed)
-        model = xgb.train(
-            params=param_7_EV,
-            dtrain=xgb_matrix,
-            num_boost_round=int(cv_final['AUC_rounds'].iloc[0]),
-            verbose_eval=2,
-        )
-        
-        #Save model
-        model.save_model(model_path)
-        
-    else:
-        #Load model
-        model = xgb.Booster()
-        model.load_model(model_path)
-
-        #Initialize xG column for all events
-        pbp['xG'] = 0.0
-
-        if len(data) > 0:
-            #Predict xG for fenwick shots
-            data['xG'] = model.predict(xgb_matrix)
+        if not train:
+            xg_data = pd.concat(dfs)
 
             #Add xG columns
-            for col in data.columns:
+            for col in xg_data.columns:
                 if col not in pbp.columns:
                     pbp[col] = np.nan
 
-            pbp.loc[data.index, data.columns] = data
+            pbp.loc[xg_data.index, xg_data.columns] = xg_data
 
-        #Return: PBP dataframe with xG columns
-        pbp_xg = pbp.sort_values(by=['event_index','season','game_id','period','seconds_elapsed','event_num'])
+            #Return: PBP dataframe with xG columns
+            pbp_xg = pbp.sort_values(by=['event_index','season','game_id','period','seconds_elapsed','event_num'])
 
-        return pbp_xg
+            return pbp_xg
 
 def feature_importance(model_path = xg_model_path):
     print('Feature importance for WSBA xG Model...')
-    model = xgb.Booster()
-    model.load_model(model_path)
+    
+    for en in [False, True]:
+        model = xgb.Booster()
+        model.load_model(model_path if not en else model_path.replace('.json', '_en.json'))
 
-    fig, ax = plt.subplots(figsize=(10, 7))
-    xgb.plot_importance(model,
-        importance_type='gain',
-        max_num_features=30,
-        height=0.5,
-        grid=False,
-        show_values=False,
-        xlabel='Gain',
-        title='WSBA xG Feature Importance',
-        ax=ax
-        )
-    plt.savefig(os.path.join(metric_path,'feature_importance.png'),bbox_inches='tight')
+        fi = pd.DataFrame(model.get_score(importance_type='gain').items(), columns=['feature','gain']).sort_values("gain", ascending=False)
+        fi['gain'] /= fi['gain'].sum()
 
-def roc_auc_curve(pbp,model_path = xg_model_path):
+        fig, ax = plt.subplots(figsize=(10, 7))
+        ax.barh(fi['feature'], fi['gain'])
+        ax.invert_yaxis()
+
+        ax.set_xlabel('Gain')
+        ax.set_title(f'WSBA xG {'(Empty Net) ' if en else ''}Feature Importance')
+
+        plt.savefig(os.path.join(metric_path,f'feature_importance{'_en' if en else ''}.png'),bbox_inches='tight')
+
+def roc_auc_curve(pbp):
     print('ROC-AUC Curve for WSBA xG Model...')
 
     if 'xG' in pbp.columns:
-        model = xgb.Booster()
-        model.load_model(model_path)
-
-        data = pbp.loc[pbp['event_type'].isin(fenwick_events)]
-        data = data[np.isfinite(data[target])]
-        
-        data_sparse = sp.csr_matrix(data[[target]+continuous+boolean])
-
-        is_goal_vect = data_sparse[:, 0].A
-        predictors = data_sparse[:, 1:]
-        
-        xgb_matrix = xgb.DMatrix(data=predictors,label=is_goal_vect,feature_names=(continuous+boolean))
-
-        pred = model.predict(xgb_matrix)
-        fpr, tpr, _ = roc_curve(is_goal_vect, pred)
+        data = pbp.loc[(pbp['event_type'].isin(fenwick_events))&(pbp['strength_state'].isin(strengths))&(pbp['x'].notna())&(pbp['y'].notna())]
+          
+        fpr, tpr, _ = roc_curve(data['is_goal'], data['xG'])
         roc_auc = auc(fpr,tpr)
         
         plt.figure()
         plt.plot(fpr,tpr,label=f"ROC (AUC = {roc_auc:.4f})")
         plt.plot([0, 1], [0, 1], linestyle="--")
-        plt.title("WSBA xG ROC Curve")
+        plt.title(f"WSBA xG ROC Curve")
         plt.xlabel("False Positive Rate")
         plt.ylabel("True Positive Rate")
         plt.legend(loc="lower right")
-        plt.savefig(os.path.join(metric_path,'roc_auc_curve.png'))
+        plt.savefig(os.path.join(metric_path, f'roc_auc_curve.png'), bbox_inches='tight')
     else:
         print('No xG found for provided play-by-play data.  Apply xG model to the play-by-play data first.')
 
-def reliability(pbp,model_path = xg_model_path):
+def reliability(pbp):
     print('Reliability for WSBA xG Model...')
 
     if 'xG' in pbp.columns: 
-        model = xgb.Booster()
-        model.load_model(model_path)
-
-        data = pbp.loc[pbp['event_type'].isin(fenwick_events)]
-        data = data[np.isfinite(data[target])]
-        
-        data_sparse = sp.csr_matrix(data[[target]+continuous+boolean])
-
-        is_goal_vect = data_sparse[:, 0].A
-        predictors = data_sparse[:, 1:]
-        
-        xgb_matrix = xgb.DMatrix(data=predictors,label=is_goal_vect,feature_names=(continuous+boolean))
-
-        pred = model.predict(xgb_matrix)
-        fop, mpv = calibration_curve(is_goal_vect, pred, strategy='uniform')
+        data = pbp.loc[(pbp['event_type'].isin(fenwick_events))&(pbp['strength_state'].isin(strengths))&(pbp['x'].notna())&(pbp['y'].notna())]
+        fop, mpv = calibration_curve(data['is_goal'], data['xG'], strategy='uniform')
 
         plt.figure()
         plt.plot(mpv, fop, "s-", label="Model")
         plt.plot([0, 1], [0, 1], linestyle="--", label="Perfect calibration")
-        plt.title("WSBA xG Reliability Diagram")
+        plt.title(f"WSBA xG Reliability")
         plt.xlabel("Predicted Probability (mean)")
         plt.ylabel("Fraction of positives")
         plt.legend(loc="best")
-        plt.savefig(os.path.join(metric_path,'reliability.png'))
+        plt.savefig(os.path.join(metric_path, f'reliability.png'), bbox_inches='tight')
 
     else:
         print('No xG found for provided play-by-play data.  Apply xG model to the play-by-play data first.')

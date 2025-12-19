@@ -411,7 +411,6 @@ def calc_goalie(pbp,game_strength,second_group):
     return onice_stats
 
 def calc_game_score_features(pbp,type):
-    print('Calculating game score...')
     clean_group = ['ID','Team','Season','Game']
     second_group = ['season','game_id']
 

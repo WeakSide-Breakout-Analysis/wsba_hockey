@@ -1,7 +1,6 @@
 import re
 import warnings
 import os
-import asyncio
 import numpy as np
 import pandas as pd
 import requests as rs
@@ -54,7 +53,7 @@ def adjust_coords(pbp):
 
     #Recalibrate coordinates
     #Determine the direction teams are shooting in a given period
-    pbp['med_x'] = (pbp.where(pbp['event_type'].isin(['blocked-shot','missed-shot','shot-on-goal','goal'])).groupby(['event_team_venue','period','game_id'])['x'].transform('median'))
+    pbp['med_x'] = (pbp.where(pbp['event_type'].isin(['missed-shot','shot-on-goal','goal'])).groupby(['event_team_venue','period','game_id'])['x'].transform('median'))
 
     pbp = pbp.reset_index(drop=True)
 
@@ -182,7 +181,7 @@ def get_game_info(game_id):
             'coaches':get_game_coaches(game_id),
             'json_shifts':json_shifts}
 
-async def parse_json(info):
+def parse_json(info):
     #Given game info, return JSON document
 
     #Retreive data
@@ -346,7 +345,7 @@ def clean_html_pbp(info):
 
     return cleaned_html
 
-async def parse_html(info):
+def parse_html(info):
     #Given game info, return HTML event data
 
     #Retreive game information and html events
@@ -567,7 +566,7 @@ def espn_game_id(date,away,home):
     #Return: ESPN game id
     return game_id
 
-async def parse_espn(date,away,home):
+def parse_espn(date,away,home):
     #Given a date formatted as YYYY-MM-DD and teams, return game events from ESPN
     game_id = espn_game_id(date,away,home)
     
@@ -654,25 +653,27 @@ def assign_target(data):
     #Revert sort and return dataframe
     return data.reset_index()
 
-async def no_data(): 
+def no_data(): 
     #Allows the passage of espn_pbp data if it is not needed
     pass
 
-async def combine_pbp(info,sources):
+def combine_pbp(info,sources):
     #Given game info, return complete play-by-play data for provided game
 
     #Create tasks
-    html_task = asyncio.create_task(parse_html(info))
+    html_task = parse_html(info)
     if info['season'] in [20052006, 20062007, 20072008, 20082009, 20092010]:
-        espn_task = asyncio.create_task(parse_espn(str(info['game_date']),info['away_team_abbr'],info['home_team_abbr']))
+        espn_task = parse_espn(str(info['game_date']),info['away_team_abbr'],info['home_team_abbr'])
         json_type = 'espn'
     else:
-        espn_task = asyncio.create_task(no_data())
+        espn_task = no_data()
         json_type = 'nhl'
 
-    json_task = asyncio.create_task(parse_json(info))
+    json_task = parse_json(info)
 
-    html_pbp, json_pbp, espn_pbp = await asyncio.gather(html_task, json_task, espn_task)
+    html_pbp = html_task
+    json_pbp = json_task
+    espn_pbp = espn_task
     
     #Route data combining - json if season is after 2009-2010:
     if json_type == 'espn':
@@ -1059,15 +1060,16 @@ def combine_shifts(info,sources):
     #Return: full shifts data converted to play-by-play format
     return full_shifts
 
-async def combine_data(info,sources):
+def combine_data(info,sources):
     #Given game info, return complete play-by-play data
 
-    pbp = await combine_pbp(info,sources)
+    pbp = combine_pbp(info,sources)
     shifts = combine_shifts(info,sources)
 
     #Combine data    
     df = pd.concat([pbp,shifts])
 
+    df['game_id'] = df['game_id'].astype(int)
     df['event_num'] = df['event_num'].replace(np.nan,0)
 
     #Create priority columns designed to order events that occur at the same time in a game

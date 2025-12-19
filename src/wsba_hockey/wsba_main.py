@@ -1,6 +1,5 @@
 import random
 import os
-import asyncio
 import time
 import requests as rs
 import pandas as pd
@@ -197,7 +196,7 @@ def nhl_scrape_game(game_ids:int | list[int], split_shifts:bool = False, remove:
         try:
             #Retrieve data
             info = get_game_info(game_id)
-            data = asyncio.run(combine_data(info, sources))
+            data = combine_data(info, sources)
                 
             #Append data to list
             pbps.append(data)
@@ -1198,10 +1197,10 @@ def shooting_impacts(agg, type):
                 pos[f'{group[0]}-FNI-T'] = (pos[f'{group[0]}-FNI']/60)*pos['TOI']
 
             #Calculate On-Ice Involvement Percentiles
-            pos['Fi/F'] = pos['FC%'].rank(pct=True)
-            pos['xGi/F'] = pos['xGC%'].rank(pct=True)
-            pos['Pi/F'] = pos['GI%'].rank(pct=True)
-            pos['Gi/F'] = pos['GC%'].rank(pct=True)
+            pos['FC%-P'] = pos['FC%'].rank(pct=True)
+            pos['xGC%-P'] = pos['xGC%'].rank(pct=True)
+            pos['GI%-P'] = pos['GI%'].rank(pct=True)
+            pos['GC%-P'] = pos['GC%'].rank(pct=True)
             pos['RushFi/60'] = (pos['Rush']/pos['TOI'])*60
             pos['RushxGi/60'] = (pos['Rush xG']/pos['TOI'])*60
             pos['RushesxGi'] = pos['RushxGi/60'].rank(pct=True)
@@ -1317,8 +1316,13 @@ def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team',
         pd.DataFrame:
             A DataFrame containing the aggregated statistics according to the selected parameters.
     """
-    
-    print(f"Calculating statistics for all games in the provided play-by-play data at {game_strength} for {type}s...\nSeasons included: {pbp['season'].drop_duplicates().to_list()}...")
+        
+
+    print(f'''Calculating statistics for {'regular season' if season_types == 2 else
+                                            'playoff' if season_types == 3 else
+                                            'regular season and playoff' if season_types == [2,3] else
+                                            'unknown selection of'} games in the provided play-by-play data at {game_strength} for {type}s...\nSeasons included: {pbp['season'].drop_duplicates().to_list()}...'''
+    )
     start = time.perf_counter()
 
     #Check if xG column exists and apply model if it does not
@@ -1333,14 +1337,12 @@ def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team',
     if isinstance(game_strength, str) and game_strength != 'all':
         game_strength = [game_strength]
 
-    #Apply season_type filter
-    pbp = pbp.loc[(pbp['season_type'].isin(season_types))]
+    #Apply season_type filter and remove shootouts
+    pbp = pbp.loc[(pbp['season_type'].isin(season_types))&(pbp['period_type']!='SO')]
 
     #Convert all columns with player ids to float in order to avoid merging errors
-    for col in get_col():
-        if "_id" in col:
-            try: pbp[col] = pbp[col].astype(float)
-            except KeyError: continue
+    id_cols = [col for col in pbp.columns if '_id' in col]
+    pbp[id_cols] = pbp[id_cols].apply(pd.to_numeric, errors='ignore')
 
     #Split by game if specified
     if split_game:
@@ -1448,20 +1450,12 @@ def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team',
         #Remove goalies that appear with skaters
         complete = complete.loc[(complete['Position']!='G') | ((complete['Position']=='G')&(complete['P'].isna()))]
 
-        #Convert season name
-        complete['Season'] = complete['Season'].replace(SEASON_NAMES)
-
-        end = time.perf_counter()
-        length = end-start
-        print(f'...finished in {(length if length <60 else length/60):.2f} {'seconds' if length <60 else 'minutes'}.')
-
-        return complete if simple_col else complete.rename(columns=COL_MAP['stats'], errors='ignore')
-
     if type == 'goalie':
         complete = calc_goalie(pbp,game_strength,second_group)
 
         #Set TOI to minute
         complete['TOI'] = complete['TOI']/60
+        complete = complete.loc[complete['TOI']>0]
 
         #Add per 60 stats
         for stat in ['FF','FA','xGF','xGA','GF','GA','SF','SA','CF','CA','GSAx']:
@@ -1528,12 +1522,6 @@ def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team',
         if shot_impact:
             complete = shooting_impacts(complete,'goalie')
     
-        end = time.perf_counter()
-        length = end-start
-        print(f'...finished in {(length if length <60 else length/60):.2f} {'seconds' if length <60 else 'minutes'}.')
-
-        return complete if simple_col else complete.rename(columns=COL_MAP['stats'], errors='ignore')
-        
     elif type == 'team':
         complete = calc_team(pbp,game_strength,second_group)
 
@@ -1542,6 +1530,7 @@ def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team',
 
         #Set TOI to minute
         complete['TOI'] = complete['TOI']/60
+        complete = complete.loc[complete['TOI']>0]
 
         #Add per 60 stats
         for stat in PER_SIXTY[11:len(PER_SIXTY)]:
@@ -1574,12 +1563,7 @@ def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team',
         #Apply shot impacts if necessary
         if shot_impact:
             complete = shooting_impacts(complete,'team')
-        
-        end = time.perf_counter()
-        length = end-start
-        print(f'...finished in {(length if length <60 else length/60):.2f} {'seconds' if length <60 else 'minutes'}.')
 
-        return complete if simple_col else complete.rename(columns=COL_MAP['stats'], errors='ignore')
     else:
         indv_stats = calc_indv(pbp,game_strength,second_group)
         onice_stats = calc_onice(pbp,game_strength,second_group)
@@ -1601,8 +1585,9 @@ def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team',
         complete['FF%'] = complete['FF']/(complete['FF']+complete['FA'])
         complete['CF%'] = complete['CF']/(complete['CF']+complete['CA'])
 
-        #Set TOI to minute
+        #Set TOI to minute and remove players with no TOI
         complete['TOI'] = complete['TOI']/60
+        complete = complete.loc[complete['TOI']>0]
 
         #Add per 60 stats
         for stat in PER_SIXTY:
@@ -1678,15 +1663,19 @@ def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team',
         #Apply shot impacts if necessary (Note: this will remove skaters with fewer than 150 minutes of TOI due to the shot impact TOI rule)
         if shot_impact:
             complete = shooting_impacts(complete,'skater')
-            
-        #Convert season name
-        complete['Season'] = complete['Season'].replace(SEASON_NAMES)
 
-        end = time.perf_counter()
-        length = end-start
-        print(f'...finished in {(length if length <60 else length/60):.2f} {'seconds' if length <60 else 'minutes'}.')
+    #Add strength and season type columns to the end of the df
+    complete['Strength'] = game_strength if isinstance(game_strength, str) else ', '.join(game_strength)
+    complete['Span'] = season_types if isinstance(season_types, int) else ', '.join([str(s) for s in season_types])
+    
+    #Convert season name
+    complete['Season'] = complete['Season'].replace(SEASON_NAMES)
 
-        return complete if simple_col else complete.rename(columns=COL_MAP['stats'], errors='ignore')
+    end = time.perf_counter()
+    length = end-start
+    print(f'...finished in {(length if length <60 else length/60):.2f} {'seconds' if length <60 else 'minutes'}.')
+
+    return complete if simple_col else complete.rename(columns=COL_MAP['stats'], errors='ignore')
 
 def nhl_plot_skaters_shots(pbp:pd.DataFrame, skater_dict:dict[str | int, list[int, str]], strengths:Union[Literal['all'], list[str]] = 'all', strengths_title:str | None = None, marker_dict:dict = event_markers, situation:Literal['indv','for','against'] = ['indv'], title:bool = True, legend:bool = False):
     """
@@ -1847,8 +1836,8 @@ def nhl_plot_game_score(pbp:pd.DataFrame, game_ids: Union[Literal['all'], list[i
     game_plots = {}
     #Iterate through games, adding plot to dict
     for game in game_ids:
-        pbp = pbp.loc[pbp['game_id']==game]
-        stats = nhl_calculate_stats(pbp,'game_score').sort_values('game_score',ascending=False)
+        df = pbp.loc[pbp['game_id']==game]
+        stats = nhl_calculate_stats(df,'game_score').sort_values('game_score',ascending=False)
 
         game_plots.update({game:plot_game_score(stats)})
 
@@ -2097,7 +2086,7 @@ class NHL_Database:
         
         self.game_plots.update(nhl_plot_games(self.pbp, events, strengths, game_ids, marker_dict, team_colors, legend))
 
-        return self.game_plots    
+        return self.game_plots
     
     def add_plots(self, plot:Literal['shot','heatmap'], player_dict:dict[str | int | Literal[8], list[int, str]], strengths:Union[Literal['all'], list[str]] = 'all', strengths_title:str | None = None, marker_dict:dict = event_markers, situation:Literal['indv','for','against'] = 'indv', title:bool = True, legend:bool = False):
         """

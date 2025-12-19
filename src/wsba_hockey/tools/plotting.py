@@ -58,6 +58,7 @@ legend_elements = [
 dir = os.path.dirname(os.path.realpath(__file__))
 info_path = os.path.join(dir,'teaminfo\\nhl_teaminfo.csv')
 img_path = os.path.join(dir,'utils\\wsba.png')
+schedule_path = os.path.join(dir,'schedule\\schedule.csv')
 
 def wsba_rink(display_range='offense',rotation = 0):
     rink = NHLRink(center_logo={
@@ -306,16 +307,11 @@ def plot_game_score(df):
     plots = {}
 
     teams = df['team_abbr'].drop_duplicates()
+    schedule = pd.read_csv(schedule_path)
+    game_date = schedule.loc[schedule['game_id']==df['game_id'].astype(int).iloc[0], 'game_date'].iloc[0]
 
     for team in teams:
         plot_df = df.loc[df['team_abbr'] == team].copy()
-        
-        try:
-            game_date = wsba.nhl_scrape_game_info(
-                df['game_id'].astype(int).iloc[0]
-            )['game_date'].iloc[0]
-        except:
-            game_date = 'Unknown Date'
             
         opp = [t for t in teams if t != team]
 
