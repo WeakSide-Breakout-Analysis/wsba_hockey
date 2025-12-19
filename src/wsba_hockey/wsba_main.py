@@ -1450,7 +1450,7 @@ def nhl_calculate_stats(pbp:pd.DataFrame, type:Literal['skater','goalie','team',
         #Remove goalies that appear with skaters
         complete = complete.loc[(complete['Position']!='G') | ((complete['Position']=='G')&(complete['P'].isna()))]
 
-    if type == 'goalie':
+    elif type == 'goalie':
         complete = calc_goalie(pbp,game_strength,second_group)
 
         #Set TOI to minute
