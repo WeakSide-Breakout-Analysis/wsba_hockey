@@ -15,6 +15,8 @@ strengths_list = {
     'SH':['4v5','3v5','3v4']
 }
 
+per_sixty = ['Fi','xGi','Gi','A1','A2','P1','P','Si','OZF','NZF','DZF','FF','FA','xGF','xGA','GF','GA','SF','SA','CF','CA','HF','HA','Give','Take','Penl','Penl2','Penl5','Draw','PIM','Block','GSAx']
+
 def calc_indv(pbp,game_strength,second_group):
     # Filter by game strength if not "all"
     if game_strength != "all":
@@ -455,3 +457,271 @@ def calc_game_score_features(pbp,type):
         score = score.drop(columns=['xGF','xGA','Team GF','Team GA']).replace([np.inf,-np.inf],np.nan).fillna(0)
 
     return score
+
+def shooting_impacts(agg, type):
+    #Given stats table generated from the nhl_calculate_stats function, return table with shot impacts
+    #Only 5v5 is supported as of now
+
+    #param 'agg' - stats table
+    #param 'type' - type of stats to calculate ('skater', 'goalie', or 'team')
+
+    #COMPOSITE IMPACT EVALUATIONS:
+
+    #SR = Shot Rate
+    #SQ = Shot Quality
+    #FN = Finishing
+
+    #I = Impact
+
+    #INDV = Individual
+    #OOFF = On-Ice Offense
+    #ODEF = On-Ice Defense
+
+    #Grouping-Metric Code: XXXX-YYI
+
+    #Goal Composition Formula
+    #The aggregation of goals is composed of three factors: shot rate, shot quality, and finishing
+    #These are represented by their own metrics in which:
+    #Goals = (Fenwick*(League Average Fenwick SH%)) + ((xGoals/Fenwick - League Average Fenwick SH%)*Fenwick) + (Goals - xGoals)
+
+    def goal_comp(fenwick, xg_fen, xg, g, fsh):
+        rate = fenwick * fsh
+        qual = (xg_fen - fsh) * fenwick
+        fini = g - xg
+        return rate + qual + fini
+
+    def calc_group(pos, group):
+        #Have to set these columns for compatibility with df.apply
+        suf = group[1]
+
+        pos['fsh'] = pos[f'Fsh{suf}%']
+        pos['fenwick'] = pos[f'F{suf}/60']
+        pos['xg'] = pos[f'xG{suf}/60']
+        pos['g'] = pos[f'G{suf}/60']
+        pos['xg_fen'] = pos[f'xG{suf}/F{suf}']
+        pos['finishing'] = pos[f'G{suf}/xG{suf}']
+
+        #Find average for position in frame
+        avg_fen = pos['fenwick'].mean()
+        avg_xg = pos['xg'].mean()
+        avg_g = pos['g'].mean()
+        avg_fsh = avg_g / avg_fen
+        avg_xg_fen = avg_xg / avg_fen
+
+        #Calculate composite percentiles
+        pos[f'{group[0]}-SR'] = pos['fenwick'].rank(pct=True)
+        pos[f'{group[0]}-SQ'] = pos['xg_fen'].rank(pct=True)
+        pos[f'{group[0]}-FN'] = pos['finishing'].rank(pct=True)
+
+        #Calculate shot rate, shot quality, and finishing impacts
+        pos[f'{group[0]}-SRI'] = pos['g'] - pos.apply(
+            lambda x: goal_comp(avg_fen, x.xg_fen, x.xg, x.g, avg_fsh), axis=1
+        )
+        pos[f'{group[0]}-SQI'] = pos['g'] - pos.apply(
+            lambda x: goal_comp(x.fenwick, avg_xg_fen, x.xg, x.g, avg_fsh), axis=1
+        )
+        pos[f'{group[0]}-FNI'] = pos['g'] - pos.apply(
+            lambda x: goal_comp(x.fenwick, x.xg_fen, avg_xg, avg_g, avg_fsh), axis=1
+        )
+
+        #Convert impacts to totals
+        pos[f'{group[0]}-SRI-T'] = (pos[f'{group[0]}-SRI'] / 60) * pos['TOI']
+        pos[f'{group[0]}-SQI-T'] = (pos[f'{group[0]}-SQI'] / 60) * pos['TOI']
+        pos[f'{group[0]}-FNI-T'] = (pos[f'{group[0]}-FNI'] / 60) * pos['TOI']
+
+        return pos.drop(columns=['fsh','fenwick','xg_fen','xg','g','finishing'])
+
+    if type in ('goalie', 'team'):
+        pos = agg[agg['TOI'] >= 150]
+        non = agg[agg['TOI'] < 150]
+
+        #Loop through all groupings generating impacts
+        for group in [('OOFF','F'), ('ODEF','A')]:
+            pos = calc_group(pos, group)
+
+        #Flip against metric percentiles
+        pos['ODEF-SR'] = 1 - pos['ODEF-SR']
+        pos['ODEF-SQ'] = 1 - pos['ODEF-SQ']
+        pos['ODEF-FN'] = 1 - pos['ODEF-FN']
+
+        #Extraneous Values
+        pos['EGF'] = pos['OOFF-SRI'] + pos['OOFF-SQI'] + pos['OOFF-FNI']
+        pos['ExGF'] = pos['OOFF-SRI'] + pos['OOFF-SQI']
+        pos['EGA'] = pos['ODEF-SRI'] + pos['ODEF-SQI'] + pos['ODEF-FNI']
+        pos['ExGA'] = pos['ODEF-SRI'] + pos['ODEF-SQI']
+
+        #...and their percentiles and totals
+        for stat in ['EGF','ExGF','EGA','ExGA']:
+            pos[f'{stat}-P'] = pos[stat].rank(pct=True)
+            pos[f'{stat}-T'] = (pos[stat] / 60) * pos['TOI']
+
+        #Goal Composites...
+        pos['NetGI'] = pos['EGF'] - pos['EGA']
+        pos['NetxGI'] = pos['ExGF'] - pos['ExGA']
+        pos['Team-Adjusted-EGI'] = pos['ODEF-FNI'] - pos['ExGA']
+        pos['GISAx'] = pos['ExGA'] - pos['EGA']
+
+        #...and their percentiles and totals
+        for stat in ['NetGI','NetxGI','Team-Adjusted-EGI','GISAx']:
+            pos[f'{stat}-P'] = pos[stat].rank(pct=True)
+            pos[f'{stat}-T'] = (pos[stat] / 60) * pos['TOI']
+
+        #Per-sixty stats and extra Stats... and their percentiles
+        for stat in per_sixty:
+            try:
+                pos[f'{stat}/60-P'] = pos[f'{stat}/60'].rank(pct=True)
+            except KeyError:
+                pass
+        
+        #Flip percentiles for against stats
+        for stat in ['FA','xGA','GA','CA','HA','Give','Penl','Penl2','Penl5']:
+            try:
+                pos[f'{stat}/60-P'] = 1-pos[f'{stat}/60-P']
+            except KeyError:
+                pass
+
+        for p in ['GF%','SF%','xGF%','FF%','CF%']:
+            pos[f'{p}-P'] = pos[p].rank(pct=True)
+
+        #Add extra metrics
+        pos['RushF/60'] = (pos['RushF']/pos['TOI'])*60
+        pos['RushA/60'] = (pos['RushA']/pos['TOI'])*60
+        pos['RushesFF'] = pos['RushF/60'].rank(pct=True)
+        pos['RushesFA'] = 1 - pos['RushA/60'].rank(pct=True)
+        pos['RushFxG/60'] = (pos['RushFxG']/pos['TOI'])*60
+        pos['RushAxG/60'] = (pos['RushAxG']/pos['TOI'])*60
+        pos['RushesxGF'] = pos['RushFxG/60'].rank(pct=True)
+        pos['RushesxGA'] = 1 - pos['RushAxG/60'].rank(pct=True)
+        pos['RushFG/60'] = (pos['RushFG']/pos['TOI'])*60
+        pos['RushAG/60'] = (pos['RushAG']/pos['TOI'])*60
+        pos['RushesGF'] = pos['RushFG/60'].rank(pct=True)
+        pos['RushesGA'] = 1 - pos['RushAG/60'].rank(pct=True)
+
+        sort_cols = ['Goalie','Season','Team'] if type == 'goalie' else ['Season','Team']
+        return pd.concat([pos,non]).sort_values(sort_cols)
+
+    else:
+        #Remove skaters with less than 150 minutes of TOI then split between forwards and dmen
+        forwards = agg[(agg['Position'] != 'D') & (agg['TOI'] >= 150)]
+        defensemen = agg[(agg['Position'] == 'D') & (agg['TOI'] >= 150)]
+        non_players = agg[agg['TOI'] < 150]
+
+        #Loop through both positions, all groupings generating impacts
+        frames = []
+        for pos in [forwards, defensemen]:
+            df = pos.copy()
+            for group in [('INDV','i'), ('OOFF','F'), ('ODEF','A')]:
+                df = calc_group(df, group)
+
+            #Flip against metric percentiles
+            df['ODEF-SR'] = 1 - df['ODEF-SR']
+            df['ODEF-SQ'] = 1 - df['ODEF-SQ']
+            df['ODEF-FN'] = 1 - df['ODEF-FN']
+
+            #Extraneous Values
+            df['EGi'] = df['INDV-SRI'] + df['INDV-SQI'] + df['INDV-FNI']
+            df['ExGi'] = df['INDV-SRI'] + df['INDV-SQI']
+            df['EGF'] = df['OOFF-SRI'] + df['OOFF-SQI'] + df['OOFF-FNI']
+            df['ExGF'] = df['OOFF-SRI'] + df['OOFF-SQI']
+            df['EGA'] = df['ODEF-SRI'] + df['ODEF-SQI'] + df['ODEF-FNI']
+            df['ExGA'] = df['ODEF-SRI'] + df['ODEF-SQI']
+
+            #...and their percentiles and totals
+            for stat in ['EGi','ExGi','EGF','ExGF','EGA','ExGA']:
+                df[f'{stat}-P'] = df[stat].rank(pct=True)
+                df[f'{stat}-T'] = (df[stat] / 60) * df['TOI']
+
+            #Goal Composites...
+            df['NetGI'] = df['EGF'] - df['EGA']
+            df['NetxGI'] = df['ExGF'] - df['ExGA']
+            df['Team-Adjusted-EGI'] = df['ODEF-FNI'] - df['ExGA']
+            df['GISAx'] = df['ExGA'] - df['EGA']
+            df['LiEG'] = df['EGF'] - df['EGi']
+            df['LiExG'] = df['ExGF'] - df['ExGi']
+            df['LiGIn'] = df['LiEG'] * df['AC%']
+            df['LixGIn'] = df['LiExG'] * df['AC%']
+            df['ALiGIn'] = df['LiGIn'] - df['LixGIn']
+            df['CompGI'] = df['EGi'] + df['LiGIn']
+            df['LiRelGI'] = df['CompGI'] - (df['EGF'] - df['CompGI'])
+
+            #...and their percentiles and totals
+            for stat in ['NetGI','NetxGI','Team-Adjusted-EGI','GISAx','LiEG','LiExG','LiGIn','LixGIn','ALiGIn','CompGI','LiRelGI']:
+                df[f'{stat}-P'] = df[stat].rank(pct=True)
+                df[f'{stat}-T'] = (df[stat] / 60) * df['TOI']            
+            
+            #Per-sixty stats and extra stats... and their percentiles
+            for stat in per_sixty:
+                try:
+                    df[f'{stat}/60-P'] = df[f'{stat}/60'].rank(pct=True)
+                except KeyError:
+                    pass
+
+            for p in ['GC%','AC%','GI%','FC%','xGC%','GF%','SF%','xGF%','FF%','CF%']:
+                df[f'{p}-P'] = df[p].rank(pct=True)
+            
+            #Rush stats... and their percentiles
+            df['RushFi/60'] = (df['Rush']/df['TOI'])*60
+            df['RushxGi/60'] = (df['Rush xG']/df['TOI'])*60
+            df['RushesxGi'] = df['RushxGi/60'].rank(pct=True)
+            df['RushesFi'] = df['RushFi/60'].rank(pct=True)
+
+            frames.append(df)
+
+        complete = pd.concat(frames)
+
+        #Flip percentiles for against stats
+        for stat in ['FA','xGA','GA','CA','HA','Give','Penl','Penl2','Penl5']:
+            try:
+                complete[f'{stat}/60-P'] = 1-complete[f'{stat}/60-P']
+            except KeyError:
+                pass
+
+        #Add back skaters with less than 150 minutes TOI
+        return pd.concat([complete, non_players]).sort_values(['Player','Season','Team','ID'])
+
+def apply_rosters(df,type,roster_path):
+    #Apply roster information to stats dataframe
+
+    #Nothing to add for teams
+    if type == 'team':
+        return df
+    else:
+        #Import rosters and player info
+        rosters = pd.read_csv(roster_path)
+        names = rosters[['player_id','player_name',
+                            'headshot','position','handedness',
+                            'height_in','weight_lbs',
+                            'birth_date','birth_country']].drop_duplicates(subset=['player_id'],keep='last')
+
+        #Add names
+        complete = pd.merge(df,names,how='left',left_on=['ID'],right_on=['player_id'])
+
+        #Rename if there are no missing names'
+        complete = complete.rename(columns={'player_name':'Goalie' if type=='goalie' else 'Player',
+                                            'headshot':'Headshot',
+                                            'position':'Position',
+                                            'handedness':'Handedness',
+                                            'height_in':'Height (in)',
+                                            'weight_lbs':'Weight (lbs)',
+                                            'birth_date':'Birthday',
+                                            'birth_country':'Nationality'}).drop(columns=['player_id'])
+
+        #Add player age
+        complete['Birthday'] = pd.to_datetime(complete['Birthday'])
+        complete['Year'] = complete['Season'].astype(str).str[4:8].astype(int)
+        complete['Age'] = complete['Year'] - complete['Birthday'].dt.year
+
+        #Find player headshot
+        complete['Headshot'] = 'https://assets.nhle.com/mugs/nhl/'+complete['Season'].astype(str)+'/'+complete['Team']+'/'+complete['ID'].astype(int).astype(str)+'.png'
+
+        #Add WSBA ID
+        complete['WSBA'] = complete['ID'].astype(str).str.replace('.0','')+complete['Season'].astype(str)+complete['Team']
+
+        #Remove goaltenders from skater dataframes
+        if type == 'skater':
+            complete = complete.loc[complete['Position']!='G']
+        elif type == 'game_score':
+            complete = complete.loc[(complete['Position']!='G') | ((complete['Position']=='G')&(complete['P'].isna()))]
+
+        #Return dataframe with stats info
+        return complete

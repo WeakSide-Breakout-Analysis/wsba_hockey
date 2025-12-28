@@ -76,13 +76,13 @@ def wsba_rink(display_range='offense',rotation = 0):
             despine=True
         )
 
-def prep_plot_data(pbp,events,strengths,marker_dict=event_markers):
+def prep_plot_data(pbp,strengths,season_types=2,marker_dict=event_markers):
     try: pbp['xG']
     except:
         pbp = wsba_xG(pbp)
         pbp['xG'] = np.where(pbp['xG'].isna(),0,pbp['xG'])
 
-    pbp['WSBA'] = pbp['event_player_1_id'].astype(str)+pbp['season'].astype(str)+pbp['event_team_abbr']
+    pbp['wsba_id'] = pbp['event_player_1_id'].astype(str)+pbp['season'].astype(str)+pbp['event_team_abbr']
     
     pbp['event_team_abbr_2'] = np.where(pbp['event_team_venue']=='home',pbp['away_team_abbr'],pbp['home_team_abbr'])
     
@@ -106,7 +106,10 @@ def prep_plot_data(pbp,events,strengths,marker_dict=event_markers):
     pbp['size'] = np.where(pbp['xG']<0.05,20,pbp['xG']*400)
     pbp['marker'] = pbp['event_type'].replace(marker_dict)
 
-    pbp = pbp.loc[(pbp['event_type'].isin(events))]
+    if isinstance(season_types, int):
+        season_types = [season_types]
+
+    pbp = pbp.loc[pbp['season_type'].isin(season_types)]
 
     if strengths != 'all':
         pbp = pbp.loc[(pbp['strength_state'].isin(strengths)) | (pbp['strength_state_2'].isin(strengths))]
@@ -118,17 +121,7 @@ def prep_plot_data(pbp,events,strengths,marker_dict=event_markers):
 
     return pbp
 
-def gen_heatmap(pbp, player, season, team, strengths, metric = 'xG', strengths_title = None, title = None):
-    pbp = pbp.loc[(pbp['season']==season)]
-    
-    df = prep_plot_data(pbp,metric_events[metric],strengths)
-
-    df = df.fillna(0)
-    df = df.loc[(df['x_adj'].notna())&(df['y_adj'].notna())&(df['empty_net']==0)]
-
-    fig, ax = plt.subplots(1, 1, figsize=(10,12), facecolor='w', edgecolor='k')
-    wsba_rink(display_range='full')
-
+def gen_heatmap(pbp, player, season, team, strengths, season_types = 2, metric = 'xG', strengths_title = None, title = None):
     if isinstance(player, int):
         id_mod = '_id'
     elif player:
@@ -136,8 +129,24 @@ def gen_heatmap(pbp, player, season, team, strengths, metric = 'xG', strengths_t
         player = player.upper()
     else:
         id_mod = None
+    
+    pbp = pbp.loc[(pbp['season']==season)]
+    
+    pbp = prep_plot_data(pbp, strengths, season_types)
+
+    events = metric_events[metric]
+
+    pbp = pbp.loc[pbp['event_type'].isin(events)]
+
+    pbp = pbp.fillna(0)
+    pbp = pbp.loc[(pbp['x_adj'].notna())&(pbp['y_adj'].notna())&(pbp['empty_net']==0)]
+
+    fig, ax = plt.subplots(1, 1, figsize=(10,12), facecolor='w', edgecolor='k')
+    wsba_rink(display_range='full')
 
     for sit in ['for','against']:
+        df = pbp
+
         if sit == 'for':
             df['x'] = abs(df['x_adj'])
             df['y'] = np.where(df['x_adj']<0,-df['y_adj'],df['y_adj'])
@@ -162,6 +171,7 @@ def gen_heatmap(pbp, player, season, team, strengths, metric = 'xG', strengths_t
         [x,y] = np.round(np.meshgrid(np.linspace(x_min,x_max,(x_max-x_min)),np.linspace(-42.5,42.5,85)))
         xgoals = griddata((df['x'],df['y']),df[metrics[metric]],(x,y),method='cubic',fill_value=0)
         xgoals = np.where(xgoals < 0,0,xgoals)
+
         xgoals_smooth = gaussian_filter(xgoals,sigma=3)
         
         if player:
@@ -169,19 +179,19 @@ def gen_heatmap(pbp, player, season, team, strengths, metric = 'xG', strengths_t
                 player_shots = df.loc[(df[f'onice_for{id_mod}'].str.contains(str(player)))&(df['event_team_abbr']==team)&(df['strength_state'].isin(strengths) if strengths != 'all' else True)]
             else:
                 player_shots = df.loc[(df[f'onice_against{id_mod}'].str.contains(str(player)))&(df['event_team_abbr_2']==team)&(df['strength_state_2'].isin(strengths) if strengths != 'all' else True)]
-            [x,y] = np.round(np.meshgrid(np.linspace(x_min,x_max,(x_max-x_min)),np.linspace(-42.5,42.5,85)))
-            xgoals_player = griddata((player_shots['x'],player_shots['y']),player_shots[metrics[metric]],(x,y),method='cubic',fill_value=0)
-            xgoals_player = np.where(xgoals_player < 0,0,xgoals_player)
         else:
             if sit == 'for':
                 player_shots = df.loc[(df['event_team_abbr']==team)]
             else:
                 player_shots = df.loc[(df['event_team_abbr_2']==team)]
-            [x,y] = np.round(np.meshgrid(np.linspace(x_min,x_max,(x_max-x_min)),np.linspace(-42.5,42.5,85)))
-            xgoals_player = griddata((player_shots['x'],player_shots['y']),player_shots[metrics[metric]],(x,y),method='cubic',fill_value=0)
-            xgoals_player = np.where(xgoals_player < 0,0,xgoals_player)
 
-        difference = (gaussian_filter(xgoals_player,sigma = 3)) - xgoals_smooth
+        [x,y] = np.round(np.meshgrid(np.linspace(x_min,x_max,(x_max-x_min)),np.linspace(-42.5,42.5,85)))
+        xgoals_player = griddata((player_shots['x'],player_shots['y']),player_shots[metrics[metric]],(x,y),method='cubic',fill_value=0)
+        xgoals_player = np.where(xgoals_player < 0,0,xgoals_player)
+
+        xgoals_player_smooth = gaussian_filter(xgoals_player,sigma = 3)
+              
+        difference = xgoals_player_smooth - xgoals_smooth
         data_min= difference.min()
         data_max= difference.max()
     
@@ -215,7 +225,7 @@ def gen_heatmap(pbp, player, season, team, strengths, metric = 'xG', strengths_t
     )
 
     cbar.ax.set_xticklabels(['Deficit', 'Even', 'Surplus'])
-    cbar.set_label(f'On-Ice {metric}, Compared to League Average', fontsize=12)
+    cbar.set_label(f'On-Ice {metric}/60, Compared to League Average', fontsize=12)
     
     if not strengths_title:
         strengths_title = ', '.join(strengths) if np.logical_and(isinstance(strengths, list),strengths_title==None) else strengths.title()
@@ -227,14 +237,14 @@ def gen_heatmap(pbp, player, season, team, strengths, metric = 'xG', strengths_t
 
     return fig
 
-def plot_skater_shots(pbp, player, season, team, strengths, strengths_title = None, title = None, marker_dict=event_markers, situation='for', legend=False):
+def plot_skater_shots(pbp, player, season, team, strengths, season_types = 2, strengths_title = None, title = None, marker_dict=event_markers, situation='for', legend=False):
     shots = ['goal','missed-shot','shot-on-goal']
-    pbp = prep_plot_data(pbp,shots,strengths,marker_dict)
-    pbp = pbp.loc[(pbp['season']==season)&((pbp['away_team_abbr']==team)|(pbp['home_team_abbr']==team))]
+    pbp = prep_plot_data(pbp,strengths,season_types,marker_dict)
+    pbp = pbp.loc[(pbp['season']==season)&(pbp['event_type'].isin(shots))&((pbp['away_team_abbr']==team)|(pbp['home_team_abbr']==team))]
 
     team_data = pd.read_csv(info_path)
-    team_color = list(team_data.loc[team_data['WSBA']==f'{team}{season}','primary_color'])[0]
-    team_color_2nd = list(team_data.loc[team_data['WSBA']==f'{team}{season}','secondary_color'])[0]
+    team_color = list(team_data.loc[team_data['wsba_id']==f'{team}{season}','primary_color'])[0]
+    team_color_2nd = list(team_data.loc[team_data['wsba_id']==f'{team}{season}','secondary_color'])[0]
 
     if isinstance(player, int):
         id_mod = '_id'
@@ -269,8 +279,8 @@ def plot_skater_shots(pbp, player, season, team, strengths, strengths_title = No
     return fig
     
 def plot_game_events(pbp,game_id,events,strengths,marker_dict=event_markers,team_colors={'away':'secondary','home':'primary'},legend=False):
-    pbp = prep_plot_data(pbp,events,strengths,marker_dict)
-    pbp = pbp.loc[pbp['game_id'].astype(str)==str(game_id)]
+    pbp = prep_plot_data(pbp,strengths,season_types=[2,3],marker_dict=marker_dict)
+    pbp = pbp.loc[(pbp['event_type'].isin(events))&(pbp['game_id']==game_id)]
     
     away_abbr = pbp['away_team_abbr'].iloc[0]
     home_abbr = pbp['home_team_abbr'].iloc[0]
@@ -281,8 +291,8 @@ def plot_game_events(pbp,game_id,events,strengths,marker_dict=event_markers,team
 
     team_data = pd.read_csv(info_path)
     team_info ={
-        'away_color':'#000000' if list(team_data.loc[team_data['WSBA']==f'{away_abbr}{season}','secondary_color'])[0]=='#FFFFFF' else list(team_data.loc[team_data['WSBA']==f'{away_abbr}{season}',f'{team_colors['away']}_color'])[0],
-        'home_color': list(team_data.loc[team_data['WSBA']==f'{home_abbr}{season}',f'{team_colors['home']}_color'])[0],
+        'away_color':'#000000' if list(team_data.loc[team_data['wsba_id']==f'{away_abbr}{season}','secondary_color'])[0]=='#FFFFFF' else list(team_data.loc[team_data['wsba_id']==f'{away_abbr}{season}',f'{team_colors['away']}_color'])[0],
+        'home_color': list(team_data.loc[team_data['wsba_id']==f'{home_abbr}{season}',f'{team_colors['home']}_color'])[0],
         'away_logo': f'tools/logos/png/{away_abbr}{season}.png',
         'home_logo': f'tools/logos/png/{home_abbr}{season}.png',
     }

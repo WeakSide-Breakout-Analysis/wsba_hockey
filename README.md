@@ -28,13 +28,14 @@ wsba.nhl_scrape_season(20242025,split_shifts=False,remove=['game-end'],local=Tru
 ```python
 wsba.nhl_scrape_schedule(20242025)
 wsba.nhl_scrape_seasons_info(seasons=[20212022,20222023,20232024,20242025])
-wsba.nhl_scrape_standings(arg = '2024-03-20')
+wsba.nhl_scrape_standings()
 ```
 
 ### NHL Rosters and Player Information
 
 ```python
 wsba.nhl_scrape_roster(20242025)
+nhl_scrape_player_info([8477956, 8479987])
 wsba.nhl_scrape_team_info()
 ```
 
@@ -47,9 +48,9 @@ wsba.nhl_scrape_prospects('BOS')
 
 ### NHL EDGE Data
 ```python
-wsba.nhl_scrape_edge(20252026,['skater',[8477956, 8479987]])
-wsba.nhl_scrape_edge(20252026,['goalie',[8480280]])
-wsba.nhl_scrape_edge(20252026,['team',['BOS']])
+wsba.nhl_scrape_edge(20252026,'skater',[8477956, 8479987])
+wsba.nhl_scrape_edge(20252026,'goalie',[8480280])
+wsba.nhl_scrape_edge(20252026,'team',['BOS'])
 ```
 
 ## DATA ANALYTICS
@@ -63,8 +64,8 @@ pbp = wsba.nhl_apply_xG(pbp)
 
 ### Stat Aggregation
 ```python
-pbp = wsba.nhl_scrape_season(20232024,remove=[], local = True)
-wsba.nhl_calculate_stats(pbp,'skater',[2],['5v5','4v4','3v3'],shot_impact = True)
+pbp = wsba.nhl_scrape_season(20232024, local = True)
+wsba.nhl_calculate_stats(pbp,'skater',['5v5','4v4','3v3'], 'all',shot_impact = True)
 ```
 ### Shot Plotting (Plots, Heatmaps, etc.)
 ```python

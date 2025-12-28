@@ -24,6 +24,6 @@ wsba.nhl_scrape_standings(20222023).to_csv(f'{dir}/samples/sample_standings.csv'
 db = wsba.NHL_Database('sample_db')
 db.add_games([2021020045])
 db.add_stats('sample_skater_stats','skater','5v5',[2,3])
-db.add_game_plots(['missed-shot','shot-on-goal','goal'],['5v5'])
-db.add_plots('shot',{8478420:[20212022,'COL']})
+db.add_game_plots()
+db.add_plots('shot',{8478420:[20212022,'COL']}, title='Sample Skater Plot')
 db.export_data(f'{dir}/samples/')

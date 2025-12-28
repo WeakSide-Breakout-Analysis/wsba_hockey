@@ -29,7 +29,7 @@ def get_col():
         'season','season_type','game_id','game_date',"start_time","venue","venue_location",
         'away_team_abbr','home_team_abbr','event_num','period','period_type',
         'seconds_elapsed','period_time','game_time',"strength_state","strength_state_venue","home_team_defending_side",
-        "event_type_code","event_type","description","event_reason",
+        "event_type_code","event_type","event_id","description","event_reason",
         "penalty_type","penalty_duration","penalty_attribution",
         "event_team_abbr","event_team_venue",
         'num_on', 'players_on','ids_on','num_off','players_off','ids_off','shift_type',
@@ -40,7 +40,7 @@ def get_col():
         "shot_type","zone_code","x","y","x_fixed","y_fixed","x_adj","y_adj",
         "event_skaters","away_skaters","home_skaters",
         "event_distance","event_angle","event_length","seconds_since_last",
-        "away_score","home_score", "away_fenwick", "home_fenwick",
+        "away_score","home_score", "away_fenwick", "home_fenwick",'ppt_replay_url',
         "away_on_1","away_on_2","away_on_3","away_on_4","away_on_5","away_on_6","away_goalie",
         "home_on_1","home_on_2","home_on_3","home_on_4","home_on_5","home_on_6","home_goalie",
         "away_on_1_id","away_on_2_id","away_on_3_id","away_on_4_id","away_on_5_id","away_on_6_id","away_goalie_id",
@@ -231,6 +231,7 @@ def parse_json(info):
         "homeTeamDefendingSide":"home_team_defending_side",
         "typeCode":"event_type_code",
         "typeDescKey":"event_type",
+        "pptReplayUrl":"ppt_replay_url",
         "details.shotType":"shot_type",
         "details.duration":"penalty_duration",
         "details.descKey":"penalty_type",
@@ -585,7 +586,6 @@ def parse_espn(date,away,home):
     })
     
     #Some games are missing plays on ESPN, for some reason
-
     if espn_events.empty:
         print(f"No coordinates found for game ...")
         return pd.DataFrame(columns=['period','seconds_elapsed','event_type','event_team_abbr'])
@@ -1124,6 +1124,9 @@ def combine_data(info,sources):
         df['home_coach'] = coaches['home']
         df['event_coach'] = np.where(df['event_team_abbr']==df['home_team_abbr'],coaches['home'],np.where(df['event_team_abbr']==df['away_team_abbr'],coaches['away'],""))
 
+    #Fix event goalies
+    df['event_goalie_id'] = np.where(df['event_team_venue']=='away',df['home_goalie_id'],df['away_goalie_id'])
+
     #Assign score, corsi, fenwick, and penalties for each event
     for venue in ['away','home']:
         df[f'{venue}_score'] = ((df['event_team_venue']==venue)&(df['event_type']=='goal')).cumsum().shift(1)
@@ -1141,6 +1144,6 @@ def combine_data(info,sources):
         try: df[col]
         except: df[col] = ""
         df[col] = df[col].ffill()
-     
+
     #Return: complete play-by-play with all important data for each event in a provided game
     return df[[col for col in get_col() if col in df.columns.to_list()]].replace(r'^\s*$', np.nan, regex=True)

@@ -9,6 +9,7 @@ import wsba_hockey.tools.scraping as scraping
 import matplotlib.pyplot as plt
 from sklearn.calibration import calibration_curve
 from sklearn.metrics import roc_curve, auc
+from typing import Literal, Union
 
 ### XG_MODEL FUNCTIONS ###
 # Provided in this file are functions vital to the goal prediction model in the WSBA Hockey Python package. #
@@ -115,11 +116,8 @@ def fix_players(pbp):
         roster['player_id'] = roster['player_id'].astype(str)
         roster_dict = roster.set_index('player_id').to_dict()['handedness']
 
-        #For the first three pbp seasons the event_goalie_id isn't included as a column
-        try:
-            pbp['event_goalie_id']
-        except KeyError:
-            pbp['event_goalie_id'] = np.where(pbp['event_team_venue']=='home',pbp['home_goalie_id'],pbp['away_goalie_id'])
+        #Fix event goalies
+        pbp['event_goalie_id'] = np.where(pbp['event_team_venue']=='away',pbp['home_goalie_id'],pbp['away_goalie_id'])
             
         #Add hands
         pbp['event_player_1_hand'] = pbp['event_player_1_id'].astype(str).str.replace('.0','').replace(roster_dict).replace('nan',None)
@@ -189,7 +187,7 @@ def prep_xG_data(data):
     #Return: pbp data prepared to train and calculate the xG model
     return data
 
-def wsba_xG(pbp, model_type = 'xgb', states = False, hypertune = False, train = False, test_path = test_path, cv_path = cv_path, model_path = xg_model_path, train_runs = 20, cv_runs = 20):
+def wsba_xG(pbp, model_type: Literal['bayesian', 'frequentist'] = 'frequentist', states = False, hypertune = False, train = False, test_path = test_path, cv_path = cv_path, model_path = xg_model_path, train_runs = 20, cv_runs = 20):
     #Train and calculate the WSBA Expected Goals model
     
     #Add index for future merging
@@ -220,14 +218,9 @@ def wsba_xG(pbp, model_type = 'xgb', states = False, hypertune = False, train = 
     data = prep_xG_data(pbp.loc[(pbp['event_type'].isin(events))&(pbp['strength_state'].isin(strengths))&(pbp['x'].notna())&(pbp['y'].notna())])
     data = data.loc[data['event_type'].isin(fenwick_events)]
     
-    #Choose whether to predict goals with Bayesian (PyMC) or Frequentist (XGBoost) modelling
-    if model_type == 'pymc':
-        #PyMC
-        print('### PYMC MODEL ###')
-
+    if model_type == 'bayesian':
+        NotImplementedError('PyMC Model in Development...')
     else:
-        #XGBoost
-        
         dfs = []
         for empty_net in [False, True]:
             #Two sub-models: Those on a goaltender and those on an empty net
