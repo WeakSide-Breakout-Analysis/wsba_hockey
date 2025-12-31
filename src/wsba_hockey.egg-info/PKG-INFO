@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: wsba_hockey
-Version: 1.4.0
+Version: 1.4.1
 Summary: WeakSide Breakout's complete Python package of access to hockey data, primairly including the scraping of National Hockey League schedule, play-by-play, and shifts information.
 Author-email: Owen Singh <owenbksingh@gmail.com>
 Project-URL: Homepage, https://github.com/owensingh38/wsba_hockey/
@@ -106,7 +106,7 @@ wsba.repo_load_schedule(seasons=[20212022,20222023,20232024,20242025])
 ```
 
 ## DOCUMENTATION
-View full documentation here: [WSBA Hockey Package Documentation](https://owensingh38.github.io/wsba_hockey/)
+View full documentation here: [WSBA Hockey Package Documentation](https://weakside-breakout-analysis.github.io/wsba_hockey/)
 
 ## ACKNOWLEDGEMENTS AND CREDITS 
 ### Huge thanks to the following:

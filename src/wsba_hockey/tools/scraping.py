@@ -115,71 +115,75 @@ def get_game_info(game_id):
     api = f"https://api-web.nhle.com/v1/gamecenter/{game_id}/play-by-play"
     json = rs.get(api).json()
 
-    #Games don't always have JSON shifts, for whatever reason
-    shifts = f"https://api.nhle.com/stats/rest/en/shiftcharts?cayenneExp=gameId={game_id}"
-    shifts = rs.get(shifts).json()
-    json_shifts = pd.json_normalize(shifts['data'])
-    
-    if shifts['total'] == 0:
-        json_shifts = pd.DataFrame()
-
-    #Split information
-    base = pd.json_normalize(json)
-    game_id = base['id'][0]
-    season = base['season'][0]
-    season_type = base['gameType'][0]
-    game_date = base['gameDate'][0]
-    game_state = base['gameState'][0]
-    start_time = base['startTimeUTC'][0]
-    venue = base['venue.default'][0]
-    venue_location = base['venueLocation.default'][0]
-    away_team_id = base['awayTeam.id'][0]
-    away_team_abbr = base['awayTeam.abbrev'][0]
-    home_team_id = base['homeTeam.id'][0]
-    home_team_abbr = base['homeTeam.abbrev'][0]
-
-    #Add roster
-    roster = get_game_roster(json)
-    #In the HTML parsing process, player are identified by a regex pattern (ABB #00 such as BOS #37) or number and name in the following format: #00 NAME (i.e. #37 BERGERON) so these are added as IDs of sorts.  
-    roster['descID'] = '#'+roster['sweaterNumber'].astype(str)+" "+roster['lastName.default'].str.upper()
-    roster['team_abbr'] = roster['teamId'].replace({
-        away_team_id:[away_team_abbr],
-        home_team_id:[home_team_abbr]
-    })
-    roster['key'] = roster['team_abbr'] + " #" + roster['sweaterNumber'].astype(str)
-
-    #Create an additional roster dictionary for use with HTML parsing
-    #Roster dict
-    roster_dict = {'away':{},
-                   'home':{}}
-    
-    #Evaluate and add players by team
-    for team in ['away','home']:
-        abbr = (away_team_abbr if team == 'away' else home_team_abbr)
-        rost = roster.loc[roster['team_abbr']==abbr]
+    #Provide explicit error for games which have not yet occured
+    if json['gameState'] in ['FUT', 'PRE']:
+        raise ValueError("Game has not yet occured.")
+    else:
+        #Games don't always have JSON shifts, for whatever reason
+        shifts = f"https://api.nhle.com/stats/rest/en/shiftcharts?cayenneExp=gameId={game_id}"
+        shifts = rs.get(shifts).json()
+        json_shifts = pd.json_normalize(shifts['data'])
         
-        #Now iterate through team players
-        for player,id,num,pos,team_abbr,key in zip(rost['full_name'],rost['playerId'],rost['sweaterNumber'],rost['positionCode'],rost['team_abbr'],rost['key']):
-            roster_dict[team].update({str(num):[key, pos, player, team_abbr, id]})
+        if shifts['total'] == 0:
+            json_shifts = pd.DataFrame()
 
-    #Return: game information
-    return {"game_id":str(game_id),
-            "season":season,
-            "season_type":season_type,
-            "game_date":game_date,
-            "game_state":game_state,
-            "start_time":start_time,
-            'venue':venue,
-            'venue_location':venue_location,
-            'away_team_id':away_team_id,
-            'away_team_abbr':away_team_abbr,
-            'home_team_id':home_team_id,
-            'home_team_abbr':home_team_abbr,
-            'events':pd.json_normalize(json['plays']).reset_index(drop=True),
-            'rosters':roster,
-            'HTML_rosters':roster_dict,
-            'coaches':get_game_coaches(game_id),
-            'json_shifts':json_shifts}
+        #Split information
+        base = pd.json_normalize(json)
+        game_id = base['id'][0]
+        season = base['season'][0]
+        season_type = base['gameType'][0]
+        game_date = base['gameDate'][0]
+        game_state = base['gameState'][0]
+        start_time = base['startTimeUTC'][0]
+        venue = base['venue.default'][0]
+        venue_location = base['venueLocation.default'][0]
+        away_team_id = base['awayTeam.id'][0]
+        away_team_abbr = base['awayTeam.abbrev'][0]
+        home_team_id = base['homeTeam.id'][0]
+        home_team_abbr = base['homeTeam.abbrev'][0]
+
+        #Add roster
+        roster = get_game_roster(json)
+        #In the HTML parsing process, player are identified by a regex pattern (ABB #00 such as BOS #37) or number and name in the following format: #00 NAME (i.e. #37 BERGERON) so these are added as IDs of sorts.  
+        roster['descID'] = '#'+roster['sweaterNumber'].astype(str)+" "+roster['lastName.default'].str.upper()
+        roster['team_abbr'] = roster['teamId'].replace({
+            away_team_id:[away_team_abbr],
+            home_team_id:[home_team_abbr]
+        })
+        roster['key'] = roster['team_abbr'] + " #" + roster['sweaterNumber'].astype(str)
+
+        #Create an additional roster dictionary for use with HTML parsing
+        #Roster dict
+        roster_dict = {'away':{},
+                    'home':{}}
+        
+        #Evaluate and add players by team
+        for team in ['away','home']:
+            abbr = (away_team_abbr if team == 'away' else home_team_abbr)
+            rost = roster.loc[roster['team_abbr']==abbr]
+            
+            #Now iterate through team players
+            for player,id,num,pos,team_abbr,key in zip(rost['full_name'],rost['playerId'],rost['sweaterNumber'],rost['positionCode'],rost['team_abbr'],rost['key']):
+                roster_dict[team].update({str(num):[key, pos, player, team_abbr, id]})
+
+        #Return: game information
+        return {"game_id":str(game_id),
+                "season":season,
+                "season_type":season_type,
+                "game_date":game_date,
+                "game_state":game_state,
+                "start_time":start_time,
+                'venue':venue,
+                'venue_location':venue_location,
+                'away_team_id':away_team_id,
+                'away_team_abbr':away_team_abbr,
+                'home_team_id':home_team_id,
+                'home_team_abbr':home_team_abbr,
+                'events':pd.json_normalize(json['plays']).reset_index(drop=True),
+                'rosters':roster,
+                'HTML_rosters':roster_dict,
+                'coaches':get_game_coaches(game_id),
+                'json_shifts':json_shifts}
 
 def parse_json(info):
     #Given game info, return JSON document

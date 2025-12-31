@@ -139,7 +139,7 @@ FENWICK_EVENTS = [
 ]
 
 ## SCRAPE FUNCTIONS ##
-def nhl_scrape_game(game_ids:int | list[int], split_shifts:bool = False, remove:list[str] = [], verbose:bool = False, sources:bool = False, errors:bool = False):
+def nhl_scrape_game(game_ids:int | list[int], split_shifts:bool = False, remove:list[str] = [], xg:bool = False, sources:bool = False, errors:bool = False):
     """
     Given a set of game_ids (NHL API), return complete play-by-play information as requested.
 
@@ -150,8 +150,8 @@ def nhl_scrape_game(game_ids:int | list[int], split_shifts:bool = False, remove:
             If True, returns a dict with separate 'pbp' and 'shifts' DataFrames. Default is False.
         remove (List[str], optional):
             List of event types to remove from the result. Default is an empty list.
-        verbose (bool, optional):
-            If True, generates extra event features (such as those required to calculate xG). Default is False.
+        xg (bool, optional):
+            If True, calculates xG for the play-by-play data (for most accurate values leave 'remove' empty).
         sources (bool, optional):
             If True, saves raw HTML, JSON, SHIFTS, and single-game full play-by-play to a separate folder in the working directory. Default is False.
         errors (bool, optional):
@@ -234,6 +234,7 @@ def nhl_scrape_game(game_ids:int | list[int], split_shifts:bool = False, remove:
             print(f" finished in {secs:.2f} seconds. {prog}/{len(game_ids)} ({(prog/len(game_ids))*100:.2f}%)")
         except Exception as e:
             #Games such as the all-star game and pre-season games will incur this error
+            
             #Other games have known problems
             if game_id in KNOWN_PROBS.keys():
                 print(f"\nGame {game_id} has a known problem: {KNOWN_PROBS[game_id]}")
@@ -249,9 +250,9 @@ def nhl_scrape_game(game_ids:int | list[int], split_shifts:bool = False, remove:
         return pd.DataFrame()
     df = pd.concat(pbps)
 
-    #If verbose is true features required to calculate xG are added to dataframe
-    if verbose:
-        df = prep_xG_data(df)
+    #Add xG if necessary
+    if xg:
+        df = nhl_apply_xG(df)
     else:
         ""
 
@@ -367,7 +368,7 @@ def nhl_scrape_schedule(season:int | Literal['now'] = 'now', start:str | None = 
     #Return: specificed schedule data
     return df[[col for col in COL_MAP['schedule'].values() if col in df.columns]]
 
-def nhl_scrape_season(season:int, split_shifts:bool = False, season_types:list[int] = [2,3], remove:list[str] = [], start:str | None = None, end:str | None = None, local:bool=False, local_path:str = SCHEDULE_PATH, verbose:bool = False, sources:bool = False, errors:bool = False):
+def nhl_scrape_season(season:int, split_shifts:bool = False, season_types:list[int] = [2,3], remove:list[str] = [], start:str | None = None, end:str | None = None, local:bool=False, local_path:str = SCHEDULE_PATH, xg:bool = False, sources:bool = False, errors:bool = False):
     """
     Given season, scrape all play-by-play occuring within the season.
 
@@ -388,8 +389,8 @@ def nhl_scrape_season(season:int, split_shifts:bool = False, season_types:list[i
             If True, use local file to retreive schedule data.
         local_path (bool, optional):
             If True, specifies the path with schedule data necessary to scrape a season's games (only relevant if local = True).
-        verbose (bool, optional):
-            If True, generates extra event features (such as those required to calculate xG). Default is False.
+        xg (bool, optional):
+            If True, calculates xG for the play-by-play data (for most accurate values leave 'remove' empty).
         sources (bool, optional):
             If True, saves raw HTML, JSON, SHIFTS, and single-game full play-by-play to a separate folder in the working directory. Default is False.
         errors (bool, optional):
@@ -458,9 +459,9 @@ def nhl_scrape_season(season:int, split_shifts:bool = False, season_types:list[i
 
     #Perform scrape
     if split_shifts:
-        data = nhl_scrape_game(game_ids,split_shifts=True,remove=remove,verbose=verbose,sources=sources,errors=errors)
+        data = nhl_scrape_game(game_ids,split_shifts=True,remove=remove,xg=xg,sources=sources,errors=errors)
     else:
-        data = nhl_scrape_game(game_ids,remove=remove,verbose=verbose,sources=sources,errors=errors)
+        data = nhl_scrape_game(game_ids,remove=remove,xg=xg,sources=sources,errors=errors)
     
     end = time.perf_counter()
     secs = end - start

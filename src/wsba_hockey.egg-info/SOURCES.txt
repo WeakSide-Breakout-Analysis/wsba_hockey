@@ -10,7 +10,6 @@ src/wsba_hockey.egg-info/top_level.txt
 src/wsba_hockey/tools/__init__.py
 src/wsba_hockey/tools/agg.py
 src/wsba_hockey/tools/columns.py
-src/wsba_hockey/tools/game_pred.py
 src/wsba_hockey/tools/game_score.py
 src/wsba_hockey/tools/plotting.py
 src/wsba_hockey/tools/scraping.py

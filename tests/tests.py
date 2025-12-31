@@ -9,7 +9,7 @@ import wsba_hockey as wsba
 dir = os.path.dirname(os.path.realpath(__file__))
 
 #Test scrape of random games
-wsba.nhl_scrape_game(['random',1,2007,2024]).to_csv(f'{dir}/samples/sample_random_game.csv',index=False)
+wsba.nhl_scrape_game(['random',1,2007,2024], xg=True).to_csv(f'{dir}/samples/sample_random_game.csv',index=False)
 
 #Standings Scraping
 wsba.nhl_scrape_standings(20222023).to_csv(f'{dir}/samples/sample_standings.csv',index=False)
